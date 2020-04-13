@@ -177,6 +177,8 @@ public:
     };
 
     ResultCode DoApplicationJump(DeliverArg arg);
+    ResultCode PrepareToStartApplication(u64 title_id, FS::MediaType media_type);
+    ResultCode StartApplication(std::vector<u8> parameter, std::vector<u8> hmac);
 
     boost::optional<DeliverArg> ReceiveDeliverArg() const {
         return deliver_arg;
@@ -219,6 +221,24 @@ public:
 
     ApplicationJumpParameters GetApplicationJumpParameters() const {
         return app_jump_parameters;
+    }
+
+    struct ApplicationStartParameters {
+        u64 next_title_id;
+        FS::MediaType next_media_type;
+
+    private:
+        template <class Archive>
+        void serialize(Archive& ar, const unsigned int file_version) {
+            ar& next_title_id;
+            ar& next_media_type;
+        }
+        friend class boost::serialization::access;
+
+    };
+
+    ApplicationStartParameters GetApplicationStartParameters() const {
+        return app_start_parameters;
     }
 
 private:
@@ -271,6 +291,7 @@ private:
     };
 
     ApplicationJumpParameters app_jump_parameters{};
+    ApplicationStartParameters app_start_parameters{};
     boost::optional<DeliverArg> deliver_arg{};
 
     // Holds data about the concurrently running applets in the system.
@@ -279,6 +300,8 @@ private:
     // This overload returns nullptr if no applet with the specified id has been started.
     AppletSlotData* GetAppletSlotData(AppletId id);
     AppletSlotData* GetAppletSlotData(AppletAttributes attributes);
+
+    void SetDeliveryArg(std::vector<u8> parameter, std::vector<u8> hmac);
 
     void EnsureHomeMenuLoaded();
 
@@ -292,6 +315,7 @@ private:
     void serialize(Archive& ar, const unsigned int file_version) {
         ar& next_parameter;
         ar& app_jump_parameters;
+        ar& app_start_parameters;
         if (file_version > 0) {
             ar& deliver_arg;
         }
