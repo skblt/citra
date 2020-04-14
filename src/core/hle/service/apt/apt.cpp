@@ -556,9 +556,9 @@ void Module::APTInterface::StartApplication(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x1B, 3, 4); // 0x001B00C4
     u32 parameter_size = rp.Pop<u32>();
     u32 hmac_size = rp.Pop<u32>();
-    u8 paused = rp.Pop<u8>();
-    [[maybe_unused]] const std::vector<u8> parameter = rp.PopStaticBuffer();
-    [[maybe_unused]] const std::vector<u8> hmac = rp.PopStaticBuffer();
+    bool paused = rp.Pop<bool>();
+    std::vector<u8> parameter = rp.PopStaticBuffer();
+    std::vector<u8> hmac = rp.PopStaticBuffer();
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(apt->applet_manager->StartApplication(parameter, hmac, paused));

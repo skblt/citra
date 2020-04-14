@@ -239,10 +239,6 @@ public:
 
     };
 
-    ApplicationStartParameters GetApplicationStartParameters() const {
-        return app_start_parameters;
-    }
-
 private:
     /// Parameter data to be returned in the next call to Glance/ReceiveParameter.
     // NOTE: A bug in gcc prevents serializing std::optional
@@ -297,7 +293,7 @@ private:
     };
 
     ApplicationJumpParameters app_jump_parameters{};
-    ApplicationStartParameters app_start_parameters{};
+    boost::optional<ApplicationStartParameters> app_start_parameters{};
     boost::optional<DeliverArg> deliver_arg{};
 
     // Holds data about the concurrently running applets in the system.
