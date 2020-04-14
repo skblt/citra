@@ -178,7 +178,9 @@ public:
 
     ResultCode DoApplicationJump(DeliverArg arg);
     ResultCode PrepareToStartApplication(u64 title_id, FS::MediaType media_type);
-    ResultCode StartApplication(std::vector<u8> parameter, std::vector<u8> hmac);
+    ResultCode StartApplication(const std::vector<u8>& parameter, const std::vector<u8>& hmac,
+                                bool paused);
+    ResultCode WakeupApplication();
 
     boost::optional<DeliverArg> ReceiveDeliverArg() const {
         return deliver_arg;
@@ -246,6 +248,10 @@ private:
     // NOTE: A bug in gcc prevents serializing std::optional
     boost::optional<MessageParameter> next_parameter;
 
+    /// This parameter will be sent to the application/applet once they register themselves by using
+    /// APT::Initialize.
+    boost::optional<MessageParameter> delayed_parameter;
+
     static constexpr std::size_t NumAppletSlot = 4;
 
     enum class AppletSlot : u8 {
@@ -301,7 +307,12 @@ private:
     AppletSlotData* GetAppletSlotData(AppletId id);
     AppletSlotData* GetAppletSlotData(AppletAttributes attributes);
 
-    void SetDeliveryArg(std::vector<u8> parameter, std::vector<u8> hmac);
+    /// Sets the APT delivery argument. Applications can read it with APT::ReceiveDeliveryArg
+    void SetDeliveryArg(const std::vector<u8>& parameter, const std::vector<u8>& hmac);
+
+    /// Checks if the Application slot has already been registered and sends the parameter to it,
+    /// otherwise it queues for sending when the application registers itself with APT::Enable.
+    void SendApplicationParameterAfterRegistration(const MessageParameter& parameter);
 
     void EnsureHomeMenuLoaded();
 
