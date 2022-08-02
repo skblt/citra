@@ -140,44 +140,43 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin/$<CONFIG>)
 # ======================
 
 # Enable vcpkg features
-if (ENABLE_SDL2)
-    find_package(SDL2 CONFIG)
+if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
+    if (ENABLE_SDL2)
+        find_package(SDL2 CONFIG)
 
-    if (NOT SDL2_FOUND)
-        message(STATUS "SDL2 not found. Using vcpkg")
-        list(APPEND VCPKG_MANIFEST_FEATURES "citra-sdl2")
-    endif()
-endif()
-
-if (ENABLE_WEB_SERVICE)
-    list(APPEND VCPKG_MANIFEST_FEATURES "citra-web-service")
-endif()
-
-if (USE_DISCORD_PRESENCE)
-    list(APPEND VCPKG_MANIFEST_FEATURES "citra-discord")
-endif()
-
-if (ENABLE_FFMPEG)
-    if(ENABLE_FFMPEG_VIDEO_DUMPER)
-        set(FFmpeg_COMPONENTS "avcodec avformat avutil swscale swresample")
-    else()
-        set(FFmpeg_COMPONENTS "avcodec")
+        if (NOT SDL2_FOUND)
+            message(STATUS "SDL2 not found. Using vcpkg")
+            list(APPEND VCPKG_MANIFEST_FEATURES "citra-sdl2")
+        endif()
     endif()
 
-    find_package(FFmpeg COMPONENTS ${FFmpeg_COMPONENTS})
-
-    if (NOT FFMPEG_FOUND OR "${FFmpeg_avcodec_VERSION}" VERSION_LESS "57.48.101")
-        message(STATUS "FFmpeg not found. Using vcpkg")
-        list(APPEND VCPKG_MANIFEST_FEATURES "citra-ffmpeg")
+    if (ENABLE_WEB_SERVICE)
+        list(APPEND VCPKG_MANIFEST_FEATURES "citra-web-service")
     endif()
-endif()
 
-if (ENABLE_FDK)
-    find_library(FDK_AAC fdk-aac DOC "The path to fdk_aac library")
-    if(FDK_AAC STREQUAL "FDK_AAC-NOTFOUND")
-        message(STATUS "FDK AAC not found. Using vcpkg")
-        list(APPEND VCPKG_MANIFEST_FEATURES "citra-fdk-aac")
+    if (USE_DISCORD_PRESENCE)
+        list(APPEND VCPKG_MANIFEST_FEATURES "citra-discord")
     endif()
+
+    if (ENABLE_FFMPEG)
+        find_package(FFmpeg COMPONENTS avcodec avformat avutil swscale swresample)
+
+        if (NOT FFMPEG_FOUND OR "${FFmpeg_avcodec_VERSION}" VERSION_LESS "57.48.101")
+            message(STATUS "FFmpeg not found. Using vcpkg")
+            list(APPEND VCPKG_MANIFEST_FEATURES "citra-ffmpeg")
+        endif()
+    endif()
+
+    if (ENABLE_FDK)
+        find_library(FDK_AAC fdk-aac DOC "The path to fdk_aac library")
+        if(FDK_AAC STREQUAL "FDK_AAC-NOTFOUND")
+            message(STATUS "FDK AAC not found. Using vcpkg")
+            list(APPEND VCPKG_MANIFEST_FEATURES "citra-fdk-aac")
+        endif()
+    endif()
+
+    # Cache the selected manifest features.
+    set(VCPKG_MANIFEST_FEATURES ${VCPKG_MANIFEST_FEATURES} CACHE STRING "")
 endif()
 
 # Include vcpkg toolchain file
@@ -288,6 +287,12 @@ if (NOT LIBUSB_FOUND)
 endif()
 
 if (ENABLE_FFMPEG)
+    if(ENABLE_FFMPEG_VIDEO_DUMPER)
+        set(FFmpeg_COMPONENTS "avcodec avformat avutil swscale swresample")
+    else()
+        set(FFmpeg_COMPONENTS "avcodec")
+    endif()
+
     find_package(FFmpeg REQUIRED COMPONENTS ${FFmpeg_COMPONENTS})
 endif()
 
