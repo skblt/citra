@@ -10,10 +10,6 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/cmake-modul
 include(DownloadExternals)
 include(CMakeDependentOption)
 
-# Include vcpkg toolchain file
-set(VCPKG_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/vcpkg")
-set(CMAKE_TOOLCHAIN_FILE "${VCPKG_PATH}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
-
 project(citra LANGUAGES C CXX ASM)
 
 # Set bundled sdl2/qt as dependent options.
@@ -42,15 +38,6 @@ CMAKE_DEPENDENT_OPTION(ENABLE_MF "Use Media Foundation decoder (preferred over F
 CMAKE_DEPENDENT_OPTION(COMPILE_WITH_DWARF "Add DWARF debugging information" ON "MINGW" OFF)
 
 CMAKE_DEPENDENT_OPTION(ENABLE_FDK "Use FDK AAC decoder" OFF "NOT ENABLE_FFMPEG_AUDIO_DECODER;NOT ENABLE_MF" OFF)
-
-# Enable vcpkg features
-if (ENABLE_WEB_SERVICE)
-    list(APPEND VCPKG_MANIFEST_FEATURES "citra-web-service")
-endif()
-
-if (USE_DISCORD_PRESENCE)
-    list(APPEND VCPKG_MANIFEST_FEATURES "citra-discord")
-endif()
 
 if(NOT EXISTS ${PROJECT_SOURCE_DIR}/.git/hooks/pre-commit)
     message(STATUS "Copying pre-commit hook")
@@ -152,6 +139,50 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin/$<CONFIG>)
 # System imported libraries
 # ======================
 
+# Enable vcpkg features
+if (ENABLE_SDL2)
+    find_package(SDL2 CONFIG)
+
+    if (NOT SDL2_FOUND)
+        message(STATUS "SDL2 not found. Using vcpkg")
+        list(APPEND VCPKG_MANIFEST_FEATURES "citra-sdl2")
+    endif()
+endif()
+
+if (ENABLE_WEB_SERVICE)
+    list(APPEND VCPKG_MANIFEST_FEATURES "citra-web-service")
+endif()
+
+if (USE_DISCORD_PRESENCE)
+    list(APPEND VCPKG_MANIFEST_FEATURES "citra-discord")
+endif()
+
+if (ENABLE_FFMPEG)
+    if(ENABLE_FFMPEG_VIDEO_DUMPER)
+        set(FFmpeg_COMPONENTS "avcodec avformat avutil swscale swresample")
+    else()
+        set(FFmpeg_COMPONENTS "avcodec")
+    endif()
+
+    find_package(FFmpeg COMPONENTS ${FFmpeg_COMPONENTS})
+
+    if (NOT FFMPEG_FOUND OR "${FFmpeg_avcodec_VERSION}" VERSION_LESS "57.48.101")
+        message(STATUS "FFmpeg not found. Using vcpkg")
+        list(APPEND VCPKG_MANIFEST_FEATURES "citra-ffmpeg")
+    endif()
+endif()
+
+if (ENABLE_FDK)
+    find_library(FDK_AAC fdk-aac DOC "The path to fdk_aac library")
+    if(FDK_AAC STREQUAL "FDK_AAC-NOTFOUND")
+        message(STATUS "FDK AAC not found. Using vcpkg")
+        list(APPEND VCPKG_MANIFEST_FEATURES "citra-fdk-aac")
+    endif()
+endif()
+
+# Include vcpkg toolchain file
+include(${CMAKE_SOURCE_DIR}/externals/vcpkg/scripts/buildsystems/vcpkg.cmake)
+
 # Prefer the -pthread flag on Linux.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -204,7 +235,6 @@ set(REQUIRED_PACKAGES
     cryptopp
     fmt
     glad
-    glm
     zstd
     unofficial-enet
     lodepng
@@ -215,13 +245,6 @@ foreach(PACKAGE ${REQUIRED_PACKAGES})
 endforeach()
 
 if (ENABLE_SDL2)
-    find_package(SDL2 CONFIG)
-
-    if (NOT SDL2_FOUND)
-        message(STATUS "SDL2 not found. Using vcpkg")
-        list(APPEND VCPKG_MANIFEST_FEATURES "citra-sdl2")
-    endif()
-
     find_package(SDL2 CONFIG REQUIRED)
 else()
     set(SDL2_FOUND NO)
@@ -265,29 +288,11 @@ if (NOT LIBUSB_FOUND)
 endif()
 
 if (ENABLE_FFMPEG)
-    if(ENABLE_FFMPEG_VIDEO_DUMPER)
-        set(FFmpeg_COMPONENTS "avcodec avformat avutil swscale swresample")
-        add_definitions(-DENABLE_FFMPEG_VIDEO_DUMPER)
-    else()
-        set(FFmpeg_COMPONENTS "avcodec")
-    endif()
-
-    find_package(FFmpeg COMPONENTS ${FFmpeg_COMPONENTS})
-
-    if (NOT FFMPEG_FOUND OR "${FFmpeg_avcodec_VERSION}" VERSION_LESS "57.48.101")
-        message(STATUS "FFmpeg not found. Using vcpkg")
-        list(APPEND VCPKG_MANIFEST_FEATURES "citra-ffmpeg")
-    endif()
-
     find_package(FFmpeg REQUIRED COMPONENTS ${FFmpeg_COMPONENTS})
 endif()
 
 if (ENABLE_FDK)
-    find_library(FDK_AAC fdk-aac DOC "The path to fdk_aac library")
-    if(FDK_AAC STREQUAL "FDK_AAC-NOTFOUND")
-        message(STATUS "FDK AAC not found. Using vcpkg")
-        list(APPEND VCPKG_MANIFEST_FEATURES "citra-fdk-aac")
-    endif()
+    find_package(fdk-aac CONFIG REQUIRED)
 endif()
 
 # Platform-specific library requirements
