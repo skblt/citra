@@ -67,7 +67,7 @@ elseif(ENABLE_FDK)
         hle/fdk_decoder.cpp
         hle/fdk_decoder.h
     )
-    target_link_libraries(audio_core PRIVATE ${FDK_AAC})
+    target_link_libraries(audio_core PRIVATE FDK-AAC::fdk-aac)
     target_compile_definitions(audio_core PUBLIC HAVE_FDK)
 endif()
 
@@ -80,7 +80,7 @@ if(ANDROID)
 endif()
 
 if(SDL2_FOUND)
-    target_link_libraries(audio_core PRIVATE SDL2)
+    target_link_libraries(audio_core PRIVATE SDL2::SDL2)
     target_compile_definitions(audio_core PRIVATE HAVE_SDL2)
 endif()
 

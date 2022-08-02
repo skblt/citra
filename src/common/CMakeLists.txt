@@ -135,8 +135,8 @@ endif()
 
 create_target_directory_groups(common)
 
-target_link_libraries(common PUBLIC fmt microprofile Boost::boost Boost::serialization)
-target_link_libraries(common PRIVATE libzstd_static)
+target_link_libraries(common PUBLIC fmt::fmt microprofile Boost::boost Boost::serialization)
+target_link_libraries(common PRIVATE zstd::libzstd_shared)
 if (ARCHITECTURE_x86_64)
-    target_link_libraries(common PRIVATE xbyak)
+    target_link_libraries(common PRIVATE xbyak::xbyak)
 endif()

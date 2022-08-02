@@ -25,4 +25,4 @@ if (ENABLE_WEB_SERVICE)
     endif()
 endif()
 
-target_link_libraries(network PRIVATE common enet Boost::serialization)
+target_link_libraries(network PRIVATE common unofficial::enet::enet Boost::serialization)

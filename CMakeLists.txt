@@ -10,12 +10,15 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/cmake-modul
 include(DownloadExternals)
 include(CMakeDependentOption)
 
+# Include vcpkg toolchain file
+set(VCPKG_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/vcpkg")
+set(CMAKE_TOOLCHAIN_FILE "${VCPKG_PATH}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
+
 project(citra LANGUAGES C CXX ASM)
 
 # Set bundled sdl2/qt as dependent options.
 # OFF by default, but if ENABLE_SDL2 and MSVC are true then ON
 option(ENABLE_SDL2 "Enable the SDL2 frontend" ON)
-CMAKE_DEPENDENT_OPTION(CITRA_USE_BUNDLED_SDL2 "Download bundled SDL2 binaries" ON "ENABLE_SDL2;MSVC" OFF)
 
 option(ENABLE_QT "Enable the Qt frontend" ON)
 option(ENABLE_QT_TRANSLATION "Enable translations for the Qt frontend" OFF)
@@ -32,17 +35,22 @@ if (ENABLE_FFMPEG_AUDIO_DECODER OR ENABLE_FFMPEG_VIDEO_DUMPER)
     set(ENABLE_FFMPEG ON)
 endif()
 
-CMAKE_DEPENDENT_OPTION(CITRA_USE_BUNDLED_FFMPEG "Download bundled FFmpeg binaries" ON "ENABLE_FFMPEG;MSVC" OFF)
-
 option(USE_DISCORD_PRESENCE "Enables Discord Rich Presence" OFF)
 
 CMAKE_DEPENDENT_OPTION(ENABLE_MF "Use Media Foundation decoder (preferred over FFmpeg)" ON "WIN32" OFF)
 
 CMAKE_DEPENDENT_OPTION(COMPILE_WITH_DWARF "Add DWARF debugging information" ON "MINGW" OFF)
 
-option(USE_SYSTEM_BOOST "Use the system Boost libs (instead of the bundled ones)" OFF)
-
 CMAKE_DEPENDENT_OPTION(ENABLE_FDK "Use FDK AAC decoder" OFF "NOT ENABLE_FFMPEG_AUDIO_DECODER;NOT ENABLE_MF" OFF)
+
+# Enable vcpkg features
+if (ENABLE_WEB_SERVICE)
+    list(APPEND VCPKG_MANIFEST_FEATURES "citra-web-service")
+endif()
+
+if (USE_DISCORD_PRESENCE)
+    list(APPEND VCPKG_MANIFEST_FEATURES "citra-discord")
+endif()
 
 if(NOT EXISTS ${PROJECT_SOURCE_DIR}/.git/hooks/pre-commit)
     message(STATUS "Copying pre-commit hook")
@@ -141,7 +149,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set up output paths for executable binaries
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin/$<CONFIG>)
 
-
 # System imported libraries
 # ======================
 
@@ -149,33 +156,73 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin/$<CONFIG>)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+# Boost
+find_package(Boost REQUIRED COMPONENTS serialization)
+
+# Find inih
+find_path(INIH_INCLUDE_DIR "INIReader.h" REQUIRED)
+find_library(INIH_LIB NAMES inih REQUIRED)
+add_library(inih INTERFACE)
+target_include_directories(inih INTERFACE ${INIH_INCLUDE_DIR})
+target_link_libraries(inih INTERFACE ${INIH_LIB})
+
+# Xbyak
+if (ARCHITECTURE_x86_64)
+    find_package(xbyak CONFIG REQUIRED)
+endif()
+
+# DiscordRPC
+if (USE_DISCORD_PRESENCE)
+    find_package(discord-rpc CONFIG REQUIRED)
+endif()
+
+if (ENABLE_WEB_SERVICE)
+    # OpenSSL
+    find_package(OpenSSL REQUIRED)
+
+    # JSON
+    find_package(nlohmann_json CONFIG REQUIRED)
+
+    # httplib
+    find_path(CPP_HTTPLIB_INCLUDE_DIRS "httplib.h")
+    add_library(httplib INTERFACE)
+    target_include_directories(httplib INTERFACE ${CPP_HTTPLIB_INCLUDE_DIRS})
+
+    # cpp-jwt
+    find_package(cpp-jwt CONFIG REQUIRED)
+endif()
+
+# (xperia64): Only use libyuv on Android b/c of build issues on Windows and mandatory JPEG
+if(ANDROID)
+    # libyuv
+    find_package(libyuv CONFIG REQUIRED)
+endif()
+
+# Find the rest of our dependecies
+set(REQUIRED_PACKAGES
+    Catch2
+    cryptopp
+    fmt
+    glad
+    glm
+    zstd
+    unofficial-enet
+    lodepng
+)
+
+foreach(PACKAGE ${REQUIRED_PACKAGES})
+    find_package(${PACKAGE} CONFIG REQUIRED)
+endforeach()
+
 if (ENABLE_SDL2)
-    if (CITRA_USE_BUNDLED_SDL2)
-        # Detect toolchain and platform
-        if ((MSVC_VERSION GREATER_EQUAL 1920 AND MSVC_VERSION LESS 1940) AND ARCHITECTURE_x86_64)
-            set(SDL2_VER "SDL2-2.0.16")
-        else()
-            message(FATAL_ERROR "No bundled SDL2 binaries for your toolchain. Disable CITRA_USE_BUNDLED_SDL2 and provide your own.")
-        endif()
+    find_package(SDL2 CONFIG)
 
-        if (DEFINED SDL2_VER)
-            download_bundled_external("sdl2/" ${SDL2_VER} SDL2_PREFIX)
-        endif()
-
-        set(SDL2_FOUND YES)
-        set(SDL2_INCLUDE_DIR "${SDL2_PREFIX}/include" CACHE PATH "Path to SDL2 headers")
-        set(SDL2_LIBRARY "${SDL2_PREFIX}/lib/x64/SDL2.lib" CACHE PATH "Path to SDL2 library")
-        set(SDL2_DLL_DIR "${SDL2_PREFIX}/lib/x64/" CACHE PATH "Path to SDL2.dll")
-    else()
-        find_package(SDL2 REQUIRED)
+    if (NOT SDL2_FOUND)
+        message(STATUS "SDL2 not found. Using vcpkg")
+        list(APPEND VCPKG_MANIFEST_FEATURES "citra-sdl2")
     endif()
 
-    if (SDL2_FOUND)
-        # TODO(yuriks): Make FindSDL2.cmake export an IMPORTED library instead
-        add_library(SDL2 INTERFACE)
-        target_link_libraries(SDL2 INTERFACE "${SDL2_LIBRARY}")
-        target_include_directories(SDL2 INTERFACE "${SDL2_INCLUDE_DIR}")
-    endif()
+    find_package(SDL2 CONFIG REQUIRED)
 else()
     set(SDL2_FOUND NO)
 endif()
@@ -218,39 +265,31 @@ if (NOT LIBUSB_FOUND)
 endif()
 
 if (ENABLE_FFMPEG)
-    if (CITRA_USE_BUNDLED_FFMPEG)
-        if ((MSVC_VERSION GREATER_EQUAL 1920 AND MSVC_VERSION LESS 1940) AND ARCHITECTURE_x86_64)
-            set(FFmpeg_VER "ffmpeg-4.1-win64")
-        else()
-            message(FATAL_ERROR "No bundled FFmpeg binaries for your toolchain. Disable CITRA_USE_BUNDLED_FFMPEG and provide your own.")
-        endif()
-
-        if (DEFINED FFmpeg_VER)
-            download_bundled_external("ffmpeg/" ${FFmpeg_VER} FFmpeg_PREFIX)
-            set(FFMPEG_DIR "${FFmpeg_PREFIX}")
-        endif()
-    endif()
-
-    if (ENABLE_FFMPEG_VIDEO_DUMPER)
-        find_package(FFmpeg REQUIRED COMPONENTS avcodec avformat avutil swscale swresample)
+    if(ENABLE_FFMPEG_VIDEO_DUMPER)
+        set(FFmpeg_COMPONENTS "avcodec avformat avutil swscale swresample")
+        add_definitions(-DENABLE_FFMPEG_VIDEO_DUMPER)
     else()
-        find_package(FFmpeg REQUIRED COMPONENTS avcodec)
+        set(FFmpeg_COMPONENTS "avcodec")
     endif()
-    if ("${FFmpeg_avcodec_VERSION}" VERSION_LESS "57.48.101")
-        message(FATAL_ERROR "Found version for libavcodec is too low. The required version is at least 57.48.101 (included in FFmpeg 3.1 and later).")
-    endif()
-endif()
 
-if (ENABLE_FFMPEG_VIDEO_DUMPER)
-    add_definitions(-DENABLE_FFMPEG_VIDEO_DUMPER)
+    find_package(FFmpeg COMPONENTS ${FFmpeg_COMPONENTS})
+
+    if (NOT FFMPEG_FOUND OR "${FFmpeg_avcodec_VERSION}" VERSION_LESS "57.48.101")
+        message(STATUS "FFmpeg not found. Using vcpkg")
+        list(APPEND VCPKG_MANIFEST_FEATURES "citra-ffmpeg")
+    endif()
+
+    find_package(FFmpeg REQUIRED COMPONENTS ${FFmpeg_COMPONENTS})
 endif()
 
 if (ENABLE_FDK)
     find_library(FDK_AAC fdk-aac DOC "The path to fdk_aac library")
     if(FDK_AAC STREQUAL "FDK_AAC-NOTFOUND")
-        message(FATAL_ERROR "fdk_aac library not found.")
+        message(STATUS "FDK AAC not found. Using vcpkg")
+        list(APPEND VCPKG_MANIFEST_FEATURES "citra-fdk-aac")
     endif()
 endif()
+
 # Platform-specific library requirements
 # ======================================
 
@@ -360,20 +399,8 @@ git_describe(GIT_DESC --always --long --dirty)
 git_branch_name(GIT_BRANCH)
 get_timestamp(BUILD_DATE)
 
-if (NOT USE_SYSTEM_BOOST)
-    add_definitions( -DBOOST_ALL_NO_LIB )
-endif()
-
 enable_testing()
 add_subdirectory(externals)
-
-# Boost
-if (USE_SYSTEM_BOOST)
-    find_package(Boost 1.70.0 COMPONENTS serialization REQUIRED)
-else()
-    add_library(Boost::boost ALIAS boost)
-    add_library(Boost::serialization ALIAS boost_serialization)
-endif()
 
 add_subdirectory(src)
 add_subdirectory(dist/installer)
