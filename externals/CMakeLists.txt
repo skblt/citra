@@ -23,9 +23,10 @@ target_link_libraries(boost_serialization PUBLIC boost)
 
 # Add additional boost libs here; remember to ALIAS them in the root CMakeLists!
 
-# Catch
-add_library(catch-single-include INTERFACE)
-target_include_directories(catch-single-include INTERFACE catch/single_include)
+# Catch2
+set(CATCH_INSTALL_DOCS OFF)
+set(CATCH_INSTALL_EXTRAS OFF)
+add_subdirectory(catch2)
 
 # Crypto++
 add_subdirectory(cryptopp)
