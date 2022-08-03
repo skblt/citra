@@ -179,6 +179,13 @@ if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
     set(VCPKG_MANIFEST_FEATURES ${VCPKG_MANIFEST_FEATURES} CACHE STRING "")
 endif()
 
+# Prefer static linkage on windows and mingw
+if (MINGW)
+    set(VCPKG_TARGET_TRIPLET "x64-mingw-static")
+elseif (WIN32)
+    set(VCPKG_TARGET_TRIPLET "x64-windows-static")
+endif()
+
 # Include vcpkg toolchain file
 include(${CMAKE_SOURCE_DIR}/externals/vcpkg/scripts/buildsystems/vcpkg.cmake)
 
