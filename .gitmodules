@@ -14,14 +14,14 @@
     path = externals/teakra
     url = https://github.com/wwylele/teakra.git
 [submodule "externals/vma"]
-	path = externals/vma
-	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+    path = externals/vma
+    url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
 [submodule "externals/Vulkan-Headers"]
-	path = externals/Vulkan-Headers
-	url = https://github.com/KhronosGroup/Vulkan-Headers
+    path = externals/Vulkan-Headers
+    url = https://github.com/KhronosGroup/Vulkan-Headers
 [submodule "externals/vcpkg"]
-	path = externals/vcpkg
-	url = https://github.com/microsoft/vcpkg
+    path = externals/vcpkg
+    url = https://github.com/microsoft/vcpkg
 [submodule "externals/inih/inih"]
-	path = externals/inih/inih
-	url = https://github.com/benhoyt/inih
+    path = externals/inih/inih
+    url = https://github.com/benhoyt/inih

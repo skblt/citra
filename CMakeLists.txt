@@ -192,6 +192,9 @@ elseif (WIN32)
     set(VCPKG_TARGET_TRIPLET "x64-windows-static")
 endif()
 
+# Enable library versioning and manifests
+set(VCPKG_FEATURE_FLAGS "manifests,versions" CACHE INTERNAL "Necessary vcpkg flags for manifest based autoinstall and versioning")
+
 # Include vcpkg toolchain file
 include(${CMAKE_SOURCE_DIR}/externals/vcpkg/scripts/buildsystems/vcpkg.cmake)
 

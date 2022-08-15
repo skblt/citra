@@ -1,6 +1,7 @@
 {
     "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
     "name": "citra-emu",
+    "builtin-baseline": "d293ac220dd126165d24907b6f07e6b658b3329f",
     "version-string": "1.0.0",
     "dependencies": [
         "boost-serialization",
@@ -32,6 +33,12 @@
         "xbyak",
         "glslang"
     ],
+    "overrides": [
+        {
+            "name": "fmt",
+            "version": "8.1.1"
+        }
+     ],
     "features": {
         "citra-discord": {
             "description": "Discord Rich Presence",
