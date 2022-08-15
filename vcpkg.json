@@ -6,6 +6,7 @@
         "boost-serialization",
         "boost-system",
         "boost-range",
+        "boost-optional",
         "boost-icl",
         "boost-date-time",
         "boost-crc",

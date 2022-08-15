@@ -568,7 +568,7 @@ void System::Reset() {
     // TODO: Properly implement the reset
 
     // Since the system is completely reinitialized, we'll have to store the deliver arg manually.
-    std::optional<Service::APT::AppletManager::DeliverArg> deliver_arg;
+    boost::optional<Service::APT::AppletManager::DeliverArg> deliver_arg;
     if (auto apt = Service::APT::GetModule(*this)) {
         deliver_arg = apt->GetAppletManager()->ReceiveDeliverArg();
     }

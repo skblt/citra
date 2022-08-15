@@ -544,7 +544,7 @@ void NWM_UDS::OnWifiPacketReceived(const Network::WifiPacket& packet) {
     }
 }
 
-std::optional<Network::MacAddress> NWM_UDS::GetNodeMacAddress(u16 dest_node_id, u8 flags) {
+boost::optional<Network::MacAddress> NWM_UDS::GetNodeMacAddress(u16 dest_node_id, u8 flags) {
     constexpr u8 BroadcastFlag = 0x2;
     if ((flags & BroadcastFlag) || dest_node_id == BroadcastNetworkNodeId) {
         // Broadcast
@@ -559,7 +559,7 @@ std::optional<Network::MacAddress> NWM_UDS::GetNodeMacAddress(u16 dest_node_id, 
             return node.second.node_id == dest_node_id && node.second.connected;
         });
     if (destination == node_map.end()) {
-        return std::nullopt;
+        return {};
     }
     return destination->first;
 }

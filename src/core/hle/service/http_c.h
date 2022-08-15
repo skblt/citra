@@ -10,7 +10,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <optional>
+#include <boost/optional.hpp>
 #include <boost/serialization/optional.hpp>
 #include <boost/serialization/shared_ptr.hpp>
 #include <boost/serialization/string.hpp>
@@ -221,7 +221,7 @@ public:
 struct SessionData : public Kernel::SessionRequestHandler::SessionDataBase {
     /// The HTTP context that is currently bound to this session, this can be empty if no context
     /// has been bound. Certain commands can only be called on a session with a bound context.
-    std::optional<Context::Handle> current_http_context;
+    boost::optional<Context::Handle> current_http_context;
 
     u32 session_id;
 

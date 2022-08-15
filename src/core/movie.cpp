@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include <optional>
+#include <boost/optional.hpp>
 #include <cryptopp/hex.h>
 #include <cryptopp/osrng.h>
 #include "common/bit_field.h"
@@ -574,28 +574,30 @@ void Movie::SetReadOnly(bool read_only_) {
     read_only = read_only_;
 }
 
-static std::optional<CTMHeader> ReadHeader(const std::string& movie_file) {
+static boost::optional<CTMHeader> ReadHeader(const std::string& movie_file) {
     FileUtil::IOFile save_record(movie_file, "rb");
     const u64 size = save_record.GetSize();
 
     if (!save_record || size <= sizeof(CTMHeader)) {
-        return std::nullopt;
+        return boost::none;
     }
 
     CTMHeader header;
     save_record.ReadArray(&header, 1);
 
     if (header_magic_bytes != header.filetype) {
-        return std::nullopt;
+        return boost::none;
     }
 
     return header;
 }
 
 void Movie::PrepareForPlayback(const std::string& movie_file) {
-    if (auto header = ReadHeader(movie_file); header) {
-        init_time = header.value().clock_init_time;
-    }
+    auto header = ReadHeader(movie_file);
+    if (header == boost::none)
+        return;
+
+    init_time = header.value().clock_init_time;
 }
 
 void Movie::PrepareForRecording() {
@@ -636,15 +638,15 @@ Movie::ValidationResult Movie::ValidateMovie(const std::string& movie_file) cons
 }
 
 Movie::MovieMetadata Movie::GetMovieMetadata(const std::string& movie_file) const {
-    if (auto header = ReadHeader(movie_file); header) {
-        std::array<char, 33> author{}; // Add a null terminator
-        std::memcpy(author.data(), header->author.data(), header->author.size());
+    auto header = ReadHeader(movie_file);
+    if (header == boost::none)
+        return {};
 
-        return {header->program_id, std::string{author.data()}, header->rerecord_count,
-                header->input_count};
-    }
+    std::array<char, 33> author{}; // Add a null terminator
+    std::memcpy(author.data(), header->author.data(), header->author.size());
 
-    return {};
+    return {header->program_id, std::string{author.data()}, header->rerecord_count,
+            header->input_count};
 }
 
 void Movie::Shutdown() {
