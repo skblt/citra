@@ -23,6 +23,13 @@ add_library(video_core STATIC
     regs_texturing.h
     renderer_base.cpp
     renderer_base.h
+    rasterizer_cache/morton.h
+    rasterizer_cache/pixel_format.h
+    rasterizer_cache/rasterizer_cache.h
+    rasterizer_cache/rasterizer_cache_base.h
+    rasterizer_cache/surface.h
+    rasterizer_cache/surface_params.cpp
+    rasterizer_cache/surface_params.h
     renderer_opengl/frame_dumper_opengl.cpp
     renderer_opengl/frame_dumper_opengl.h
     renderer_opengl/gl_rasterizer.cpp

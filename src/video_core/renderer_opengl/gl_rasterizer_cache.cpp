@@ -514,7 +514,7 @@ void RasterizerCacheOpenGL::CopySurface(const Surface& src_surface, const Surfac
     if (src_surface->type == SurfaceType::Fill) {
         // FillSurface needs a 4 bytes buffer
         const u32 fill_offset =
-            (boost::icl::first(copy_interval) - src_surface->addr) % src_surface->fill_size;
+                (boost::icl::first(copy_interval) - src_surface->addr) % src_surface->fill_size;
         std::array<u8, 4> fill_buffer;
 
         u32 fill_buff_pos = fill_offset;
@@ -592,14 +592,13 @@ void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
             tex_info.SetDefaultStride();
             tex_info.physical_address = addr;
 
-            const SurfaceInterval load_interval(load_start, load_end);
+            const SurfaceInterval load_interval{load_start, load_end};
             const auto rect = GetSubRect(FromInterval(load_interval));
             ASSERT(FromInterval(load_interval).GetInterval() == load_interval);
 
-            for (unsigned y = rect.bottom; y < rect.top; ++y) {
-                for (unsigned x = rect.left; x < rect.right; ++x) {
-                    auto vec4 =
-                        Pica::Texture::LookupTexture(texture_src_data, x, height - 1 - y, tex_info);
+            for (u32 y = rect.bottom; y < rect.top; ++y) {
+                for (u32 x = rect.left; x < rect.right; ++x) {
+                    auto vec4 = Pica::Texture::LookupTexture(texture_src_data, x, height - 1 - y, tex_info);
                     const std::size_t offset = (x + (width * y)) * 4;
                     std::memcpy(&gl_buffer[offset], vec4.AsArray(), 4);
                 }
@@ -706,7 +705,7 @@ bool CachedSurface::LoadCustomTexture(u64 tex_hash) {
     return true;
 }
 
-void CachedSurface::DumpTexture(GLuint target_tex, u64 tex_hash) {
+void CachedSurface::DumpTexture(GLuint, u64 tex_hash) {
     // Make sure the texture size is a power of 2
     // If not, the surface is actually a framebuffer
     std::bitset<32> width_bits(width);
