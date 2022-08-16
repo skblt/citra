@@ -1,0 +1,80 @@
+{
+    "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+    "name": "citra-emu",
+    "version-string": "1.0.0",
+    "dependencies": [
+        "boost-serialization",
+        "boost-system",
+        "boost-range",
+        "boost-icl",
+        "boost-date-time",
+        "boost-crc",
+        "boost-container",
+        "boost-asio",
+        "catch2",
+        "cryptopp",
+        "enet",
+        "libusb",
+        "glm",
+        "fmt",
+        {
+            "name": "glad",
+            "features": [
+                "gl-api-33",
+                "gles2-api-32",
+                "extensions"
+            ]
+        },
+        "libyuv",
+        "lodepng",
+        "zstd",
+        "xbyak",
+        "glslang"
+    ],
+    "features": {
+        "citra-discord": {
+            "description": "Discord Rich Presence",
+            "dependencies": [
+                "discord-rpc"
+            ]
+        },
+        "citra-sdl2": {
+            "description": "SDL2 frontend",
+            "dependencies": [ 
+                "sdl2"
+            ]
+        },
+        "citra-web-service": {
+            "description": "Web services (telemetry, etc.)",
+            "dependencies": [ 
+                {
+                    "name": "openssl",
+                    "platform": "windows"
+                },
+                "nlohmann-json",
+                "cpp-httplib",
+                "cpp-jwt"
+            ]
+        },
+        "citra-ffmpeg": {
+            "description": "Enable FFmpeg utilities",
+            "dependencies": [
+                {
+                    "name": "ffmpeg",
+                    "features": [
+                        "avcodec",
+                        "avformat",
+                        "avdevice",
+                        "swresample"
+                    ]
+                }
+            ]
+        },
+        "citra-fdk-aac": {
+            "description": "FDK AAC decoder",
+            "dependencies": [
+                "fdk-aac"
+            ]
+        }
+    }
+}

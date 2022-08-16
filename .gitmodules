@@ -22,3 +22,6 @@
 [submodule "externals/vcpkg"]
 	path = externals/vcpkg
 	url = https://github.com/microsoft/vcpkg
+[submodule "externals/inih/inih"]
+	path = externals/inih/inih
+	url = https://github.com/benhoyt/inih

@@ -3,21 +3,21 @@ cmake_minimum_required(VERSION 3.12)
 if (${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.15)
     # Don't override the warning flags in MSVC:
     cmake_policy(SET CMP0092 NEW)
-endif ()
+    # Allow selecting MSVC runtime library using CMAKE_MSVC_RUNTIME_LIBRARY.
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/cmake-modules")
 include(DownloadExternals)
 include(CMakeDependentOption)
-
-# Include vcpkg toolchain file
-set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/externals/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
-include(VcpkgCmakeUtils)
 
 project(citra LANGUAGES C CXX ASM)
 
 # Set bundled sdl2/qt as dependent options.
 # OFF by default, but if ENABLE_SDL2 and MSVC are true then ON
 option(ENABLE_SDL2 "Enable the SDL2 frontend" ON)
+
 option(ENABLE_QT "Enable the Qt frontend" ON)
 option(ENABLE_QT_TRANSLATION "Enable translations for the Qt frontend" OFF)
 CMAKE_DEPENDENT_OPTION(CITRA_USE_BUNDLED_QT "Download bundled Qt binaries" ON "ENABLE_QT;MSVC" OFF)
@@ -26,16 +26,12 @@ option(ENABLE_WEB_SERVICE "Enable web services (telemetry, etc.)" ON)
 
 option(ENABLE_CUBEB "Enables the cubeb audio backend" ON)
 
-option(ENABLE_VULKAN "Enables the use of the Vulkan API" ON)
-
 option(ENABLE_FFMPEG_AUDIO_DECODER "Enable FFmpeg audio (AAC) decoder" OFF)
 option(ENABLE_FFMPEG_VIDEO_DUMPER "Enable FFmpeg video dumper" OFF)
 
 if (ENABLE_FFMPEG_AUDIO_DECODER OR ENABLE_FFMPEG_VIDEO_DUMPER)
     set(ENABLE_FFMPEG ON)
 endif()
-
-CMAKE_DEPENDENT_OPTION(CITRA_USE_BUNDLED_FFMPEG "Download bundled FFmpeg binaries" ON "ENABLE_FFMPEG;MSVC" OFF)
 
 option(USE_DISCORD_PRESENCE "Enables Discord Rich Presence" OFF)
 
@@ -49,6 +45,14 @@ if(NOT EXISTS ${PROJECT_SOURCE_DIR}/.git/hooks/pre-commit)
     message(STATUS "Copying pre-commit hook")
     file(COPY hooks/pre-commit
         DESTINATION ${PROJECT_SOURCE_DIR}/.git/hooks)
+endif()
+
+# Use ccache for android if available
+# =======================================================================
+if (NOT $ENV{NDK_CCACHE} EQUAL "")
+    set(CCACHE_EXE $ENV{NDK_CCACHE})
+    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_EXE})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_EXE})
 endif()
 
 # Sanity check : Check that all submodules are present
@@ -108,13 +112,13 @@ if (NOT ENABLE_GENERIC)
     if (MSVC)
         detect_architecture("_M_AMD64" x86_64)
         detect_architecture("_M_IX86" x86)
-        detect_architecture("_M_ARM" arm)
-        detect_architecture("_M_ARM64" arm64)
+        detect_architecture("_M_ARM" ARM)
+        detect_architecture("_M_ARM64" ARM64)
     else()
         detect_architecture("__x86_64__" x86_64)
         detect_architecture("__i386__" x86)
-        detect_architecture("__arm__" arm)
-        detect_architecture("__aarch64__" arm64)
+        detect_architecture("__arm__" ARM)
+        detect_architecture("__aarch64__" ARM64)
     endif()
 endif()
 if (NOT DEFINED ARCHITECTURE)
@@ -134,95 +138,120 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set up output paths for executable binaries
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin/$<CONFIG>)
 
-
 # System imported libraries
 # ======================
 
-# Download required dependecies with vcpkg
-set(REQUIRED_LIBRARIES
-    boost-serialization
-    boost-system
-    boost-range
-    boost-icl
-    boost-date-time
-    boost-crc
-    boost-container
-    boost-asio
-    catch2
-    cryptopp
-    enet
-    fmt
-    glm
-    glad[gl-api-33,gles2-api-32,extensions]
-    inih
-    lodepng
-    glslang
-    zstd
-)
+# Enable vcpkg features
+if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
+    if (ENABLE_SDL2)
+        find_package(SDL2 CONFIG)
 
-foreach(LIBRARY ${REQUIRED_LIBRARIES})
-    vcpkg_add_package(${LIBRARY})
-endforeach()
+        if (NOT SDL2_FOUND)
+            message(STATUS "SDL2 not found. Using vcpkg")
+            list(APPEND VCPKG_MANIFEST_FEATURES "citra-sdl2")
+        endif()
+    endif()
 
-# Xbyak
-if (ARCHITECTURE_x86_64)
-    vcpkg_add_package(xbyak)
-    find_package(xbyak CONFIG REQUIRED)
+    if (ENABLE_WEB_SERVICE)
+        list(APPEND VCPKG_MANIFEST_FEATURES "citra-web-service")
+    endif()
+
+    if (USE_DISCORD_PRESENCE)
+        list(APPEND VCPKG_MANIFEST_FEATURES "citra-discord")
+    endif()
+
+    if (ENABLE_FFMPEG)
+        find_package(FFmpeg COMPONENTS avcodec avformat avutil swscale swresample)
+
+        if (NOT FFMPEG_FOUND OR "${FFmpeg_avcodec_VERSION}" VERSION_LESS "57.48.101")
+            message(STATUS "FFmpeg not found. Using vcpkg")
+            list(APPEND VCPKG_MANIFEST_FEATURES "citra-ffmpeg")
+        endif()
+    endif()
+
+    if (ENABLE_FDK)
+        find_library(FDK_AAC fdk-aac DOC "The path to fdk_aac library")
+        if(FDK_AAC STREQUAL "FDK_AAC-NOTFOUND")
+            message(STATUS "FDK AAC not found. Using vcpkg")
+            list(APPEND VCPKG_MANIFEST_FEATURES "citra-fdk-aac")
+        endif()
+    endif()
+
+    # Cache the selected manifest features.
+    set(VCPKG_MANIFEST_FEATURES ${VCPKG_MANIFEST_FEATURES} CACHE STRING "")
 endif()
+
+# Prefer static linkage on windows and MinGW
+if (MINGW)
+    set(VCPKG_TARGET_TRIPLET "x64-mingw-static")
+elseif (WIN32)
+    # We could also build a dynamic CRT and not require this flag but vcpkg
+    # developers actively discourage this. See:
+    # https://github.com/microsoft/vcpkg/issues/15122#issuecomment-745497720
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    set(VCPKG_TARGET_TRIPLET "x64-windows-static")
+endif()
+
+# Include vcpkg toolchain file
+include(${CMAKE_SOURCE_DIR}/externals/vcpkg/scripts/buildsystems/vcpkg.cmake)
+
+# Prefer the -pthread flag on Linux.
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
+# Boost
+find_package(Boost REQUIRED COMPONENTS serialization)
 
 # DiscordRPC
 if (USE_DISCORD_PRESENCE)
-    vcpkg_add_package(discord-rpc)
     find_package(discord-rpc CONFIG REQUIRED)
 endif()
 
 if (ENABLE_WEB_SERVICE)
-    # LibreSSL
-    vcpkg_add_package(openssl)
+    # OpenSSL
     find_package(OpenSSL REQUIRED)
 
     # JSON
-    vcpkg_add_package(nlohmann-json)
     find_package(nlohmann_json CONFIG REQUIRED)
 
     # httplib
-    vcpkg_add_package(cpp-httplib)
     find_path(CPP_HTTPLIB_INCLUDE_DIRS "httplib.h")
     add_library(httplib INTERFACE)
     target_include_directories(httplib INTERFACE ${CPP_HTTPLIB_INCLUDE_DIRS})
 
     # cpp-jwt
-    vcpkg_add_package(cpp-jwt)
     find_package(cpp-jwt CONFIG REQUIRED)
 endif()
 
 # (xperia64): Only use libyuv on Android b/c of build issues on Windows and mandatory JPEG
 if(ANDROID)
     # libyuv
-    vcpkg_add_package(libyuv)
     find_package(libyuv CONFIG REQUIRED)
 endif()
 
-# Prefer the -pthread flag on Linux.
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
+# Find the rest of our dependecies
+set(REQUIRED_PACKAGES
+    Catch2
+    cryptopp
+    fmt
+    glad
+    glm
+    zstd
+    unofficial-enet
+    lodepng
+    glslang
+    xbyak
+)
+
+foreach(PACKAGE ${REQUIRED_PACKAGES})
+    find_package(${PACKAGE} CONFIG REQUIRED)
+endforeach()
 
 if (ENABLE_SDL2)
-    find_package(SDL2 CONFIG)
-
-    if (NOT SDL2_FOUND)
-        vcpkg_add_package(sdl2)
-        find_package(SDL2 CONFIG REQUIRED)
-    endif()
-
-    if (SDL2_FOUND)
-        add_library(SDL2 INTERFACE)
-        target_link_libraries(SDL2 INTERFACE SDL2::SDL2 SDL2::SDL2main)
-    endif()
+    find_package(SDL2 CONFIG REQUIRED)
 else()
     set(SDL2_FOUND NO)
 endif()
-
 
 if (ENABLE_QT)
     if (CITRA_USE_BUNDLED_QT)
@@ -256,62 +285,23 @@ if(NOT APPLE)
     find_package(LibUSB)
 endif()
 if (NOT LIBUSB_FOUND)
-    vcpkg_add_package(libusb)
-    find_package(libusb CONFIG)
-
-    if (NOT ${libusb_FOUND})
-        set(LIBUSB_INCLUDE_DIRS ${LIBUSB_INCLUDE_DIR})
-        set(LIBUSB_LIBRARIES ${LIBUSB_LIBRARY})
-    endif()
+    set(LIBUSB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/externals/libusb/libusb/libusb")
+    set(LIBUSB_LIBRARIES usb)
 endif()
 
 if (ENABLE_FFMPEG)
-    vcpkg_add_package(ffmpeg[avcodec,avformat,avdevice,swresample])
-    if (ENABLE_FFMPEG_VIDEO_DUMPER)
-        find_package(FFMPEG REQUIRED COMPONENTS libavcodec libavformat libavutil libswresample)
+    if(ENABLE_FFMPEG_VIDEO_DUMPER)
+        set(FFmpeg_COMPONENTS "avcodec avformat avutil swscale swresample")
     else()
-        find_package(FFMPEG REQUIRED COMPONENTS libavcodec)
+        set(FFmpeg_COMPONENTS "avcodec")
     endif()
 
-    if ("${FFmpeg_avcodec_VERSION}" VERSION_LESS "57.48.101")
-        message(FATAL_ERROR "Found version for libavcodec is too low. The required version is at least 57.48.101 (included in FFmpeg 3.1 and later).")
-    endif()
-endif()
-
-if (ENABLE_FFMPEG_VIDEO_DUMPER)
-    add_definitions(-DENABLE_FFMPEG_VIDEO_DUMPER)
+    find_package(FFmpeg REQUIRED COMPONENTS ${FFmpeg_COMPONENTS})
 endif()
 
 if (ENABLE_FDK)
-    vcpkg_add_package(fdk-acc)
     find_package(fdk-aac CONFIG REQUIRED)
 endif()
-
-# Find the rest of our dependecies
-set(REQUIRED_PACKAGES
-    Catch2
-    cryptopp
-    fmt
-    glad
-    glm
-    zstd
-    unofficial-enet
-    lodepng
-)
-
-foreach(PACKAGE ${REQUIRED_PACKAGES})
-    find_package(${PACKAGE} CONFIG REQUIRED)
-endforeach()
-
-# Find Boost::serialization
-find_package(Boost REQUIRED COMPONENTS serialization)
-
-# Find inih
-find_path(INIH_INCLUDE_DIR "INIReader.h" REQUIRED)
-find_library(INIH_LIB NAMES inih REQUIRED)
-add_library(inih INTERFACE)
-target_include_directories(inih INTERFACE ${INIH_INCLUDE_DIR})
-target_link_libraries(inih INTERFACE ${INIH_LIB})
 
 # Platform-specific library requirements
 # ======================================
@@ -331,10 +321,6 @@ elseif (WIN32)
     endif()
 elseif (CMAKE_SYSTEM_NAME MATCHES "^(Linux|kFreeBSD|GNU|SunOS)$")
     set(PLATFORM_LIBRARIES rt)
-endif()
-
-if (ENABLE_VULKAN)
-    find_package(glslang CONFIG REQUIRED)
 endif()
 
 # Setup a custom clang-format target (if clang-format can be found) that will run
@@ -411,6 +397,13 @@ function(get_timestamp _var)
     string(TIMESTAMP timestamp UTC)
     set(${_var} "${timestamp}" PARENT_SCOPE)
 endfunction()
+
+# Prevent boost from linking against libs when building
+add_definitions(-DBOOST_ERROR_CODE_HEADER_ONLY
+    -DBOOST_SYSTEM_NO_LIB
+    -DBOOST_DATE_TIME_NO_LIB
+    -DBOOST_REGEX_NO_LIB
+)
 
 # generate git/build information
 include(GetGitRevisionDescription)
