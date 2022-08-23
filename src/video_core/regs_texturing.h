@@ -184,6 +184,7 @@ struct TexturingRegs {
         const TextureConfig config;
         const TextureFormat format;
     };
+
     const std::array<FullTextureConfig, 3> GetTextures() const {
         return {{
             {static_cast<bool>(main_config.texture0_enable), texture0, texture0_format},

@@ -12,6 +12,8 @@ add_library(video_core STATIC
     pica_types.h
     primitive_assembly.cpp
     primitive_assembly.h
+    rasterizer_accelerated.cpp
+    rasterizer_accelerated.h
     rasterizer_interface.h
     regs.cpp
     regs.h
@@ -102,6 +104,14 @@ add_library(video_core STATIC
     texture/etc1.h
     texture/texture_decode.cpp
     texture/texture_decode.h
+    transform_cache/morton_swizzle.h
+    transform_cache/pixel_format.h
+    transform_cache/rasterizer_cache.h
+    transform_cache/slot_vector.h
+    transform_cache/surface.cpp
+    transform_cache/surface.h
+    transform_cache/types.h
+    transform_cache/utils.h
     utils.h
     vertex_loader.cpp
     vertex_loader.h

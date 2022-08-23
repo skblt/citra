@@ -5,15 +5,14 @@
 #pragma once
 #include "common/alignment.h"
 #include "core/memory.h"
-#include "video_core/rasterizer_cache/pixel_format.h"
-#include "video_core/renderer_opengl/gl_vars.h"
+#include "video_core/transform_cache/pixel_format.h"
 #include "video_core/utils.h"
 #include "video_core/video_core.h"
 
-namespace OpenGL {
+namespace VideoCore {
 
 template <bool morton_to_gl, PixelFormat format>
-static void MortonCopyTile(u32 stride, u8* tile_buffer, u8* gl_buffer) {
+constexpr void MortonCopyTile(u32 stride, u8* tile_buffer, u8* gl_buffer) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
     constexpr u32 aligned_bytes_per_pixel = GetBytesPerPixel(format);
     for (u32 y = 0; y < 8; ++y) {
@@ -24,17 +23,6 @@ static void MortonCopyTile(u32 stride, u8* tile_buffer, u8* gl_buffer) {
                 if constexpr (format == PixelFormat::D24S8) {
                     gl_ptr[0] = tile_ptr[3];
                     std::memcpy(gl_ptr + 1, tile_ptr, 3);
-                } else if (format == PixelFormat::RGBA8 && GLES) {
-                    // because GLES does not have ABGR format
-                    // so we will do byteswapping here
-                    gl_ptr[0] = tile_ptr[3];
-                    gl_ptr[1] = tile_ptr[2];
-                    gl_ptr[2] = tile_ptr[1];
-                    gl_ptr[3] = tile_ptr[0];
-                } else if (format == PixelFormat::RGB8 && GLES) {
-                    gl_ptr[0] = tile_ptr[2];
-                    gl_ptr[1] = tile_ptr[1];
-                    gl_ptr[2] = tile_ptr[0];
                 } else {
                     std::memcpy(gl_ptr, tile_ptr, bytes_per_pixel);
                 }
@@ -42,17 +30,6 @@ static void MortonCopyTile(u32 stride, u8* tile_buffer, u8* gl_buffer) {
                 if constexpr (format == PixelFormat::D24S8) {
                     std::memcpy(tile_ptr, gl_ptr + 1, 3);
                     tile_ptr[3] = gl_ptr[0];
-                } else if (format == PixelFormat::RGBA8 && GLES) {
-                    // because GLES does not have ABGR format
-                    // so we will do byteswapping here
-                    tile_ptr[0] = gl_ptr[3];
-                    tile_ptr[1] = gl_ptr[2];
-                    tile_ptr[2] = gl_ptr[1];
-                    tile_ptr[3] = gl_ptr[0];
-                } else if (format == PixelFormat::RGB8 && GLES) {
-                    tile_ptr[0] = gl_ptr[2];
-                    tile_ptr[1] = gl_ptr[1];
-                    tile_ptr[2] = gl_ptr[0];
                 } else {
                     std::memcpy(tile_ptr, gl_ptr, bytes_per_pixel);
                 }
@@ -62,13 +39,12 @@ static void MortonCopyTile(u32 stride, u8* tile_buffer, u8* gl_buffer) {
 }
 
 template <bool morton_to_gl, PixelFormat format>
-static void MortonCopy(u32 stride, u32 height, u8* gl_buffer, PAddr base, PAddr start, PAddr end) {
+constexpr void MortonCopy(u32 stride, u32 height, u8* gl_buffer, PAddr base, PAddr start, PAddr end) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
     constexpr u32 tile_size = bytes_per_pixel * 64;
 
     constexpr u32 aligned_bytes_per_pixel = GetBytesPerPixel(format);
     static_assert(aligned_bytes_per_pixel >= bytes_per_pixel, "");
-    gl_buffer += aligned_bytes_per_pixel - bytes_per_pixel;
 
     const PAddr aligned_down_start = base + Common::AlignDown(start - base, tile_size);
     const PAddr aligned_start = base + Common::AlignUp(start - base, tile_size);
@@ -85,7 +61,7 @@ static void MortonCopy(u32 stride, u32 height, u8* gl_buffer, PAddr base, PAddr 
     auto glbuf_next_tile = [&] {
         x = (x + 8) % stride;
         gl_buffer += 8 * aligned_bytes_per_pixel;
-        if (x == 0) {
+        if (!x) {
             y += 8;
             gl_buffer -= stride * 9 * aligned_bytes_per_pixel;
         }

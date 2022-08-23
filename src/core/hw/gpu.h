@@ -191,8 +191,7 @@ struct Regs {
         enum ScalingMode : u32 {
             NoScale = 0, // Doesn't scale the image
             ScaleX = 1,  // Downscales the image in half in the X axis and applies a box filter
-            ScaleXY =
-                2, // Downscales the image in half in both the X and Y axes and applies a box filter
+            ScaleXY = 2, // Downscales the image in half in both the X and Y axes and applies a box filter
         };
 
         union {

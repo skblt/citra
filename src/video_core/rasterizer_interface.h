@@ -1,9 +1,8 @@
-// Copyright 2015 Citra Emulator Project
+// Copyright 2022 Citra Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
 #pragma once
-
 #include <atomic>
 #include <functional>
 #include "common/common_types.h"
@@ -15,7 +14,7 @@ struct ScreenInfo;
 
 namespace Pica::Shader {
 struct OutputVertex;
-} // namespace Pica::Shader
+}
 
 namespace VideoCore {
 
@@ -25,6 +24,7 @@ enum class LoadCallbackStage {
     Build,
     Complete,
 };
+
 using DiskResourceLoadCallback = std::function<void(LoadCallbackStage, std::size_t, std::size_t)>;
 
 class RasterizerInterface {
@@ -41,6 +41,9 @@ public:
 
     /// Notify rasterizer that the specified PICA register has been changed
     virtual void NotifyPicaRegisterChanged(u32 id) = 0;
+
+    /// Increase/decrease the number of surface in pages touching the specified region
+    virtual void UpdatePagesCachedCount(PAddr addr, u32 size, int delta) = 0;
 
     /// Notify rasterizer that all caches should be flushed to 3DS memory
     virtual void FlushAll() = 0;

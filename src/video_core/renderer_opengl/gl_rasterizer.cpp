@@ -1781,9 +1781,8 @@ void RasterizerOpenGL::SyncColorWriteMask() {
         }
     }
 
-    auto IsColorWriteEnabled = [&](u32 value) {
-        return (regs.framebuffer.framebuffer.allow_color_write != 0 && value != 0) ? GL_TRUE
-                                                                                   : GL_FALSE;
+    auto IsColorWriteEnabled = [&](u32 value) -> bool {
+        return regs.framebuffer.framebuffer.allow_color_write != 0 && value != 0;
     };
 
     state.color_mask.red_enabled = IsColorWriteEnabled(regs.framebuffer.output_merger.red_enable);

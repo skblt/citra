@@ -15,6 +15,7 @@ size_t CalculateTileSize(TexturingRegs::TextureFormat format);
 
 struct TextureInfo {
     PAddr physical_address;
+    std::array<PAddr, 5> cube_addresses;
     unsigned int width;
     unsigned int height;
     ptrdiff_t stride;
