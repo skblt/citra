@@ -6,7 +6,6 @@
 #include <set>
 #include <thread>
 #include <unordered_map>
-#include <boost/functional/hash.hpp>
 #include <boost/variant.hpp>
 #include "core/frontend/scope_acquire_context.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
