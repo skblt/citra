@@ -25,6 +25,7 @@
             ]
         },
         "libyuv",
+        "libusb",
         "lodepng",
         "sdl2",
         {
