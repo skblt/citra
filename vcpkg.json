@@ -23,7 +23,6 @@
                 "extensions"
             ]
         },
-        "inih",
         "libyuv",
         "lodepng",
         "sdl2",
