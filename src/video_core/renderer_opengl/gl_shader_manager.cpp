@@ -12,20 +12,18 @@
 #include "video_core/renderer_opengl/gl_shader_disk_cache.h"
 #include "video_core/renderer_opengl/gl_shader_manager.h"
 #include "video_core/renderer_opengl/gl_state.h"
-#include "video_core/renderer_opengl/gl_vars.h"
 #include "video_core/video_core.h"
 
 namespace OpenGL {
 
 static u64 GetUniqueIdentifier(const Pica::Regs& regs, const ProgramCode& code) {
-    std::size_t hash = 0;
-    u64 regs_uid = Common::ComputeHash64(regs.reg_array.data(), Pica::Regs::NUM_REGS * sizeof(u32));
-    boost::hash_combine(hash, regs_uid);
+    u64 hash = Common::ComputeHash64(regs.reg_array.data(), Pica::Regs::NUM_REGS * sizeof(u32));
     if (code.size() > 0) {
         u64 code_uid = Common::ComputeHash64(code.data(), code.size() * sizeof(u32));
-        boost::hash_combine(hash, code_uid);
+        hash = Common::HashCombine(hash, code_uid);
     }
-    return static_cast<u64>(hash);
+
+    return hash;
 }
 
 static OGLProgram GeneratePrecompiledProgram(const ShaderDiskCacheDump& dump,
@@ -335,13 +333,13 @@ public:
     }
 
     struct ShaderTuple {
+        u64 vs_hash = 0;
+        u64 gs_hash = 0;
+        u64 fs_hash = 0;
+
         GLuint vs = 0;
         GLuint gs = 0;
         GLuint fs = 0;
-
-        std::size_t vs_hash = 0;
-        std::size_t gs_hash = 0;
-        std::size_t fs_hash = 0;
 
         bool operator==(const ShaderTuple& rhs) const {
             return std::tie(vs, gs, fs) == std::tie(rhs.vs, rhs.gs, rhs.fs);
@@ -352,11 +350,7 @@ public:
         }
 
         std::size_t GetConfigHash() const {
-            std::size_t hash = 0;
-            boost::hash_combine(hash, vs_hash);
-            boost::hash_combine(hash, gs_hash);
-            boost::hash_combine(hash, fs_hash);
-            return hash;
+            return Common::ComputeHash64(this, 3 * sizeof(u64));
         }
     };
 

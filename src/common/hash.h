@@ -12,6 +12,14 @@
 namespace Common {
 
 /**
+ * Combines the seed parameter with the provided hash, producing a new unique hash
+ * Implementation from: http://boost.sourceforge.net/doc/html/boost/hash_combine.html
+ */
+inline u64 HashCombine(std::size_t& seed, const u64 hash) {
+    return seed ^= hash + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+
+/**
  * Computes a 64-bit hash over the specified block of data
  * @param data Block of data to compute hash over
  * @param len Length of data (in bytes) to compute hash over
