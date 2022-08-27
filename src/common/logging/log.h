@@ -1,13 +1,13 @@
-// Copyright 2014 Citra Emulator Project
+// Copyright 2022 Citra Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
 #pragma once
 
 #include <array>
-#include <fmt/format.h>
+#include <algorithm>
 #include "common/common_types.h"
-
+#include "common/logging/formatter.h"
 namespace Log {
 
 // trims up to and including the last of ../, ..\, src/, src\ in a string
