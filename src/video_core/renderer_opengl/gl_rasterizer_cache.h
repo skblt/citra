@@ -20,11 +20,11 @@
 #pragma GCC diagnostic pop
 #endif
 #include <unordered_map>
-#include <boost/functional/hash.hpp>
 #include <glad/glad.h>
 #include "common/assert.h"
 #include "common/common_funcs.h"
 #include "common/common_types.h"
+#include "common/hash.h"
 #include "common/math_util.h"
 #include "core/custom_tex_cache.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
@@ -84,28 +84,14 @@ namespace std {
 template <>
 struct hash<OpenGL::HostTextureTag> {
     std::size_t operator()(const OpenGL::HostTextureTag& tag) const noexcept {
-        std::size_t hash = 0;
-        boost::hash_combine(hash, tag.format_tuple.format);
-        boost::hash_combine(hash, tag.format_tuple.internal_format);
-        boost::hash_combine(hash, tag.width);
-        boost::hash_combine(hash, tag.height);
-        return hash;
+        return Common::ComputeHash64(this, sizeof(OpenGL::HostTextureTag));
     }
 };
 
 template <>
 struct hash<OpenGL::TextureCubeConfig> {
     std::size_t operator()(const OpenGL::TextureCubeConfig& config) const noexcept {
-        std::size_t hash = 0;
-        boost::hash_combine(hash, config.px);
-        boost::hash_combine(hash, config.nx);
-        boost::hash_combine(hash, config.py);
-        boost::hash_combine(hash, config.ny);
-        boost::hash_combine(hash, config.pz);
-        boost::hash_combine(hash, config.nz);
-        boost::hash_combine(hash, config.width);
-        boost::hash_combine(hash, static_cast<u32>(config.format));
-        return hash;
+        return Common::ComputeHash64(this, sizeof(OpenGL::TextureCubeConfig));
     }
 };
 } // namespace std
