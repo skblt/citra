@@ -4,10 +4,15 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
 include(DownloadExternals)
 include(ExternalProject)
 
+# Crypto++
+set(CRYPTOPP_BUILD_TESTING OFF)
+set(DISABLE_RDRAND TRUE)
+add_subdirectory(cryptopp)
+
 # Dynarmic
 if (ARCHITECTURE_x86_64 OR ARCHITECTURE_ARM64)
     set(DYNARMIC_TESTS OFF)
-    set(DYNARMIC_NO_BUNDLED_FMT ON)
+    set(DYNARMIC_NO_BUNDLED_FMT OFF) # Until we upgrade dynarmic
     set(DYNARMIC_FRONTENDS "A32")
     add_subdirectory(dynarmic)
 endif()

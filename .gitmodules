@@ -16,9 +16,6 @@
 [submodule "xbyak"]
     path = externals/xbyak
     url = https://github.com/herumi/xbyak.git
-[submodule "cryptopp"]
-    path = externals/cryptopp/cryptopp
-    url = https://github.com/weidai11/cryptopp.git
 [submodule "fmt"]
     path = externals/fmt
     url = https://github.com/fmtlib/fmt.git
@@ -58,3 +55,6 @@
 [submodule "vcpkg"]
 	path = externals/vcpkg
 	url = https://github.com/microsoft/vcpkg
+[submodule "externals/cryptopp"]
+	path = externals/cryptopp
+	url = https://github.com/abdes/cryptopp-cmake
