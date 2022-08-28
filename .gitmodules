@@ -35,8 +35,8 @@
     path = externals/libusb/libusb
     url = https://github.com/libusb/libusb.git
 [submodule "cubeb"]
-    path = externals/cubeb
-    url = https://github.com/kinetiknz/cubeb.git
+	path = externals/cubeb
+	url = https://github.com/mozilla/cubeb
 [submodule "discord-rpc"]
     path = externals/discord-rpc
     url = https://github.com/discord/discord-rpc.git
