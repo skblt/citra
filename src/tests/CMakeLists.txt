@@ -24,6 +24,6 @@ endif()
 create_target_directory_groups(tests)
 
 target_link_libraries(tests PRIVATE common core video_core audio_core)
-target_link_libraries(tests PRIVATE ${PLATFORM_LIBRARIES} catch-single-include nihstro-headers Threads::Threads)
+target_link_libraries(tests PRIVATE ${PLATFORM_LIBRARIES} Catch2::Catch2 nihstro-headers Threads::Threads)
 
 add_test(NAME tests COMMAND tests)
