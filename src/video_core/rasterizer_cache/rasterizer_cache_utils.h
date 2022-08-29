@@ -13,6 +13,8 @@ struct FormatTuple {
     int internal_format;
     u32 format;
     u32 type;
+
+    constexpr auto operator<=>(const FormatTuple&) const = default;
 };
 
 const FormatTuple& GetFormatTuple(PixelFormat pixel_format);
@@ -22,9 +24,7 @@ struct HostTextureTag {
     u32 width = 0;
     u32 height = 0;
 
-    bool operator==(const HostTextureTag& rhs) const noexcept {
-        return std::memcmp(this, &rhs, sizeof(HostTextureTag)) == 0;
-    };
+    constexpr auto operator<=>(const HostTextureTag&) const = default;
 
     const u64 Hash() const {
         return Common::ComputeHash64(this, sizeof(HostTextureTag));
@@ -41,13 +41,7 @@ struct TextureCubeConfig {
     u32 width;
     Pica::TexturingRegs::TextureFormat format;
 
-    bool operator==(const TextureCubeConfig& rhs) const {
-        return std::memcmp(this, &rhs, sizeof(TextureCubeConfig)) == 0;
-    }
-
-    bool operator!=(const TextureCubeConfig& rhs) const {
-        return std::memcmp(this, &rhs, sizeof(TextureCubeConfig)) != 0;
-    }
+    constexpr auto operator<=>(const TextureCubeConfig&) const = default;
 
     const u64 Hash() const {
         return Common::ComputeHash64(this, sizeof(TextureCubeConfig));

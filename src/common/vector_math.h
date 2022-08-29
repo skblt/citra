@@ -128,13 +128,7 @@ public:
         return x * x + y * y;
     }
 
-    [[nodiscard]] constexpr bool operator!=(const Vec2& other) const {
-        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec2)) != 0;
-    }
-
-    [[nodiscard]] constexpr bool operator==(const Vec2& other) const {
-        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec2)) == 0;
-    }
+    [[nodiscard]] constexpr auto operator<=>(const Vec2&) const = default;
 
     // Only implemented for T=float
     [[nodiscard]] float Length() const;
@@ -299,13 +293,7 @@ public:
         return *this;
     }
 
-    [[nodiscard]] constexpr bool operator!=(const Vec3& other) const {
-        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec3)) != 0;
-    }
-
-    [[nodiscard]] constexpr bool operator==(const Vec3& other) const {
-        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec3)) == 0;
-    }
+    [[nodiscard]] constexpr auto operator<=>(const Vec3&) const = default;
 
     [[nodiscard]] constexpr T Length2() const {
         return x * x + y * y + z * z;
@@ -536,13 +524,7 @@ public:
         return *this;
     }
 
-    [[nodiscard]] constexpr bool operator!=(const Vec4& other) const {
-        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec4)) != 0;
-    }
-
-    [[nodiscard]] constexpr bool operator==(const Vec4& other) const {
-        return std::memcmp(AsArray(), other.AsArray(), sizeof(Vec4)) == 0;
-    }
+    [[nodiscard]] constexpr auto operator<=>(const Vec4&) const = default;
 
     [[nodiscard]] constexpr T Length2() const {
         return x * x + y * y + z * z + w * w;
