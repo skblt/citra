@@ -55,3 +55,6 @@
 [submodule "libyuv"]
 	path = externals/libyuv
 	url = https://chromium.googlesource.com/libyuv/libyuv
+[submodule "sdl2"]
+	path = externals/sdl2/SDL
+	url = https://github.com/libsdl-org/SDL
