@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.12)
 if (${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.15)
     # Don't override the warning flags in MSVC:
     cmake_policy(SET CMP0092 NEW)
+    # Enforce new LTO setting
+    cmake_policy(SET CMP0069 NEW)
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules")
@@ -11,6 +13,8 @@ include(DownloadExternals)
 include(CMakeDependentOption)
 
 project(citra LANGUAGES C CXX ASM)
+
+option(ENABLE_LTO "Enable link time optimization" OFF)
 
 option(ENABLE_SDL2 "Enable the SDL2 frontend" ON)
 
@@ -54,6 +58,22 @@ if (NOT $ENV{NDK_CCACHE} EQUAL "")
     set(CCACHE_EXE $ENV{NDK_CCACHE})
     set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_EXE})
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_EXE})
+endif()
+
+# Check for LTO support
+# =======================================================================
+if (ENABLE_LTO)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT supported OUTPUT error_msg)
+
+    if (supported)
+        message(STATUS "LTO enabled")
+    else()
+        message(STATUS "LTO enabled but is unavailable, disabling: ${error_msg}")
+        set(ENABLE_LTO OFF)
+    endif()
+else()
+    message(STATUS "LTO disabled")
 endif()
 
 # Sanity check : Check that all submodules are present
