@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <bit>
 #include <optional>
 #include <boost/range/iterator_range.hpp>
 #include "common/alignment.h"
@@ -84,7 +85,7 @@ OGLTexture RasterizerCacheOpenGL::AllocateSurfaceTexture(const FormatTuple& tupl
         return texture;
     }
 
-    const GLsizei levels = static_cast<GLsizei>(std::log2(std::max(width, height))) + 1;
+    const GLsizei levels = std::bit_width(std::max(width, height));
 
     OGLTexture texture;
     texture.Create();
@@ -550,7 +551,7 @@ const CachedTextureCube& RasterizerCacheOpenGL::GetTextureCube(const TextureCube
 
         const auto& tuple = GetFormatTuple(PixelFormatFromTextureFormat(config.format));
         const u32 width = cube.res_scale * config.width;
-        const GLsizei levels = static_cast<GLsizei>(std::log2(width)) + 1;
+        const GLsizei levels = std::bit_width(width);
 
         // Allocate the cube texture
         cube.texture.Create();

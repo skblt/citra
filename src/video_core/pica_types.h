@@ -22,23 +22,21 @@ namespace Pica {
  *
  * @todo Verify on HW if this conversion is sufficiently accurate.
  */
-template <unsigned M, unsigned E>
+template <u32 M, u32 E>
 struct Float {
 public:
-    static Float<M, E> FromFloat32(float val) {
-        Float<M, E> ret;
+    [[nodiscard]] constexpr static Float FromFloat32(float val) {
+        Float ret;
         ret.value = val;
         return ret;
     }
 
-    static Float<M, E> FromRaw(u32 hex) {
-        Float<M, E> res;
-
-        const int width = M + E + 1;
-        const int bias = 128 - (1 << (E - 1));
-        int exponent = (hex >> M) & ((1 << E) - 1);
-        const unsigned mantissa = hex & ((1 << M) - 1);
-        const unsigned sign = (hex >> (E + M)) << 31;
+    [[nodiscard]] constexpr static Float FromRaw(u32 hex) {
+        s32 exponent = (hex >> M) & ((1 << E) - 1);
+        const s32 width = M + E + 1;
+        const s32 bias = 128 - (1 << (E - 1));
+        const u32 mantissa = hex & ((1 << M) - 1);
+        const u32 sign = (hex >> (E + M)) << 31;
 
         if (hex & ((1 << (width - 1)) - 1)) {
             if (exponent == (1 << E) - 1)
@@ -50,93 +48,83 @@ public:
             hex = sign;
         }
 
-        std::memcpy(&res.value, &hex, sizeof(float));
-
-        return res;
+        Float result;
+        std::memcpy(&result.value, &hex, sizeof(float));
+        return result;
     }
 
-    static Float<M, E> Zero() {
+    [[nodiscard]] constexpr static Float Zero() {
         return FromFloat32(0.f);
     }
 
     // Not recommended for anything but logging
-    float ToFloat32() const {
+    [[nodiscard]] constexpr float ToFloat32() const {
         return value;
     }
 
-    Float<M, E> operator*(const Float<M, E>& flt) const {
+    [[nodiscard]] constexpr Float operator*(const Float& flt) const {
         float result = value * flt.ToFloat32();
+
         // PICA gives 0 instead of NaN when multiplying by inf
-        if (std::isnan(result))
-            if (!std::isnan(value) && !std::isnan(flt.ToFloat32()))
-                result = 0.f;
-        return Float<M, E>::FromFloat32(result);
+        if (std::isnan(result) && !std::isnan(value) && !std::isnan(flt.ToFloat32())) {
+            result = 0.f;
+        }
+
+        return Float::FromFloat32(result);
     }
 
-    Float<M, E> operator/(const Float<M, E>& flt) const {
-        return Float<M, E>::FromFloat32(ToFloat32() / flt.ToFloat32());
+    [[nodiscard]] constexpr Float operator/(const Float& flt) const {
+        return Float::FromFloat32(ToFloat32() / flt.ToFloat32());
     }
 
-    Float<M, E> operator+(const Float<M, E>& flt) const {
-        return Float<M, E>::FromFloat32(ToFloat32() + flt.ToFloat32());
+    [[nodiscard]] constexpr Float operator+(const Float& flt) const {
+        return Float::FromFloat32(ToFloat32() + flt.ToFloat32());
     }
 
-    Float<M, E> operator-(const Float<M, E>& flt) const {
-        return Float<M, E>::FromFloat32(ToFloat32() - flt.ToFloat32());
+    [[nodiscard]] constexpr Float operator-(const Float& flt) const {
+        return Float::FromFloat32(ToFloat32() - flt.ToFloat32());
     }
 
-    Float<M, E>& operator*=(const Float<M, E>& flt) {
+    [[nodiscard]] constexpr Float& operator*=(const Float& flt) {
         value = operator*(flt).value;
         return *this;
     }
 
-    Float<M, E>& operator/=(const Float<M, E>& flt) {
+    [[nodiscard]] constexpr Float& operator/=(const Float& flt) {
         value /= flt.ToFloat32();
         return *this;
     }
 
-    Float<M, E>& operator+=(const Float<M, E>& flt) {
+    [[nodiscard]] constexpr Float& operator+=(const Float& flt) {
         value += flt.ToFloat32();
         return *this;
     }
 
-    Float<M, E>& operator-=(const Float<M, E>& flt) {
+    [[nodiscard]] constexpr Float& operator-=(const Float& flt) {
         value -= flt.ToFloat32();
         return *this;
     }
 
-    Float<M, E> operator-() const {
-        return Float<M, E>::FromFloat32(-ToFloat32());
+    [[nodiscard]] constexpr Float operator-() const {
+        return Float::FromFloat32(-ToFloat32());
     }
 
-    bool operator<(const Float<M, E>& flt) const {
-        return ToFloat32() < flt.ToFloat32();
+    [[nodiscard]] constexpr auto operator<=>(const Float& flt) const {
+        return ToFloat32() <=> flt.ToFloat32();
     }
 
-    bool operator>(const Float<M, E>& flt) const {
-        return ToFloat32() > flt.ToFloat32();
-    }
-
-    bool operator>=(const Float<M, E>& flt) const {
-        return ToFloat32() >= flt.ToFloat32();
-    }
-
-    bool operator<=(const Float<M, E>& flt) const {
-        return ToFloat32() <= flt.ToFloat32();
-    }
-
-    bool operator==(const Float<M, E>& flt) const {
+    [[nodiscard]] constexpr bool operator==(const Float& flt) const {
         return ToFloat32() == flt.ToFloat32();
     }
 
-    bool operator!=(const Float<M, E>& flt) const {
+    [[nodiscard]] constexpr bool operator!=(const Float& flt) const {
         return ToFloat32() != flt.ToFloat32();
     }
 
 private:
-    static const unsigned MASK = (1 << (M + E + 1)) - 1;
-    static const unsigned MANTISSA_MASK = (1 << M) - 1;
-    static const unsigned EXPONENT_MASK = (1 << E) - 1;
+    static constexpr u32 MASK = (1 << (M + E + 1)) - 1;
+    static constexpr u32 MANTISSA_MASK = (1 << M) - 1;
+    static constexpr u32 EXPONENT_MASK = (1 << E) - 1;
 
     // Stored as a regular float, merely for convenience
     // TODO: Perform proper arithmetic on this!
