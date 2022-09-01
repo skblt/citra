@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <vector>
 #include <functional>
 #include <mutex>
 #include <thread>
