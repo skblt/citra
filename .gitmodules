@@ -7,9 +7,9 @@
 [submodule "soundtouch"]
     path = externals/soundtouch
     url = https://github.com/citra-emu/ext-soundtouch.git
-[submodule "catch"]
-    path = externals/catch
-    url = https://github.com/philsquared/Catch.git
+[submodule "catch2"]
+    path = externals/catch2
+    url = https://github.com/catchorg/Catch2
 [submodule "dynarmic"]
     path = externals/dynarmic
     url = https://github.com/citra-emu/dynarmic.git
