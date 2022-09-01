@@ -79,6 +79,9 @@ target_include_directories(SoundTouch INTERFACE ./soundtouch/include)
 add_subdirectory(teakra EXCLUDE_FROM_ALL)
 
 # Zstandard
+set(ZSTD_LEGACY_SUPPORT OFF)
+set(ZSTD_BUILD_PROGRAMS OFF)
+set(ZSTD_BUILD_SHARED OFF)
 add_subdirectory(zstd/build/cmake EXCLUDE_FROM_ALL)
 target_include_directories(libzstd_static INTERFACE $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/externals/zstd/lib>)
 
