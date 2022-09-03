@@ -23,7 +23,6 @@
 #include "input_common/keyboard.h"
 #include "input_common/main.h"
 #include "input_common/motion_emu.h"
-#include "network/network.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 
@@ -32,7 +31,7 @@ EmuThread::EmuThread(Frontend::GraphicsContext& core_context) : core_context(cor
 EmuThread::~EmuThread() = default;
 
 static GMainWindow* GetMainWindow() {
-    for (QWidget* w : qApp->topLevelWidgets()) {
+    for (auto& w : qApp->topLevelWidgets()) {
         if (GMainWindow* main = qobject_cast<GMainWindow*>(w)) {
             return main;
         }
@@ -46,7 +45,8 @@ void EmuThread::run() {
 
     emit LoadProgress(VideoCore::LoadCallbackStage::Prepare, 0, 0);
 
-    Core::System::GetInstance().Renderer().Rasterizer()->LoadDiskResources(
+    Core::System& system = Core::System::GetInstance();
+    system.Renderer().Rasterizer()->LoadDiskResources(
         stop_run, [this](VideoCore::LoadCallbackStage stage, std::size_t value, std::size_t total) {
             emit LoadProgress(stage, value, total);
         });
@@ -55,11 +55,11 @@ void EmuThread::run() {
 
     core_context.MakeCurrent();
 
-    if (Core::System::GetInstance().frame_limiter.IsFrameAdvancing()) {
+    if (system.frame_limiter.IsFrameAdvancing()) {
         // Usually the loading screen is hidden after the first frame is drawn. In this case
         // we hide it immediately as we need to wait for user input to start the emulation.
         emit HideLoadingScreen();
-        Core::System::GetInstance().frame_limiter.WaitOnce();
+        system.frame_limiter.WaitOnce();
     }
 
     // Holds whether the cpu was running during the last iteration,
@@ -71,7 +71,7 @@ void EmuThread::run() {
             if (!was_active)
                 emit DebugModeLeft();
 
-            Core::System::ResultStatus result = Core::System::GetInstance().RunLoop();
+            Core::System::ResultStatus result = system.RunLoop();
             if (result == Core::System::ResultStatus::ShutdownRequested) {
                 // Notify frontend we shutdown
                 emit ErrorThrown(result, "");
@@ -80,7 +80,7 @@ void EmuThread::run() {
             }
             if (result != Core::System::ResultStatus::Success) {
                 this->SetRunning(false);
-                emit ErrorThrown(result, Core::System::GetInstance().GetStatusDetails());
+                emit ErrorThrown(result, system.GetStatusDetails());
             }
 
             was_active = running || exec_step;
@@ -91,7 +91,7 @@ void EmuThread::run() {
                 emit DebugModeLeft();
 
             exec_step = false;
-            Core::System::GetInstance().SingleStep();
+            [[maybe_unused]] Core::System::ResultStatus result = system.SingleStep();
             emit DebugModeEntered();
             yieldCurrentThread();
 
@@ -103,7 +103,7 @@ void EmuThread::run() {
     }
 
     // Shutdown the core emulation
-    Core::System::GetInstance().Shutdown();
+    system.Shutdown();
 
 #if MICROPROFILE_ENABLED
     MicroProfileOnThreadExit();

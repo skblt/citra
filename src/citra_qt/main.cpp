@@ -12,17 +12,12 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QOpenGLFunctions_4_3_Core>
+#include <QProcess>
 #include <QSysInfo>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QtGui>
 #include <QtWidgets>
 #include <fmt/format.h>
-#ifdef __APPLE__
-#include <unistd.h> // for chdir
-#endif
-#ifdef _WIN32
-#include <windows.h>
-#endif
 #include "citra_qt/aboutdialog.h"
 #include "citra_qt/applets/mii_selector.h"
 #include "citra_qt/applets/swkbd.h"
@@ -62,10 +57,7 @@
 #include "common/detached_tasks.h"
 #include "common/file_util.h"
 #include "common/logging/backend.h"
-#include "common/logging/filter.h"
 #include "common/logging/log.h"
-#include "common/logging/text_formatter.h"
-#include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
 #ifdef ARCHITECTURE_x86_64
@@ -77,18 +69,22 @@
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/frontend/applets/default_applets.h"
 #include "core/frontend/scope_acquire_context.h"
-#include "core/gdbstub/gdbstub.h"
 #include "core/hle/service/fs/archive.h"
 #include "core/hle/service/nfc/nfc.h"
 #include "core/loader/loader.h"
 #include "core/movie.h"
 #include "core/savestate.h"
 #include "core/settings.h"
-#include "game_list_p.h"
 #include "network/network_settings.h"
 #include "ui_main.h"
-#include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
+
+#ifdef __APPLE__
+#include <unistd.h> // for chdir
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #ifdef USE_DISCORD_PRESENCE
 #include "citra_qt/discord_impl.h"
@@ -152,8 +148,8 @@ static void InitializeLogging() {
 }
 
 GMainWindow::GMainWindow()
-    : config(std::make_unique<Config>()), emu_thread(nullptr),
-      ui(std::make_unique<Ui::MainWindow>()) {
+    : ui(std::make_unique<Ui::MainWindow>()), config(std::make_unique<Config>()),
+      emu_thread(nullptr) {
     InitializeLogging();
     Debugger::ToggleConsole();
     Settings::LogSettings();
@@ -263,7 +259,7 @@ void GMainWindow::InitializeWidgets() {
     loading_screen = new LoadingScreen(this);
     loading_screen->hide();
     ui->horizontalLayout->addWidget(loading_screen);
-    connect(loading_screen, &LoadingScreen::Hidden, [&] {
+    connect(loading_screen, &LoadingScreen::Hidden, this, [this] {
         loading_screen->Clear();
         if (emulation_running) {
             render_window->show();
@@ -432,13 +428,13 @@ void GMainWindow::InitializeSaveStateMenuActions() {
         ui->menu_Save_State->addAction(actions_save_state[i]);
     }
 
-    connect(ui->action_Load_from_Newest_Slot, &QAction::triggered, [this] {
+    connect(ui->action_Load_from_Newest_Slot, &QAction::triggered, this, [this] {
         UpdateSaveStates();
         if (newest_slot != 0) {
             actions_load_state[newest_slot - 1]->trigger();
         }
     });
-    connect(ui->action_Save_to_Oldest_Slot, &QAction::triggered, [this] {
+    connect(ui->action_Save_to_Oldest_Slot, &QAction::triggered, this, [this] {
         UpdateSaveStates();
         actions_save_state[oldest_slot - 1]->trigger();
     });
@@ -674,7 +670,7 @@ void GMainWindow::ConnectWidgetEvents() {
     connect(game_list_placeholder, &GameListPlaceholder::AddDirectory, this,
             &GMainWindow::OnGameListAddDirectory);
     connect(game_list, &GameList::ShowList, this, &GMainWindow::OnGameListShowList);
-    connect(game_list, &GameList::PopulatingCompleted,
+    connect(game_list, &GameList::PopulatingCompleted, this,
             [this] { multiplayer_state->UpdateGameList(game_list->GetModel()); });
 
     connect(this, &GMainWindow::EmulationStarting, render_window,
@@ -765,7 +761,7 @@ void GMainWindow::ConnectMenuEvents() {
     connect(ui->action_Close_Movie, &QAction::triggered, this, &GMainWindow::OnCloseMovie);
     connect(ui->action_Save_Movie, &QAction::triggered, this, &GMainWindow::OnSaveMovie);
     connect(ui->action_Movie_Read_Only_Mode, &QAction::toggled, this,
-            [this](bool checked) { Core::Movie::GetInstance().SetReadOnly(checked); });
+            [](bool checked) { Core::Movie::GetInstance().SetReadOnly(checked); });
     connect(ui->action_Enable_Frame_Advancing, &QAction::triggered, this, [this] {
         if (emulation_running) {
             Core::System::GetInstance().frame_limiter.SetFrameAdvancing(
@@ -889,6 +885,56 @@ void GMainWindow::ShowUpdatePrompt() {
 void GMainWindow::ShowNoUpdatePrompt() {
     QMessageBox::information(this, tr("No Update Found"), tr("No update is found."),
                              QMessageBox::Ok, QMessageBox::Ok);
+}
+
+void GMainWindow::ShowFileInShell(const QFileInfo& file_info) {
+#if defined(Q_OS_WIN)
+    QProcess process;
+    QStringList args{};
+    args += QLatin1String{"/select,"};
+    args += QDir::toNativeSeparators(file_info.canonicalFilePath());
+
+    process.startDetached(QLatin1String{"explorer.exe"}, args);
+#elif defined(Q_OS_MAC)
+    QProcess process;
+    QStringList args{};
+    args += QLatin1String{"-R"};
+    args += file_info.canonicalFilePath();
+
+    process.startDetached(QLatin1String{"/usr/bin/open"}, args);
+#elif defined(Q_OS_LINUX)
+    QProcess process;
+    QStringList args;
+    args += QLatin1String{"query"};
+    args += QLatin1String{"default"};
+    args += QLatin1String{"inode/directory"};
+
+    process.start(QLatin1String{"xdg-mime"}, args);
+    process.waitForFinished();
+    const QByteArray output = process.readLine().simplified();
+
+    if (output == "dolphin.desktop" || output == "org.kde.dolphin.desktop") {
+        QStringList dolphin_args{};
+        dolphin_args += QLatin1String{"--select"};
+        dolphin_args += file_info.canonicalFilePath();
+        process.startDetached(QLatin1String{"dolphin"}, dolphin_args);
+
+    } else if (output == "nautilus.desktop" || output == "org.gnome.Nautilus.desktop" ||
+               output == "nautilus-folder-handler.desktop") {
+        QStringList nautilus_args{};
+        nautilus_args += QLatin1String{"--no-desktop"};
+        nautilus_args += file_info.canonicalFilePath();
+        process.startDetached(QLatin1String{"nautilus"}, nautilus_args);
+
+    } else if (output == "kfmclient_dir.desktop") {
+        QStringList kfmclient_args{};
+        kfmclient_args += QLatin1String{"--select"};
+        kfmclient_args += file_info.canonicalFilePath();
+        process.startDetached(QLatin1String{"konqueror"}, kfmclient_args);
+    } else {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(file_info.absolutePath()));
+    }
+#endif
 }
 
 void GMainWindow::OnOpenUpdater() {
@@ -1343,44 +1389,64 @@ void GMainWindow::OnGameListOpenFolder(u64 data_id, GameListOpenTarget target) {
         path = Service::AM::GetTitlePath(media_type, data_id) + "content/";
         break;
     }
-    case GameListOpenTarget::UPDATE_DATA:
+    case GameListOpenTarget::UPDATE_DATA: {
         open_target = "Update Data";
         path = Service::AM::GetTitlePath(Service::FS::MediaType::SDMC, data_id + 0xe00000000) +
                "content/";
         break;
-    case GameListOpenTarget::TEXTURE_DUMP:
+    }
+    case GameListOpenTarget::TEXTURE_DUMP: {
         open_target = "Dumped Textures";
         path = fmt::format("{}textures/{:016X}/",
                            FileUtil::GetUserPath(FileUtil::UserPath::DumpDir), data_id);
         break;
-    case GameListOpenTarget::TEXTURE_LOAD:
+    }
+    case GameListOpenTarget::TEXTURE_LOAD: {
         open_target = "Custom Textures";
         path = fmt::format("{}textures/{:016X}/",
                            FileUtil::GetUserPath(FileUtil::UserPath::LoadDir), data_id);
         break;
-    case GameListOpenTarget::MODS:
+    }
+    case GameListOpenTarget::MODS: {
         open_target = "Mods";
         path = fmt::format("{}mods/{:016X}/", FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
                            data_id);
         break;
+    }
+    case GameListOpenTarget::SHADER_CACHE: {
+        const std::string_view cache_type =
+            Settings::values.use_gles ? "conventional" : "separable";
+        open_target = "Shader Cache";
+        path =
+            fmt::format("{}opengl/precompiled/{}/{:016X}.bin",
+                        FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir), cache_type, data_id);
+        break;
+    }
     default:
         LOG_ERROR(Frontend, "Unexpected target {}", static_cast<int>(target));
         return;
     }
 
     QString qpath = QString::fromStdString(path);
-
-    QDir dir(qpath);
-    if (!dir.exists()) {
-        QMessageBox::critical(
-            this, tr("Error Opening %1 Folder").arg(QString::fromStdString(open_target)),
-            tr("Folder does not exist!"));
-        return;
-    }
+    const QFileInfo file_info{qpath};
 
     LOG_INFO(Frontend, "Opening {} path for data_id={:016x}", open_target, data_id);
 
-    QDesktopServices::openUrl(QUrl::fromLocalFile(qpath));
+    // Open the file highlighted in the file browser
+    if (file_info.isFile()) {
+        ShowFileInShell(file_info);
+        return;
+    }
+
+    // Open the directory in the file browser
+    if (file_info.isDir()) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(qpath));
+        return;
+    }
+
+    QMessageBox::critical(this,
+                          tr("Error Opening %1 Folder").arg(QString::fromStdString(open_target)),
+                          tr("File or Folder does not exist!").arg(qpath));
 }
 
 void GMainWindow::OnGameListNavigateToGamedbEntry(u64 program_id,
@@ -1410,7 +1476,7 @@ void GMainWindow::OnGameListDumpRomFS(QString game_path, u64 program_id) {
                     program_id | 0x0004000e00000000);
     using FutureWatcher = QFutureWatcher<std::pair<Loader::ResultStatus, Loader::ResultStatus>>;
     auto* future_watcher = new FutureWatcher(this);
-    connect(future_watcher, &FutureWatcher::finished,
+    connect(future_watcher, &FutureWatcher::finished, this,
             [this, dialog, base_path, update_path, future_watcher] {
                 dialog->hide();
                 const auto& [base, update] = future_watcher->result();
@@ -1512,7 +1578,7 @@ void GMainWindow::InstallCIA(QStringList filepaths) {
         const auto cia_progress = [&](std::size_t written, std::size_t total) {
             emit UpdateProgress(written, total);
         };
-        for (const auto current_path : filepaths) {
+        for (const auto& current_path : filepaths) {
             status = Service::AM::InstallCIA(current_path.toStdString(), cia_progress);
             emit CIAInstallReport(status, current_path);
         }
@@ -1549,6 +1615,10 @@ void GMainWindow::OnCIAInstallReport(Service::AM::InstallStatus status, QString 
                               tr("%1 must be decrypted "
                                  "before being used with Citra. A real 3DS is required.")
                                   .arg(filename));
+        break;
+    case Service::AM::InstallStatus::ErrorFileNotFound:
+        QMessageBox::critical(this, tr("Couldn't find File"),
+                              tr("File %1 does not exist").arg(filename));
         break;
     }
 }
@@ -1712,8 +1782,7 @@ void GMainWindow::ChangeScreenLayout() {
 }
 
 void GMainWindow::ToggleScreenLayout() {
-    Settings::LayoutOption new_layout = Settings::LayoutOption::Default;
-
+    Settings::LayoutOption new_layout;
     switch (Settings::values.layout_option) {
     case Settings::LayoutOption::Default:
         new_layout = Settings::LayoutOption::SingleScreen;
@@ -1727,6 +1796,8 @@ void GMainWindow::ToggleScreenLayout() {
     case Settings::LayoutOption::SideScreen:
         new_layout = Settings::LayoutOption::Default;
         break;
+    default:
+        new_layout = Settings::LayoutOption::Default;
     }
 
     Settings::values.layout_option = new_layout;
@@ -1973,7 +2044,7 @@ void GMainWindow::OnCaptureScreenshot() {
     const QString filename = game_title.remove(QRegularExpression(QStringLiteral("[\\/:?\"<>|]")));
     const QString timestamp =
         QDateTime::currentDateTime().toString(QStringLiteral("dd.MM.yy_hh.mm.ss.z"));
-    path.append(QStringLiteral("/%1_%2.png").arg(filename).arg(timestamp));
+    path.append(QStringLiteral("/%1_%2.png").arg(filename, timestamp));
     render_window->CaptureScreenshot(UISettings::values.screenshot_resolution_factor, path);
     OnStartGame();
 }

@@ -31,6 +31,7 @@
 #include "core/file_sys/archive_extsavedata.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/hle/service/fs/archive.h"
+#include "core/settings.h"
 
 GameListSearchField::KeyReleaseEater::KeyReleaseEater(GameList* gamelist, QObject* parent)
     : QObject(parent), gamelist{gamelist} {}
@@ -480,7 +481,9 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
     QAction* open_texture_dump_location = context_menu.addAction(tr("Open Texture Dump Location"));
     QAction* open_texture_load_location =
         context_menu.addAction(tr("Open Custom Texture Location"));
+    QAction* open_shader_cache_location = context_menu.addAction(tr("Open Shader Cache Location"));
     QAction* open_mods_location = context_menu.addAction(tr("Open Mods Location"));
+    QAction* clear_disk_shader_cache = context_menu.addAction(tr("Clear Disk Shader Cache"));
     QAction* dump_romfs = context_menu.addAction(tr("Dump RomFS"));
     QAction* navigate_to_gamedb_entry = context_menu.addAction(tr("Navigate to GameDB entry"));
 
@@ -509,9 +512,17 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
                                            "content/"));
     auto it = FindMatchingCompatibilityEntry(compatibility_list, program_id);
 
+    const std::string_view cache_type = Settings::values.use_gles ? "conventional" : "separable";
+    const std::string cache_file =
+        fmt::format("{}opengl/precompiled/{}/{:016X}.bin",
+                    FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir), cache_type, program_id);
+
+    const bool shader_cache_exists = FileUtil::Exists(cache_file);
     open_texture_dump_location->setVisible(is_application);
     open_texture_load_location->setVisible(is_application);
+    open_shader_cache_location->setVisible(shader_cache_exists);
     open_mods_location->setVisible(is_application);
+    clear_disk_shader_cache->setVisible(shader_cache_exists);
     dump_romfs->setVisible(is_application);
 
     navigate_to_gamedb_entry->setVisible(it != compatibility_list.end());
@@ -542,6 +553,13 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
             emit OpenFolderRequested(program_id, GameListOpenTarget::TEXTURE_LOAD);
         }
     });
+    connect(open_shader_cache_location, &QAction::triggered, [this, program_id, cache_type] {
+        if (FileUtil::CreateFullPath(
+                fmt::format("{}opengl/precompiled/{}",
+                            FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir), cache_type))) {
+            emit OpenFolderRequested(program_id, GameListOpenTarget::SHADER_CACHE);
+        }
+    });
     connect(open_mods_location, &QAction::triggered, [this, program_id] {
         if (FileUtil::CreateFullPath(fmt::format("{}mods/{:016X}/",
                                                  FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
@@ -553,6 +571,10 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
             [this, path, program_id] { emit DumpRomFSRequested(path, program_id); });
     connect(navigate_to_gamedb_entry, &QAction::triggered, [this, program_id]() {
         emit NavigateToGamedbEntryRequested(program_id, compatibility_list);
+    });
+    connect(clear_disk_shader_cache, &QAction::triggered, [cache_file] {
+        QFile file{QString::fromStdString(cache_file)};
+        file.remove();
     });
 };
 

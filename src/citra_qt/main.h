@@ -6,12 +6,12 @@
 
 #include <array>
 #include <memory>
+#include <QFileInfo>
 #include <QMainWindow>
 #include <QTimer>
 #include <QTranslator>
 #include "citra_qt/compatibility_list.h"
 #include "citra_qt/hotkeys.h"
-#include "common/announce_multiplayer_room.h"
 #include "core/core.h"
 #include "core/hle/service/am/am.h"
 #include "core/savestate.h"
@@ -131,6 +131,7 @@ private:
     void ShowUpdaterWidgets();
     void ShowUpdatePrompt();
     void ShowNoUpdatePrompt();
+    void ShowFileInShell(const QFileInfo& file_info);
     void CheckForUpdates();
     void SetDiscordEnabled(bool state);
     void LoadAmiibo(const QString& filename);
