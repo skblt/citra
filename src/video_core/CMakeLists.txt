@@ -100,6 +100,7 @@ add_library(video_core STATIC
     swrasterizer/texturing.h
     texture/etc1.cpp
     texture/etc1.h
+    texture/texture_decode_avx2.cpp
     texture/texture_decode.cpp
     texture/texture_decode.h
     utils.h

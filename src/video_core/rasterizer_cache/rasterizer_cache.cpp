@@ -6,11 +6,13 @@
 #include <optional>
 #include <boost/range/iterator_range.hpp>
 #include "common/alignment.h"
+#include "common/scope_exit.h"
 #include "common/logging/log.h"
 #include "common/microprofile.h"
 #include "video_core/pica_state.h"
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
+#include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/texture_downloader_es.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
 
@@ -89,7 +91,8 @@ OGLTexture RasterizerCacheOpenGL::AllocateSurfaceTexture(const FormatTuple& tupl
 
     OGLTexture texture;
     texture.Create();
-    texture.Allocate(GL_TEXTURE_2D, levels, tuple.internal_format, width, height);
+    texture.Allocate(GL_TEXTURE_2D, levels, tuple.internal_format,
+                     tuple.swizzle_mask, width, height);
 
     return texture;
 }
@@ -408,12 +411,12 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(
 
 Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInfo& info,
                                                  u32 max_level) {
-    if (info.physical_address == 0) {
+    if (info.address == 0) {
         return nullptr;
     }
 
     SurfaceParams params;
-    params.addr = info.physical_address;
+    params.addr = info.address;
     params.width = info.width;
     params.height = info.height;
     params.is_tiled = true;
@@ -436,8 +439,9 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
     }
 
     auto surface = GetSurface(params, ScaleMatch::Ignore, true);
-    if (!surface)
+    if (!surface) {
         return nullptr;
+    }
 
     // Update mipmap if necessary
     if (max_level != 0) {
@@ -447,18 +451,28 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
             LOG_CRITICAL(Render_OpenGL, "Unsupported mipmap level {}", max_level);
             return nullptr;
         }
+        OpenGLState prev_state = OpenGLState::GetCurState();
+        OpenGLState state;
+        SCOPE_EXIT({ prev_state.Apply(); });
 
         // Allocate more mipmap level if necessary
         if (surface->max_level < max_level) {
+            state.texture_units[0].texture_2d = surface->texture.handle;
+            state.Apply();
+            glActiveTexture(GL_TEXTURE0);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, max_level);
+
             if (surface->is_custom || !texture_filterer->IsNull()) {
                 // TODO: proper mipmap support for custom textures
-                runtime.GenerateMipmaps(surface->texture, max_level);
+                glGenerateMipmap(GL_TEXTURE_2D);
             }
-
             surface->max_level = max_level;
         }
 
         // Blit mipmaps that have been invalidated
+        state.draw.read_framebuffer = runtime.read_fbo.handle;
+        state.draw.draw_framebuffer = runtime.draw_fbo.handle;
+        state.ResetTexture(surface->texture.handle);
         SurfaceParams surface_params = *surface;
         for (u32 level = 1; level <= max_level; ++level) {
             // In PICA all mipmap levels are stored next to each other
@@ -468,7 +482,6 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
             surface_params.height /= 2;
             surface_params.stride = 0; // reset stride and let UpdateParams re-initialize it
             surface_params.UpdateParams();
-
             auto& watcher = surface->level_watchers[level - 1];
             if (!watcher || !watcher->Get()) {
                 auto level_surface = GetSurface(surface_params, ScaleMatch::Ignore, true);
@@ -484,16 +497,25 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
                 if (!level_surface->invalid_regions.empty()) {
                     ValidateSurface(level_surface, level_surface->addr, level_surface->size);
                 }
-
+                state.ResetTexture(level_surface->texture.handle);
+                state.Apply();
                 if (!surface->is_custom && texture_filterer->IsNull()) {
-                    const auto src_rect = level_surface->GetScaledRect();
-                    const auto dst_rect = surface_params.GetScaledRect();
-                    const Aspect aspect = ToAspect(surface->type);
+                    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                           level_surface->texture.handle, 0);
+                    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                                           GL_TEXTURE_2D, 0, 0);
 
-                    runtime.BlitTextures(level_surface->texture, {aspect, src_rect},
-                                         surface->texture, {aspect, dst_rect, level});
+                    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                           surface->texture.handle, level);
+                    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                                           GL_TEXTURE_2D, 0, 0);
+
+                    auto src_rect = level_surface->GetScaledRect();
+                    auto dst_rect = surface_params.GetScaledRect();
+                    glBlitFramebuffer(src_rect.left, src_rect.bottom, src_rect.right, src_rect.top,
+                                      dst_rect.left, dst_rect.bottom, dst_rect.right, dst_rect.top,
+                                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
                 }
-
                 watcher->Validate();
             }
         }
@@ -523,11 +545,13 @@ const CachedTextureCube& RasterizerCacheOpenGL::GetTextureCube(const TextureCube
 
     for (const Face& face : faces) {
         if (!face.watcher || !face.watcher->Get()) {
-            Pica::Texture::TextureInfo info;
-            info.physical_address = face.address;
-            info.height = info.width = config.width;
-            info.format = config.format;
-            info.SetDefaultStride();
+            const Pica::Texture::TextureInfo info = {
+                .address = face.address,
+                .width = config.width,
+                .height = config.width,
+                .format = config.format
+            };
+
             auto surface = GetTextureSurface(info);
             if (surface) {
                 face.watcher = surface->CreateWatcher();
@@ -555,7 +579,8 @@ const CachedTextureCube& RasterizerCacheOpenGL::GetTextureCube(const TextureCube
 
         // Allocate the cube texture
         cube.texture.Create();
-        cube.texture.Allocate(GL_TEXTURE_CUBE_MAP, levels, tuple.internal_format, width, width);
+        cube.texture.Allocate(GL_TEXTURE_CUBE_MAP, levels, tuple.internal_format,
+                              tuple.swizzle_mask, width, width);
     }
 
     u32 scaled_size = cube.res_scale * config.width;
@@ -847,8 +872,7 @@ bool RasterizerCacheOpenGL::IntervalHasInvalidPixelFormat(SurfaceParams& params,
     params.pixel_format = PixelFormat::Invalid;
     for (const auto& set : RangeFromInterval(surface_cache, interval))
         for (const auto& surface : set.second)
-            if (surface->pixel_format == PixelFormat::Invalid &&
-                surface->type != SurfaceType::Fill) {
+            if (surface->pixel_format == PixelFormat::Invalid) {
                 LOG_DEBUG(Render_OpenGL, "Surface {:#x} found with invalid pixel format",
                           surface->addr);
                 return true;

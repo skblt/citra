@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <span>
 #include "common/microprofile.h"
 #include "common/scope_exit.h"
 #include "common/texture.h"
@@ -90,17 +91,25 @@ void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
                 }
             }
         } else {
-            std::memcpy(&gl_buffer[start_offset], texture_src_data + start_offset,
-                        load_end - load_start);
+            // Convert RGB8 to RGBA8 which is more supported on modern GPUs
+            if (pixel_format == PixelFormat::RGB8) {
+                const u8* input_buffer = texture_src_data + start_offset;
+                Pica::Texture::ConvertRGBToRGBA(load_end - addr, input_buffer, gl_buffer.data());
+            } else {
+                std::memcpy(&gl_buffer[start_offset], texture_src_data + start_offset,
+                            load_end - load_start);
+            }
         }
     } else {
-        if (type == SurfaceType::Texture) {
-            Pica::Texture::TextureInfo tex_info{};
-            tex_info.width = width;
-            tex_info.height = height;
-            tex_info.format = static_cast<Pica::TexturingRegs::TextureFormat>(pixel_format);
-            tex_info.SetDefaultStride();
-            tex_info.physical_address = addr;
+        if (type == SurfaceType::Texture && pixel_format != PixelFormat::A8 &&
+            pixel_format != PixelFormat::RG8 && pixel_format != PixelFormat::IA8 &&
+                pixel_format != PixelFormat::IA4) {
+            const Pica::Texture::TextureInfo tex_info = {
+                .address = addr,
+                .width = width,
+                .height = height,
+                .format = static_cast<Pica::TexturingRegs::TextureFormat>(pixel_format)
+            };
 
             const SurfaceInterval load_interval(load_start, load_end);
             const auto rect = GetSubRect(FromInterval(load_interval));
@@ -110,12 +119,13 @@ void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
                 for (unsigned x = rect.left; x < rect.right; ++x) {
                     auto vec4 =
                         Pica::Texture::LookupTexture(texture_src_data, x, height - 1 - y, tex_info);
+
                     const std::size_t offset = (x + (width * y)) * 4;
                     std::memcpy(&gl_buffer[offset], vec4.AsArray(), 4);
                 }
             }
         } else {
-            morton_to_gl_fns[static_cast<std::size_t>(pixel_format)](stride, height, &gl_buffer[0],
+            morton_to_gpu_fns[static_cast<std::size_t>(pixel_format)](stride, height, &gl_buffer[0],
                                                                      addr, load_start, load_end);
         }
     }
@@ -177,7 +187,7 @@ void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
                         flush_end - flush_start);
         }
     } else {
-        gl_to_morton_fns[static_cast<std::size_t>(pixel_format)](stride, height, &gl_buffer[0],
+        gpu_to_morton_fns[static_cast<std::size_t>(pixel_format)](stride, height, &gl_buffer[0],
                                                                  addr, flush_start, flush_end);
     }
 }

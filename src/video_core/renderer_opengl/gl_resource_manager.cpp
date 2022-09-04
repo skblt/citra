@@ -52,8 +52,9 @@ void OGLTexture::Release() {
     handle = 0;
 }
 
-void OGLTexture::Allocate(GLenum target, GLsizei levels, GLenum internalformat, GLsizei width,
-                          GLsizei height, GLsizei depth) {
+void OGLTexture::Allocate(GLenum target, GLsizei levels, GLenum internalformat,
+                          std::array<GLint, 4> swizzle_mask,
+                          GLsizei width, GLsizei height, GLsizei depth) {
     GLuint old_tex = OpenGLState::GetCurState().texture_units[0].texture_2d;
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, handle);
@@ -79,6 +80,7 @@ void OGLTexture::Allocate(GLenum target, GLsizei levels, GLenum internalformat, 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle_mask.data());
 
     glBindTexture(GL_TEXTURE_2D, old_tex);
 }

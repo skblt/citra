@@ -9,10 +9,12 @@
 namespace VideoCore {
 
 // 8x8 Z-Order coordinate from 2D coordinates
-static constexpr u32 MortonInterleave(u32 x, u32 y) {
-    constexpr u32 xlut[] = {0x00, 0x01, 0x04, 0x05, 0x10, 0x11, 0x14, 0x15};
-    constexpr u32 ylut[] = {0x00, 0x02, 0x08, 0x0a, 0x20, 0x22, 0x28, 0x2a};
-    return xlut[x % 8] + ylut[y % 8];
+constexpr u32 MortonInterleave(u32 x, u32 y) {
+    constexpr auto Morton = [](u32 x) -> u32 {
+        return ((x & 4) << 2) | ((x & 2) << 1) | (x & 1);
+    };
+
+    return Morton(x) + (Morton(y) << 1);
 }
 
 /**

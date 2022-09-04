@@ -632,7 +632,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
 
     const auto BindCubeFace = [&](GLuint& target, Pica::TexturingRegs::CubeFace face,
                             Pica::Texture::TextureInfo& info) {
-        info.physical_address = regs.texturing.GetCubePhysicalAddress(face);
+        info.address = regs.texturing.GetCubePhysicalAddress(face);
         Surface surface = res_cache.GetTextureSurface(info);
 
         if (surface != nullptr) {
@@ -725,7 +725,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         // which causes unpredictable behavior on the host.
         // Making a copy to sample from eliminates this issue and seems to be fairly cheap.
         temp_tex.Create();
-        temp_tex.Allocate(GL_TEXTURE_2D, levels, tuple.internal_format,
+        temp_tex.Allocate(GL_TEXTURE_2D, levels, tuple.internal_format, tuple.swizzle_mask,
                           color_surface->GetScaledWidth(), color_surface->GetScaledHeight());
 
         temp_tex.CopyFrom(color_surface->texture, GL_TEXTURE_2D, levels,

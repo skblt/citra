@@ -16,7 +16,6 @@
 #include "citra_qt/util/spinbox.h"
 #include "common/color.h"
 #include "core/core.h"
-#include "core/hw/gpu.h"
 #include "core/memory.h"
 #include "video_core/pica_state.h"
 #include "video_core/regs_framebuffer.h"
@@ -525,7 +524,7 @@ void GraphicsSurfaceWidget::OnUpdate() {
         const auto texture = Pica::g_state.regs.texturing.GetTextures()[texture_index];
         auto info = Pica::Texture::TextureInfo::FromPicaRegister(texture.config, texture.format);
 
-        surface_address = info.physical_address;
+        surface_address = info.address;
         surface_width = info.width;
         surface_height = info.height;
         surface_format = static_cast<Format>(info.format);
@@ -581,11 +580,10 @@ void GraphicsSurfaceWidget::OnUpdate() {
     if (surface_format <= Format::MaxTextureFormat) {
         // Generate a virtual texture
         Pica::Texture::TextureInfo info;
-        info.physical_address = surface_address;
+        info.address = surface_address;
         info.width = surface_width;
         info.height = surface_height;
         info.format = static_cast<Pica::TexturingRegs::TextureFormat>(surface_format);
-        info.SetDefaultStride();
 
         for (unsigned int y = 0; y < surface_height; ++y) {
             for (unsigned int x = 0; x < surface_width; ++x) {

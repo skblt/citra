@@ -1,32 +1,24 @@
-// Copyright 2017 Citra Emulator Project
+// Copyright 2022 Citra Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
 #pragma once
-
+#include <span>
+#include <vector>
 #include "common/common_types.h"
 #include "common/vector_math.h"
 #include "video_core/regs_texturing.h"
 
 namespace Pica::Texture {
 
-/// Returns the byte size of a 8*8 tile of the specified texture format.
-size_t CalculateTileSize(TexturingRegs::TextureFormat format);
-
 struct TextureInfo {
-    PAddr physical_address;
-    unsigned int width;
-    unsigned int height;
-    ptrdiff_t stride;
+    PAddr address;
+    u32 width;
+    u32 height;
     TexturingRegs::TextureFormat format;
 
     static TextureInfo FromPicaRegister(const TexturingRegs::TextureConfig& config,
                                         const TexturingRegs::TextureFormat& format);
-
-    /// Calculates stride from format and width, assuming that the entire texture is contiguous.
-    void SetDefaultStride() {
-        stride = CalculateTileSize(format) * (width / 8);
-    }
 };
 
 /**
@@ -54,5 +46,36 @@ Common::Vec4<u8> LookupTexture(const u8* source, unsigned int x, unsigned int y,
  */
 Common::Vec4<u8> LookupTexelInTile(const u8* source, unsigned int x, unsigned int y,
                                    const TextureInfo& info, bool disable_alpha);
+
+/**
+ * Converts a morton swizzled 8 * 8 block of pixels to linear format
+ *
+ * @param stride The width in pixels of the source texture.
+ * @param tile_buffer The morton pixel data
+ * @param gpu_buffer The output buffer where the linear data is written
+ */
+void DecodeTile8(u32 stride, const u8* tile_buffer, u8* gpu_buffer);
+void DecodeTileIA4(u32 stride, const u8* tile_buffer, u8* gpu_buffer);
+void DecodeTile16(u32 stride, const u8* tile_buffer, u8* gpu_buffer);
+void DecodeTile32(u32 stride, const u8* tile_buffer, u8* gpu_buffer);
+
+/**
+ * Performs morton swizzling on a linear 8 * 8 block of pixels
+ *
+ * @param stride The width in pixels of the source texture.
+ * @param tile_buffer The output buffer where the morton data is written
+ * @param gpu_buffer The linear pixel data
+ */
+void EncodeTile8(u32 stride, u8* tile_buffer, const u8* gpu_buffer);
+void EncodeTile16(u32 stride, u8* tile_buffer, const u8* gpu_buffer);
+void EncodeTile32(u32 stride, u8* tile_buffer, const u8* gpu_buffer);
+
+/**
+ * Converts RGB8 encoded pixel data to RGBA8 by inserting a dummy alpha channel
+ * @param byte_count The number of bytes to read from input_buffer
+ * @param input_buffer The source RGB pixel data
+ * @param output_buffer The output buffer where the RGBA pixel data is written
+ */
+void ConvertRGBToRGBA(u32 byte_count, const u8* input_buffer, u8* output_buffer);
 
 } // namespace Pica::Texture

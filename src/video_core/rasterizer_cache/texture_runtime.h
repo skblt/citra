@@ -62,7 +62,7 @@ public:
     // Generates mipmaps for all the available levels of the texture
     void GenerateMipmaps(const OGLTexture& tex, u32 max_level);
 
-private:
+public:
     OGLFramebuffer read_fbo, draw_fbo;
 };
 

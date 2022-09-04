@@ -3,18 +3,27 @@
 // Refer to the license.txt file included.
 
 #pragma once
+#include <glad/glad.h>
 #include <functional>
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 
 namespace OpenGL {
 
+constexpr std::array<int, 4> DEFAULT_SWIZZLE = {GL_RED, GL_GREEN, GL_BLUE, GL_ALPHA};
+
 struct FormatTuple {
-    int internal_format;
-    u32 format;
-    u32 type;
+    constexpr FormatTuple() = default;
+    constexpr FormatTuple(GLint internal, GLenum format, GLenum type,
+                std::array<GLint, 4> mask = DEFAULT_SWIZZLE) : internal_format(internal),
+        format(format), type(type), swizzle_mask(mask) {}
 
     constexpr auto operator<=>(const FormatTuple&) const = default;
+
+    GLint internal_format;
+    GLenum format;
+    GLenum type;
+    std::array<GLint, 4> swizzle_mask;
 };
 
 const FormatTuple& GetFormatTuple(PixelFormat pixel_format);

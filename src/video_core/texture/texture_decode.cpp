@@ -1,56 +1,49 @@
-// Copyright 2017 Citra Emulator Project
+// Copyright 2022 Citra Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
 #include "common/assert.h"
 #include "common/color.h"
 #include "common/logging/log.h"
-#include "common/math_util.h"
 #include "common/swap.h"
 #include "common/vector_math.h"
 #include "video_core/regs_texturing.h"
 #include "video_core/texture/etc1.h"
 #include "video_core/texture/texture_decode.h"
 #include "video_core/utils.h"
+#include <immintrin.h>
 
 using TextureFormat = Pica::TexturingRegs::TextureFormat;
 
 namespace Pica::Texture {
 
-constexpr std::size_t TILE_SIZE = 8 * 8;
-constexpr std::size_t ETC1_SUBTILES = 2 * 2;
+constexpr u32 TILE_SIZE = 8 * 8;
+constexpr u32 ETC1_SUBTILES = 2 * 2;
 
-size_t CalculateTileSize(TextureFormat format) {
+constexpr u32 CalculateTileSize(TextureFormat format) {
     switch (format) {
     case TextureFormat::RGBA8:
         return 4 * TILE_SIZE;
-
     case TextureFormat::RGB8:
         return 3 * TILE_SIZE;
-
     case TextureFormat::RGB5A1:
     case TextureFormat::RGB565:
     case TextureFormat::RGBA4:
     case TextureFormat::IA8:
     case TextureFormat::RG8:
         return 2 * TILE_SIZE;
-
     case TextureFormat::I8:
     case TextureFormat::A8:
     case TextureFormat::IA4:
         return 1 * TILE_SIZE;
-
     case TextureFormat::I4:
     case TextureFormat::A4:
         return TILE_SIZE / 2;
-
     case TextureFormat::ETC1:
         return ETC1_SUBTILES * 8;
-
     case TextureFormat::ETC1A4:
         return ETC1_SUBTILES * 16;
-
-    default: // placeholder for yet unknown formats
+    default:
         UNIMPLEMENTED();
         return 0;
     }
@@ -66,7 +59,8 @@ Common::Vec4<u8> LookupTexture(const u8* source, unsigned int x, unsigned int y,
     const unsigned int fine_x = x % 8;
     const unsigned int fine_y = y % 8;
 
-    const u8* line = source + coarse_y * info.stride;
+    const u32 stride = CalculateTileSize(info.format) * (info.width / 8);
+    const u8* line = source + coarse_y * stride;
     const u8* tile = line + coarse_x * CalculateTileSize(info.format);
     return LookupTexelInTile(tile, fine_x, fine_y, info, disable_alpha);
 }
@@ -213,12 +207,13 @@ Common::Vec4<u8> LookupTexelInTile(const u8* source, unsigned int x, unsigned in
 
 TextureInfo TextureInfo::FromPicaRegister(const TexturingRegs::TextureConfig& config,
                                           const TexturingRegs::TextureFormat& format) {
-    TextureInfo info;
-    info.physical_address = config.GetPhysicalAddress();
-    info.width = config.width;
-    info.height = config.height;
-    info.format = format;
-    info.SetDefaultStride();
+    const TextureInfo info = {
+        .address = config.GetPhysicalAddress(),
+        .width = config.width,
+        .height = config.height,
+        .format = format
+    };
+
     return info;
 }
 
