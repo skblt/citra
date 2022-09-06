@@ -97,8 +97,9 @@ void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
                 }
             }
         } else {
-            morton_to_gl_fns[static_cast<std::size_t>(pixel_format)](stride, height, &gl_buffer[0],
-                                                                     addr, load_start, load_end);
+            const u32 func_index = static_cast<u32>(pixel_format);
+            const MortonFunc func = UNSWIZZLE_TABLE[func_index];
+            func(stride, height, &gl_buffer[0], addr, load_start, load_end);
         }
     }
 }
@@ -159,8 +160,9 @@ void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
                         flush_end - flush_start);
         }
     } else {
-        gl_to_morton_fns[static_cast<std::size_t>(pixel_format)](stride, height, &gl_buffer[0],
-                                                                 addr, flush_start, flush_end);
+        const u32 func_index = static_cast<u32>(pixel_format);
+        const MortonFunc func = SWIZZLE_TABLE[func_index];
+        func(stride, height, &gl_buffer[0], addr, flush_start, flush_end);
     }
 }
 
