@@ -89,4 +89,22 @@ ClearValue MakeClearValue(Aspect aspect, PixelFormat format, const u8* fill_data
     return result;
 }
 
+Aspect ToAspect(SurfaceType type) {
+    switch (type) {
+    case SurfaceType::Color:
+    case SurfaceType::Texture:
+    case SurfaceType::Fill:
+        return Aspect::Color;
+    case SurfaceType::Depth:
+        return Aspect::Depth;
+    case SurfaceType::DepthStencil:
+        return Aspect::DepthStencil;
+    default:
+        LOG_CRITICAL(Render_OpenGL, "Unknown SurfaceType {}", type);
+        UNREACHABLE();
+    }
+
+    return Aspect::Color;
+}
+
 } // namespace OpenGL
