@@ -49,6 +49,8 @@ struct TextureCubeConfig {
 
 [[nodiscard]] ClearValue MakeClearValue(Aspect aspect, PixelFormat format, const u8* fill_data);
 
+[[nodiscard]] Aspect ToAspect(SurfaceType type);
+
 } // namespace OpenGL
 
 namespace std {
