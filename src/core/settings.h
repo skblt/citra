@@ -14,6 +14,12 @@
 
 namespace Settings {
 
+enum class GraphicsAPI {
+    OpenGL = 0,
+    OpenGLES = 1,
+    Vulkan = 2
+};
+
 enum class InitClock {
     SystemTime = 0,
     FixedTime = 1,
@@ -163,7 +169,7 @@ struct Values {
     u64 init_time;
 
     // Renderer
-    bool use_gles;
+    GraphicsAPI graphics_api = GraphicsAPI::OpenGL;
     bool use_hw_renderer;
     bool use_hw_shader;
     bool separable_shader;
