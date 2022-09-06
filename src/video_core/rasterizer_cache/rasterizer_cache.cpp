@@ -198,12 +198,7 @@ RasterizerCache::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer)
     texture_downloader_es = std::make_unique<TextureDownloaderES>(false);
 }
 
-RasterizerCache::~RasterizerCache() {
-#ifndef ANDROID
-    // This is for switching renderers, which is unsupported on Android, and costly on shutdown
-    ClearAll(false);
-#endif
-}
+RasterizerCache::~RasterizerCache() = default;
 
 MICROPROFILE_DEFINE(RasterizerCache_BlitSurface, "RasterizerCache", "BlitSurface",
                     MP_RGB(128, 192, 64));
