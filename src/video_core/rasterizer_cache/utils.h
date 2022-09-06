@@ -6,6 +6,7 @@
 #include <functional>
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
+#include "video_core/rasterizer_cache/types.h"
 
 namespace OpenGL {
 
@@ -18,13 +19,11 @@ struct FormatTuple {
 const FormatTuple& GetFormatTuple(PixelFormat pixel_format);
 
 struct HostTextureTag {
-    FormatTuple format_tuple{};
+    PixelFormat format{};
     u32 width = 0;
     u32 height = 0;
 
-    bool operator==(const HostTextureTag& rhs) const noexcept {
-        return std::memcmp(this, &rhs, sizeof(HostTextureTag)) == 0;
-    };
+    auto operator<=>(const HostTextureTag&) const noexcept = default;
 
     const u64 Hash() const {
         return Common::ComputeHash64(this, sizeof(HostTextureTag));
@@ -41,18 +40,14 @@ struct TextureCubeConfig {
     u32 width;
     Pica::TexturingRegs::TextureFormat format;
 
-    bool operator==(const TextureCubeConfig& rhs) const {
-        return std::memcmp(this, &rhs, sizeof(TextureCubeConfig)) == 0;
-    }
-
-    bool operator!=(const TextureCubeConfig& rhs) const {
-        return std::memcmp(this, &rhs, sizeof(TextureCubeConfig)) != 0;
-    }
+    auto operator<=>(const TextureCubeConfig&) const noexcept = default;
 
     const u64 Hash() const {
         return Common::ComputeHash64(this, sizeof(TextureCubeConfig));
     }
 };
+
+[[nodiscard]] ClearValue MakeClearValue(Aspect aspect, PixelFormat format, const u8* fill_data);
 
 } // namespace OpenGL
 

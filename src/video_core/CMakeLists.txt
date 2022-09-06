@@ -31,9 +31,9 @@ add_library(video_core STATIC
     rasterizer_cache/pixel_format.h
     rasterizer_cache/rasterizer_cache.cpp
     rasterizer_cache/rasterizer_cache.h
-    rasterizer_cache/rasterizer_cache_types.h
-    rasterizer_cache/rasterizer_cache_utils.cpp
-    rasterizer_cache/rasterizer_cache_utils.h
+    rasterizer_cache/types.h
+    rasterizer_cache/utils.cpp
+    rasterizer_cache/utils.h
     rasterizer_cache/surface_params.cpp
     rasterizer_cache/surface_params.h
     rasterizer_cache/texture_runtime.cpp

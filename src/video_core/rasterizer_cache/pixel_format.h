@@ -12,7 +12,7 @@ namespace OpenGL {
 
 constexpr u32 PIXEL_FORMAT_COUNT = 18;
 
-enum class PixelFormat : u8 {
+enum class PixelFormat : u32 {
     // First 5 formats are shared between textures and color buffers
     RGBA8 = 0,
     RGB8 = 1,
