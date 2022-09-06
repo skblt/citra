@@ -9,6 +9,10 @@
 #include "video_core/rasterizer_cache/surface_params.h"
 #include "video_core/texture/texture_decode.h"
 
+namespace VideoCore {
+class RasterizerAccelerated;
+}
+
 namespace OpenGL {
 
 enum class ScaleMatch {
@@ -23,7 +27,7 @@ class FormatReinterpreterOpenGL;
 
 class RasterizerCacheOpenGL : NonCopyable {
 public:
-    RasterizerCacheOpenGL();
+    RasterizerCacheOpenGL(VideoCore::RasterizerAccelerated& rasterizer);
     ~RasterizerCacheOpenGL();
 
     /// Blit one surface's texture to another
@@ -105,9 +109,7 @@ private:
     /// Remove surface from the cache
     void UnregisterSurface(const Surface& surface);
 
-    /// Increase/decrease the number of surface in pages touching the specified region
-    void UpdatePagesCachedCount(PAddr addr, u32 size, int delta);
-
+    VideoCore::RasterizerAccelerated& rasterizer;
     TextureRuntime runtime;
     SurfaceCache surface_cache;
     PageMap cached_pages;

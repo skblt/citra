@@ -29,7 +29,7 @@ using DiskResourceLoadCallback = std::function<void(LoadCallbackStage, std::size
 
 class RasterizerInterface {
 public:
-    virtual ~RasterizerInterface() {}
+    virtual ~RasterizerInterface() = default;
 
     /// Queues the primitive formed by the given vertices for rendering
     virtual void AddTriangle(const Pica::Shader::OutputVertex& v0,
@@ -85,9 +85,14 @@ public:
         return false;
     }
 
+    /// Increase/decrease the number of surface in pages touching the specified region
+    virtual void UpdatePagesCachedCount(PAddr addr, u32 size, int delta) {}
+
+    /// Loads disk cached rasterizer data before rendering
     virtual void LoadDiskResources(const std::atomic_bool& stop_loading,
                                    const DiskResourceLoadCallback& callback) {}
 
+    /// Synchronizes the graphics API state with the PICA state
     virtual void SyncEntireState() {}
 };
 } // namespace VideoCore
