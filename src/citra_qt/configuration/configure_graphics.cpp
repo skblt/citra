@@ -17,8 +17,10 @@ ConfigureGraphics::ConfigureGraphics(QWidget* parent)
     ui->setupUi(this);
     SetConfiguration();
 
+    const bool not_running = !Core::System::GetInstance().IsPoweredOn();
     ui->hw_renderer_group->setEnabled(ui->toggle_hw_renderer->isChecked());
-    ui->toggle_vsync_new->setEnabled(!Core::System::GetInstance().IsPoweredOn());
+    ui->toggle_vsync_new->setEnabled(not_running);
+    ui->graphics_api_combo->setEnabled(not_running);
 
     connect(ui->toggle_hw_renderer, &QCheckBox::toggled, this, [this] {
         auto checked = ui->toggle_hw_renderer->isChecked();

@@ -147,7 +147,8 @@ EmuWindow_SDL2::EmuWindow_SDL2(bool fullscreen) {
 
     SDL_SetMainReady();
 
-    if (Settings::values.use_gles) {
+    const bool is_opengles = Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES;
+    if (is_opengles) {
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
@@ -201,7 +202,7 @@ EmuWindow_SDL2::EmuWindow_SDL2(bool fullscreen) {
         exit(1);
     }
 
-    auto gl_load_func = Settings::values.use_gles ? gladLoadGLES2Loader : gladLoadGLLoader;
+    auto gl_load_func = is_opengles ? gladLoadGLES2Loader : gladLoadGLLoader;
 
     if (!gl_load_func(static_cast<GLADloadproc>(SDL_GL_GetProcAddress))) {
         LOG_CRITICAL(Frontend, "Failed to initialize GL functions: {}", SDL_GetError());
