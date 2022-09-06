@@ -41,7 +41,7 @@ static constexpr auto RangeFromInterval(Map& map, const Interval& interval) {
 }
 
 // Allocate an uninitialized texture of appropriate size and format for the surface
-OGLTexture RasterizerCacheOpenGL::AllocateSurfaceTexture(PixelFormat format, u32 width, u32 height) {
+OGLTexture RasterizerCache::AllocateSurfaceTexture(PixelFormat format, u32 width, u32 height) {
     const FormatTuple& tuple = GetFormatTuple(format);
     auto recycled_tex = host_texture_recycler.find({format, width, height});
     if (recycled_tex != host_texture_recycler.end()) {
@@ -60,7 +60,7 @@ OGLTexture RasterizerCacheOpenGL::AllocateSurfaceTexture(PixelFormat format, u32
 }
 
 MICROPROFILE_DEFINE(OpenGL_CopySurface, "OpenGL", "CopySurface", MP_RGB(128, 192, 64));
-void RasterizerCacheOpenGL::CopySurface(const Surface& src_surface, const Surface& dst_surface,
+void RasterizerCache::CopySurface(const Surface& src_surface, const Surface& dst_surface,
                                         SurfaceInterval copy_interval) {
     MICROPROFILE_SCOPE(OpenGL_CopySurface);
 
@@ -208,7 +208,7 @@ static Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams&
     return match_surface;
 }
 
-RasterizerCacheOpenGL::RasterizerCacheOpenGL(VideoCore::RasterizerAccelerated& rasterizer)
+RasterizerCache::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer)
     : rasterizer(rasterizer) {
     resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
     texture_filterer = std::make_unique<TextureFilterer>(Settings::values.texture_filter_name,
@@ -217,7 +217,7 @@ RasterizerCacheOpenGL::RasterizerCacheOpenGL(VideoCore::RasterizerAccelerated& r
     texture_downloader_es = std::make_unique<TextureDownloaderES>(false);
 }
 
-RasterizerCacheOpenGL::~RasterizerCacheOpenGL() {
+RasterizerCache::~RasterizerCache() {
 #ifndef ANDROID
     // This is for switching renderers, which is unsupported on Android, and costly on shutdown
     ClearAll(false);
@@ -225,7 +225,7 @@ RasterizerCacheOpenGL::~RasterizerCacheOpenGL() {
 }
 
 MICROPROFILE_DEFINE(OpenGL_BlitSurface, "OpenGL", "BlitSurface", MP_RGB(128, 192, 64));
-bool RasterizerCacheOpenGL::BlitSurfaces(const Surface& src_surface,
+bool RasterizerCache::BlitSurfaces(const Surface& src_surface,
                                          const Common::Rectangle<u32>& src_rect,
                                          const Surface& dst_surface,
                                          const Common::Rectangle<u32>& dst_rect) {
@@ -252,7 +252,7 @@ bool RasterizerCacheOpenGL::BlitSurfaces(const Surface& src_surface,
     return false;
 }
 
-Surface RasterizerCacheOpenGL::GetSurface(const SurfaceParams& params, ScaleMatch match_res_scale,
+Surface RasterizerCache::GetSurface(const SurfaceParams& params, ScaleMatch match_res_scale,
                                           bool load_if_create) {
     if (params.addr == 0 || params.height * params.width == 0) {
         return nullptr;
@@ -300,7 +300,7 @@ Surface RasterizerCacheOpenGL::GetSurface(const SurfaceParams& params, ScaleMatc
     return surface;
 }
 
-SurfaceRect_Tuple RasterizerCacheOpenGL::GetSurfaceSubRect(const SurfaceParams& params,
+SurfaceRect_Tuple RasterizerCache::GetSurfaceSubRect(const SurfaceParams& params,
                                                            ScaleMatch match_res_scale,
                                                            bool load_if_create) {
     if (params.addr == 0 || params.height * params.width == 0) {
@@ -379,14 +379,14 @@ SurfaceRect_Tuple RasterizerCacheOpenGL::GetSurfaceSubRect(const SurfaceParams& 
     return std::make_tuple(surface, surface->GetScaledSubRect(params));
 }
 
-Surface RasterizerCacheOpenGL::GetTextureSurface(
+Surface RasterizerCache::GetTextureSurface(
     const Pica::TexturingRegs::FullTextureConfig& config) {
     Pica::Texture::TextureInfo info =
         Pica::Texture::TextureInfo::FromPicaRegister(config.config, config.format);
     return GetTextureSurface(info, config.config.lod.max_level);
 }
 
-Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInfo& info,
+Surface RasterizerCache::GetTextureSurface(const Pica::Texture::TextureInfo& info,
                                                  u32 max_level) {
     if (info.physical_address == 0) {
         return nullptr;
@@ -489,7 +489,7 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
     return surface;
 }
 
-const CachedTextureCube& RasterizerCacheOpenGL::GetTextureCube(const TextureCubeConfig& config) {
+const CachedTextureCube& RasterizerCache::GetTextureCube(const TextureCubeConfig& config) {
     auto& cube = texture_cube_cache[config];
 
     struct Face {
@@ -576,7 +576,7 @@ const CachedTextureCube& RasterizerCacheOpenGL::GetTextureCube(const TextureCube
     return cube;
 }
 
-SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(
+SurfaceSurfaceRect_Tuple RasterizerCache::GetFramebufferSurfaces(
     bool using_color_fb, bool using_depth_fb, const Common::Rectangle<s32>& viewport_rect) {
     const auto& regs = Pica::g_state.regs;
     const auto& config = regs.framebuffer.framebuffer;
@@ -673,7 +673,7 @@ SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(
     return std::make_tuple(color_surface, depth_surface, fb_rect);
 }
 
-Surface RasterizerCacheOpenGL::GetFillSurface(const GPU::Regs::MemoryFillConfig& config) {
+Surface RasterizerCache::GetFillSurface(const GPU::Regs::MemoryFillConfig& config) {
     SurfaceParams params;
     params.addr = config.GetStartAddress();
     params.end = config.GetEndAddress();
@@ -696,7 +696,7 @@ Surface RasterizerCacheOpenGL::GetFillSurface(const GPU::Regs::MemoryFillConfig&
     return new_surface;
 }
 
-SurfaceRect_Tuple RasterizerCacheOpenGL::GetTexCopySurface(const SurfaceParams& params) {
+SurfaceRect_Tuple RasterizerCache::GetTexCopySurface(const SurfaceParams& params) {
     Common::Rectangle<u32> rect{};
 
     Surface match_surface = FindMatch<MatchFlags::TexCopy | MatchFlags::Invalid>(
@@ -723,7 +723,7 @@ SurfaceRect_Tuple RasterizerCacheOpenGL::GetTexCopySurface(const SurfaceParams& 
     return std::make_tuple(match_surface, rect);
 }
 
-void RasterizerCacheOpenGL::DuplicateSurface(const Surface& src_surface,
+void RasterizerCache::DuplicateSurface(const Surface& src_surface,
                                              const Surface& dest_surface) {
     ASSERT(dest_surface->addr <= src_surface->addr && dest_surface->end >= src_surface->end);
 
@@ -744,7 +744,7 @@ void RasterizerCacheOpenGL::DuplicateSurface(const Surface& src_surface,
     }
 }
 
-void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, u32 size) {
+void RasterizerCache::ValidateSurface(const Surface& surface, PAddr addr, u32 size) {
     if (size == 0)
         return;
 
@@ -809,7 +809,7 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
     }
 }
 
-bool RasterizerCacheOpenGL::NoUnimplementedReinterpretations(const Surface& surface,
+bool RasterizerCache::NoUnimplementedReinterpretations(const Surface& surface,
                                                              SurfaceParams& params,
                                                              const SurfaceInterval& interval) {
     static constexpr std::array<PixelFormat, 17> all_formats{
@@ -838,7 +838,7 @@ bool RasterizerCacheOpenGL::NoUnimplementedReinterpretations(const Surface& surf
     return implemented;
 }
 
-bool RasterizerCacheOpenGL::IntervalHasInvalidPixelFormat(SurfaceParams& params,
+bool RasterizerCache::IntervalHasInvalidPixelFormat(SurfaceParams& params,
                                                           const SurfaceInterval& interval) {
     params.pixel_format = PixelFormat::Invalid;
     for (const auto& set : RangeFromInterval(surface_cache, interval))
@@ -851,7 +851,7 @@ bool RasterizerCacheOpenGL::IntervalHasInvalidPixelFormat(SurfaceParams& params,
     return false;
 }
 
-bool RasterizerCacheOpenGL::ValidateByReinterpretation(const Surface& surface,
+bool RasterizerCache::ValidateByReinterpretation(const Surface& surface,
                                                        SurfaceParams& params,
                                                        const SurfaceInterval& interval) {
     const PixelFormat dst_format = surface->pixel_format;
@@ -912,7 +912,7 @@ bool RasterizerCacheOpenGL::ValidateByReinterpretation(const Surface& surface,
     return false;
 }
 
-void RasterizerCacheOpenGL::ClearAll(bool flush) {
+void RasterizerCache::ClearAll(bool flush) {
     const auto flush_interval = PageMap::interval_type::right_open(0x0, 0xFFFFFFFF);
     // Force flush all surfaces from the cache
     if (flush) {
@@ -936,7 +936,7 @@ void RasterizerCacheOpenGL::ClearAll(bool flush) {
     remove_surfaces.clear();
 }
 
-void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
+void RasterizerCache::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
     std::lock_guard lock{mutex};
 
     if (size == 0)
@@ -970,11 +970,11 @@ void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surf
     dirty_regions -= flushed_intervals;
 }
 
-void RasterizerCacheOpenGL::FlushAll() {
+void RasterizerCache::FlushAll() {
     FlushRegion(0, 0xFFFFFFFF);
 }
 
-void RasterizerCacheOpenGL::InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner) {
+void RasterizerCache::InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner) {
     std::lock_guard lock{mutex};
 
     if (size == 0)
@@ -1038,7 +1038,7 @@ void RasterizerCacheOpenGL::InvalidateRegion(PAddr addr, u32 size, const Surface
     remove_surfaces.clear();
 }
 
-Surface RasterizerCacheOpenGL::CreateSurface(const SurfaceParams& params) {
+Surface RasterizerCache::CreateSurface(const SurfaceParams& params) {
     Surface surface = std::make_shared<CachedSurface>(params, *this, runtime);
     surface->invalid_regions.insert(surface->GetInterval());
 
@@ -1049,7 +1049,7 @@ Surface RasterizerCacheOpenGL::CreateSurface(const SurfaceParams& params) {
     return surface;
 }
 
-void RasterizerCacheOpenGL::RegisterSurface(const Surface& surface) {
+void RasterizerCache::RegisterSurface(const Surface& surface) {
     std::lock_guard lock{mutex};
 
     if (surface->registered) {
@@ -1060,7 +1060,7 @@ void RasterizerCacheOpenGL::RegisterSurface(const Surface& surface) {
     rasterizer.UpdatePagesCachedCount(surface->addr, surface->size, 1);
 }
 
-void RasterizerCacheOpenGL::UnregisterSurface(const Surface& surface) {
+void RasterizerCache::UnregisterSurface(const Surface& surface) {
     std::lock_guard lock{mutex};
 
     if (!surface->registered) {

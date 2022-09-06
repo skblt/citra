@@ -44,11 +44,11 @@ private:
     bool valid = false;
 };
 
-class RasterizerCacheOpenGL;
+class RasterizerCache;
 
 class CachedSurface : public SurfaceParams, public std::enable_shared_from_this<CachedSurface> {
 public:
-    CachedSurface(SurfaceParams params, RasterizerCacheOpenGL& owner, TextureRuntime& runtime)
+    CachedSurface(SurfaceParams params, RasterizerCache& owner, TextureRuntime& runtime)
         : SurfaceParams(params), owner(owner), runtime(runtime) {}
     ~CachedSurface();
 
@@ -120,7 +120,7 @@ public:
     Core::CustomTexInfo custom_tex_info;
 
 private:
-    RasterizerCacheOpenGL& owner;
+    RasterizerCache& owner;
     TextureRuntime& runtime;
     std::list<std::weak_ptr<SurfaceWatcher>> watchers;
 };
