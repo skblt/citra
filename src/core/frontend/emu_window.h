@@ -60,11 +60,33 @@ class GraphicsContext {
 public:
     virtual ~GraphicsContext();
 
+    /// Inform the driver to swap the front/back buffers and present the current image
+    virtual void SwapBuffers(){};
+
     /// Makes the graphics context current for the caller thread
-    virtual void MakeCurrent() = 0;
+    virtual void MakeCurrent(){};
 
     /// Releases (dunno if this is the "right" word) the context from the caller thread
-    virtual void DoneCurrent() = 0;
+    virtual void DoneCurrent(){};
+
+    class Scoped {
+    public:
+        explicit Scoped(GraphicsContext& context_) : context(context_) {
+            context.MakeCurrent();
+        }
+        ~Scoped() {
+            context.DoneCurrent();
+        }
+
+    private:
+        GraphicsContext& context;
+    };
+
+    /// Calls MakeCurrent on the context and calls DoneCurrent when the scope for the returned value
+    /// ends
+    [[nodiscard]] Scoped Acquire() {
+        return Scoped{*this};
+    }
 };
 
 /**

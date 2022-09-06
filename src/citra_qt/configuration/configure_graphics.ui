@@ -27,6 +27,36 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_6">
       <item>
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="QLabel" name="label">
+          <property name="text">
+           <string>Graphics API</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="graphics_api_combo">
+          <item>
+           <property name="text">
+            <string>OpenGL</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>OpenGLES</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Vulkan</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
        <widget class="QCheckBox" name="toggle_hw_renderer">
         <property name="toolTip">
          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use OpenGL to accelerate rendering.&lt;/p&gt;&lt;p&gt;Disable to debug graphics-related problem.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>

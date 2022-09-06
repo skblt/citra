@@ -27,19 +27,6 @@ namespace VideoCore {
 enum class LoadCallbackStage;
 }
 
-class GLContext : public Frontend::GraphicsContext {
-public:
-    explicit GLContext(QOpenGLContext* shared_context);
-
-    void MakeCurrent() override;
-
-    void DoneCurrent() override;
-
-private:
-    std::unique_ptr<QOpenGLContext> context;
-    std::unique_ptr<QOffscreenSurface> surface;
-};
-
 class EmuThread final : public QThread {
     Q_OBJECT
 
@@ -126,24 +113,6 @@ signals:
     void HideLoadingScreen();
 };
 
-class OpenGLWindow : public QWindow {
-    Q_OBJECT
-public:
-    explicit OpenGLWindow(QWindow* parent, QWidget* event_handler, QOpenGLContext* shared_context);
-
-    ~OpenGLWindow();
-
-    void Present();
-
-protected:
-    bool event(QEvent* event) override;
-    void exposeEvent(QExposeEvent* event) override;
-
-private:
-    std::unique_ptr<QOpenGLContext> context;
-    QWidget* event_handler;
-};
-
 class GRenderWindow : public QWidget, public Frontend::EmuWindow {
     Q_OBJECT
 
@@ -179,12 +148,14 @@ public:
 
     void focusOutEvent(QFocusEvent* event) override;
 
-    void InitRenderTarget();
+    bool InitRenderTarget();
 
     /// Destroy the previous run's child_widget which should also destroy the child_window
     void ReleaseRenderTarget();
 
     void CaptureScreenshot(u32 res_scale, const QString& screenshot_path);
+
+    std::pair<u32, u32> ScaleTouch(const QPointF pos) const;
 
 public slots:
 
@@ -205,29 +176,29 @@ signals:
     void MouseActivity();
 
 private:
-    std::pair<u32, u32> ScaleTouch(QPointF pos) const;
     void TouchBeginEvent(const QTouchEvent* event);
     void TouchUpdateEvent(const QTouchEvent* event);
     void TouchEndEvent();
 
     void OnMinimalClientAreaChangeRequest(std::pair<u32, u32> minimal_size) override;
 
-    std::unique_ptr<GraphicsContext> core_context;
-
-    QByteArray geometry;
-
-    /// Native window handle that backs this presentation widget
-    QWindow* child_window = nullptr;
-
-    /// In order to embed the window into GRenderWindow, you need to use createWindowContainer to
-    /// put the child_window into a widget then add it to the layout. This child_widget can be
-    /// parented to GRenderWindow and use Qt's lifetime system
-    QWidget* child_widget = nullptr;
+    bool InitializeOpenGL();
+    bool InitializeVulkan();
 
     EmuThread* emu_thread;
 
+    // Main context that will be shared with all other contexts that are requested.
+    // If this is used in a shared context setting, then this should not be used directly, but
+    // should instead be shared from
+    std::shared_ptr<Frontend::GraphicsContext> main_context;
+
     /// Temporary storage of the screenshot taken
     QImage screenshot_image;
+
+    QByteArray geometry;
+
+    QWidget* child_widget = nullptr;
+
     bool first_frame = false;
 
 protected:

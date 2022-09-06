@@ -1234,7 +1234,7 @@ static void APIENTRY DebugHandler(GLenum source, GLenum type, GLuint id, GLenum 
 VideoCore::ResultStatus RendererOpenGL::Init() {
 #ifndef ANDROID
     if (!gladLoadGL()) {
-        return VideoCore::ResultStatus::ErrorBelowGL43;
+        return VideoCore::ResultStatus::ErrorRendererInit;
     }
 
     // Qualcomm has some spammy info messages that are marked as errors but not important
@@ -1264,7 +1264,7 @@ VideoCore::ResultStatus RendererOpenGL::Init() {
     }
 
     if (!(GLAD_GL_VERSION_4_3 || GLAD_GL_ES_VERSION_3_1)) {
-        return VideoCore::ResultStatus::ErrorBelowGL43;
+        return VideoCore::ResultStatus::ErrorRendererInit;
     }
 
     InitOpenGLObjects();

@@ -35,7 +35,6 @@
 #include "core/file_sys/cia_container.h"
 #include "core/frontend/applets/default_applets.h"
 #include "core/frontend/framebuffer_layout.h"
-#include "core/frontend/scope_acquire_context.h"
 #include "core/gdbstub/gdbstub.h"
 #include "core/hle/service/am/am.h"
 #include "core/hle/service/cfg/cfg.h"
@@ -359,7 +358,7 @@ int main(int argc, char** argv) {
     Core::System::GetInstance().RegisterImageInterface(std::make_shared<LodePNGImageInterface>());
 
     std::unique_ptr<EmuWindow_SDL2> emu_window{std::make_unique<EmuWindow_SDL2>(fullscreen)};
-    Frontend::ScopeAcquireContext scope(*emu_window);
+    const auto scope = emu_window->Acquire();
     Core::System& system = Core::System::GetInstance();
 
     const Core::System::ResultStatus load_result{system.Load(*emu_window, filepath)};

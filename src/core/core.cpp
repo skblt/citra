@@ -422,8 +422,6 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window, u32 system_mo
         switch (result) {
         case VideoCore::ResultStatus::ErrorGenericDrivers:
             return ResultStatus::ErrorVideoCore_ErrorGenericDrivers;
-        case VideoCore::ResultStatus::ErrorBelowGL43:
-            return ResultStatus::ErrorVideoCore_ErrorBelowGL43;
         default:
             return ResultStatus::ErrorVideoCore;
         }
