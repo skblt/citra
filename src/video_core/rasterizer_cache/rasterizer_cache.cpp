@@ -40,10 +40,10 @@ OGLTexture RasterizerCache::AllocateSurfaceTexture(PixelFormat format, u32 width
     return texture;
 }
 
-MICROPROFILE_DEFINE(OpenGL_CopySurface, "OpenGL", "CopySurface", MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(RasterizerCache_CopySurface, "RasterizerCache", "CopySurface", MP_RGB(128, 192, 64));
 void RasterizerCache::CopySurface(const Surface& src_surface, const Surface& dst_surface,
                                         SurfaceInterval copy_interval) {
-    MICROPROFILE_SCOPE(OpenGL_CopySurface);
+    MICROPROFILE_SCOPE(RasterizerCache_CopySurface);
 
     SurfaceParams subrect_params = dst_surface->FromInterval(copy_interval);
     ASSERT(subrect_params.GetInterval() == copy_interval && src_surface != dst_surface);
@@ -199,12 +199,12 @@ RasterizerCache::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer)
 
 RasterizerCache::~RasterizerCache() = default;
 
-MICROPROFILE_DEFINE(OpenGL_BlitSurface, "OpenGL", "BlitSurface", MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(RasterizerCache_BlitSurface, "RasterizerCache", "BlitSurface", MP_RGB(128, 192, 64));
 bool RasterizerCache::BlitSurfaces(const Surface& src_surface,
                                          const Common::Rectangle<u32>& src_rect,
                                          const Surface& dst_surface,
                                          const Common::Rectangle<u32>& dst_rect) {
-    MICROPROFILE_SCOPE(OpenGL_BlitSurface);
+    MICROPROFILE_SCOPE(RasterizerCache_BlitSurface);
 
     if (CheckFormatsBlittable(src_surface->pixel_format, dst_surface->pixel_format)) {
         dst_surface->InvalidateAllWatcher();
