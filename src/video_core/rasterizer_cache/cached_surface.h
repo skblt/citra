@@ -11,6 +11,8 @@
 
 namespace OpenGL {
 
+using SurfaceRegions = boost::icl::interval_set<PAddr, std::less, SurfaceInterval>;
+
 /**
  * A watcher that notifies whether a cached surface has been changed. This is useful for caching
  * surface collection objects, including texture cube and mipmap.
