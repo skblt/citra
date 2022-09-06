@@ -5,7 +5,7 @@
 #pragma once
 #include <unordered_map>
 #include "video_core/rasterizer_cache/cached_surface.h"
-#include "video_core/rasterizer_cache/rasterizer_cache_utils.h"
+#include "video_core/rasterizer_cache/utils.h"
 #include "video_core/rasterizer_cache/surface_params.h"
 #include "video_core/texture/texture_decode.h"
 
@@ -15,10 +15,27 @@ class RasterizerAccelerated;
 
 namespace OpenGL {
 
+// Declare rasterizer interval types
+using SurfaceSet = std::set<Surface>;
+using SurfaceMap =
+    boost::icl::interval_map<PAddr, Surface, boost::icl::partial_absorber, std::less,
+                             boost::icl::inplace_plus, boost::icl::inter_section, SurfaceInterval>;
+using SurfaceCache =
+    boost::icl::interval_map<PAddr, SurfaceSet, boost::icl::partial_absorber, std::less,
+                             boost::icl::inplace_plus, boost::icl::inter_section, SurfaceInterval>;
+
+static_assert(std::is_same<SurfaceRegions::interval_type, SurfaceCache::interval_type>() &&
+                  std::is_same<SurfaceMap::interval_type, SurfaceCache::interval_type>(),
+              "Incorrect interval types");
+
+using SurfaceRect_Tuple = std::tuple<Surface, Common::Rectangle<u32>>;
+using SurfaceSurfaceRect_Tuple = std::tuple<Surface, Surface, Common::Rectangle<u32>>;
+using PageMap = boost::icl::interval_map<u32, int>;
+
 enum class ScaleMatch {
-    Exact,   // only accept same res scale
-    Upscale, // only allow higher scale than params
-    Ignore   // accept every scaled res
+    Exact,   // Only accept same res scale
+    Upscale, // Only allow higher scale than params
+    Ignore   // Accept every scaled res
 };
 
 class TextureDownloaderES;
@@ -123,7 +140,7 @@ private:
     std::recursive_mutex mutex;
 
 public:
-    OGLTexture AllocateSurfaceTexture(const FormatTuple& format_tuple, u32 width, u32 height);
+    OGLTexture AllocateSurfaceTexture(PixelFormat format, u32 width, u32 height);
 
     std::unique_ptr<TextureFilterer> texture_filterer;
     std::unique_ptr<FormatReinterpreterOpenGL> format_reinterpreter;

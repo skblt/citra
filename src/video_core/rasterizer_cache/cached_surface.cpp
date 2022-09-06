@@ -35,9 +35,9 @@ static Aspect ToAspect(SurfaceType type) {
 
 CachedSurface::~CachedSurface() {
     if (texture.handle) {
-        auto tag = is_custom ? HostTextureTag{GetFormatTuple(PixelFormat::RGBA8),
+        auto tag = is_custom ? HostTextureTag{PixelFormat::RGBA8,
                                               custom_tex_info.width, custom_tex_info.height}
-                             : HostTextureTag{GetFormatTuple(pixel_format), GetScaledWidth(),
+                             : HostTextureTag{pixel_format, GetScaledWidth(),
                                               GetScaledHeight()};
 
         owner.host_texture_recycler.emplace(tag, std::move(texture));
@@ -294,7 +294,6 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect) {
     GLint y0 = static_cast<GLint>(rect.bottom);
     std::size_t buffer_offset = (y0 * stride + x0) * GetBytesPerPixel(pixel_format);
 
-    const FormatTuple& tuple = GetFormatTuple(pixel_format);
     GLuint target_tex = texture.handle;
 
     // If not 1x scale, create 1x texture that we will blit from to replace texture subrect in
@@ -305,11 +304,10 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect) {
         y0 = 0;
 
         if (is_custom) {
-            const auto& tuple = GetFormatTuple(PixelFormat::RGBA8);
             unscaled_tex =
-                owner.AllocateSurfaceTexture(tuple, custom_tex_info.width, custom_tex_info.height);
+                owner.AllocateSurfaceTexture(PixelFormat::RGBA8, custom_tex_info.width, custom_tex_info.height);
         } else {
-            unscaled_tex = owner.AllocateSurfaceTexture(tuple, rect.GetWidth(), rect.GetHeight());
+            unscaled_tex = owner.AllocateSurfaceTexture(pixel_format, rect.GetWidth(), rect.GetHeight());
         }
 
         target_tex = unscaled_tex.handle;
@@ -321,11 +319,13 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect) {
     cur_state.texture_units[0].texture_2d = target_tex;
     cur_state.Apply();
 
+    const FormatTuple& tuple = GetFormatTuple(pixel_format);
+
     // Ensure no bad interactions with GL_UNPACK_ALIGNMENT
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
     if (is_custom) {
         if (res_scale == 1) {
-            texture = owner.AllocateSurfaceTexture(GetFormatTuple(PixelFormat::RGBA8),
+            texture = owner.AllocateSurfaceTexture(PixelFormat::RGBA8,
                                                    custom_tex_info.width, custom_tex_info.height);
             cur_state.texture_units[0].texture_2d = texture.handle;
             cur_state.Apply();
@@ -341,6 +341,7 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect) {
         glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(stride));
 
         glActiveTexture(GL_TEXTURE0);
+
         glTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, static_cast<GLsizei>(rect.GetWidth()),
                         static_cast<GLsizei>(rect.GetHeight()), tuple.format, tuple.type,
                         &gl_buffer[buffer_offset]);
@@ -390,13 +391,13 @@ void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
     OpenGLState prev_state = state;
     SCOPE_EXIT({ prev_state.Apply(); });
 
-    const FormatTuple& tuple = GetFormatTuple(pixel_format);
-
     // Ensure no bad interactions with GL_PACK_ALIGNMENT
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
     glPixelStorei(GL_PACK_ROW_LENGTH, static_cast<GLint>(stride));
     const std::size_t buffer_offset =
         (rect.bottom * stride + rect.left) * GetBytesPerPixel(pixel_format);
+
+    const FormatTuple& tuple = GetFormatTuple(pixel_format);
 
     // If not 1x scale, blit scaled texture to a new 1x texture and use that to flush
     const Aspect aspect = ToAspect(type);
@@ -408,7 +409,7 @@ void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
         scaled_rect.bottom *= res_scale;
 
         const Common::Rectangle<u32> unscaled_tex_rect{0, rect.GetHeight(), rect.GetWidth(), 0};
-        auto unscaled_tex = owner.AllocateSurfaceTexture(tuple, rect.GetWidth(), rect.GetHeight());
+        auto unscaled_tex = owner.AllocateSurfaceTexture(pixel_format, rect.GetWidth(), rect.GetHeight());
         // Blit scaled texture to the unscaled one
         runtime.BlitTextures(texture, {aspect, scaled_rect}, unscaled_tex,
                              {aspect, unscaled_tex_rect});
