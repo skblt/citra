@@ -6,10 +6,17 @@
 
 #include <array>
 #include <climits>
+#include <boost/icl/interval_map.hpp>
+#include <boost/icl/interval_set.hpp>
+#include "common/math_util.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
-#include "video_core/rasterizer_cache/rasterizer_cache_types.h"
 
 namespace OpenGL {
+
+class CachedSurface;
+using Surface = std::shared_ptr<CachedSurface>;
+
+using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
 
 class SurfaceParams {
 public:
