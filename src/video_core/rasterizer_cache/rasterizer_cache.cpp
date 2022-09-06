@@ -8,6 +8,7 @@
 #include "common/logging/log.h"
 #include "common/microprofile.h"
 #include "video_core/pica_state.h"
+#include "video_core/rasterizer_accelerated.h"
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
 #include "video_core/renderer_opengl/texture_downloader_es.h"
@@ -238,7 +239,8 @@ static Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams&
     return match_surface;
 }
 
-RasterizerCacheOpenGL::RasterizerCacheOpenGL() {
+RasterizerCacheOpenGL::RasterizerCacheOpenGL(VideoCore::RasterizerAccelerated& rasterizer)
+    : rasterizer(rasterizer) {
     resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
     texture_filterer = std::make_unique<TextureFilterer>(Settings::values.texture_filter_name,
                                                          resolution_scale_factor);
@@ -1052,7 +1054,7 @@ void RasterizerCacheOpenGL::RegisterSurface(const Surface& surface) {
     }
     surface->registered = true;
     surface_cache.add({surface->GetInterval(), SurfaceSet{surface}});
-    UpdatePagesCachedCount(surface->addr, surface->size, 1);
+    rasterizer.UpdatePagesCachedCount(surface->addr, surface->size, 1);
 }
 
 void RasterizerCacheOpenGL::UnregisterSurface(const Surface& surface) {
@@ -1062,42 +1064,8 @@ void RasterizerCacheOpenGL::UnregisterSurface(const Surface& surface) {
         return;
     }
     surface->registered = false;
-    UpdatePagesCachedCount(surface->addr, surface->size, -1);
+    rasterizer.UpdatePagesCachedCount(surface->addr, surface->size, -1);
     surface_cache.subtract({surface->GetInterval(), SurfaceSet{surface}});
-}
-
-void RasterizerCacheOpenGL::UpdatePagesCachedCount(PAddr addr, u32 size, int delta) {
-    const u32 num_pages =
-        ((addr + size - 1) >> Memory::PAGE_BITS) - (addr >> Memory::PAGE_BITS) + 1;
-    const u32 page_start = addr >> Memory::PAGE_BITS;
-    const u32 page_end = page_start + num_pages;
-
-    // Interval maps will erase segments if count reaches 0, so if delta is negative we have to
-    // subtract after iterating
-    const auto pages_interval = PageMap::interval_type::right_open(page_start, page_end);
-    if (delta > 0)
-        cached_pages.add({pages_interval, delta});
-
-    for (const auto& pair : RangeFromInterval(cached_pages, pages_interval)) {
-        const auto interval = pair.first & pages_interval;
-        const int count = pair.second;
-
-        const PAddr interval_start_addr = boost::icl::first(interval) << Memory::PAGE_BITS;
-        const PAddr interval_end_addr = boost::icl::last_next(interval) << Memory::PAGE_BITS;
-        const u32 interval_size = interval_end_addr - interval_start_addr;
-
-        if (delta > 0 && count == delta)
-            VideoCore::g_memory->RasterizerMarkRegionCached(interval_start_addr, interval_size,
-                                                            true);
-        else if (delta < 0 && count == -delta)
-            VideoCore::g_memory->RasterizerMarkRegionCached(interval_start_addr, interval_size,
-                                                            false);
-        else
-            ASSERT(count >= 0);
-    }
-
-    if (delta < 0)
-        cached_pages.add({pages_interval, delta});
 }
 
 } // namespace OpenGL
