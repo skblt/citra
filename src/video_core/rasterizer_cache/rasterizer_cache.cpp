@@ -16,25 +16,6 @@
 
 namespace OpenGL {
 
-// TODO: Deduplicate this
-static Aspect ToAspect(SurfaceType type) {
-    switch (type) {
-    case SurfaceType::Color:
-    case SurfaceType::Texture:
-    case SurfaceType::Fill:
-        return Aspect::Color;
-    case SurfaceType::Depth:
-        return Aspect::Depth;
-    case SurfaceType::DepthStencil:
-        return Aspect::DepthStencil;
-    default:
-        LOG_CRITICAL(Render_OpenGL, "Unknown SurfaceType {}", type);
-        UNREACHABLE();
-    }
-
-    return Aspect::Color;
-}
-
 template <typename Map, typename Interval>
 static constexpr auto RangeFromInterval(Map& map, const Interval& interval) {
     return boost::make_iterator_range(map.equal_range(interval));
@@ -106,13 +87,12 @@ void RasterizerCache::CopySurface(const Surface& src_surface, const Surface& dst
 }
 
 enum MatchFlags {
-    Invalid = 1,      // Flag that can be applied to other match types, invalid matches require
-                      // validation before they can be used
-    Exact = 1 << 1,   // Surfaces perfectly match
-    SubRect = 1 << 2, // Surface encompasses params
-    Copy = 1 << 3,    // Surface we can copy from
-    Expand = 1 << 4,  // Surface that can expand params
-    TexCopy = 1 << 5  // Surface that will match a display transfer "texture copy" parameters
+    Invalid = 1,      ///< Surface is allowed to be only partially valid
+    Exact = 1 << 1,   ///< Surface perfectly matches params
+    SubRect = 1 << 2, ///< Surface encompasses params
+    Copy = 1 << 3,    ///< Surface that can be used as a copy source
+    Expand = 1 << 4,  ///< Surface that can expand params
+    TexCopy = 1 << 5  ///< Surface that will match a display transfer "texture copy" parameters
 };
 
 static constexpr MatchFlags operator|(MatchFlags lhs, MatchFlags rhs) {
