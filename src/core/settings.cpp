@@ -7,7 +7,6 @@
 #include "audio_core/dsp_interface.h"
 #include "core/core.h"
 #include "core/gdbstub/gdbstub.h"
-#include "core/hle/kernel/shared_page.h"
 #include "core/hle/service/cam/cam.h"
 #include "core/hle/service/hid/hid.h"
 #include "core/hle/service/ir/ir_rst.h"
@@ -79,7 +78,7 @@ void LogSettings() {
     LOG_INFO(Config, "Citra Configuration:");
     log_setting("Core_UseCpuJit", values.use_cpu_jit);
     log_setting("Core_CPUClockPercentage", values.cpu_clock_percentage);
-    log_setting("Renderer_UseGLES", values.use_gles);
+    log_setting("Renderer_GraphicsAPI", values.graphics_api);
     log_setting("Renderer_UseHwRenderer", values.use_hw_renderer);
     log_setting("Renderer_UseHwShader", values.use_hw_shader);
     log_setting("Renderer_SeparableShader", values.separable_shader);
@@ -95,7 +94,6 @@ void LogSettings() {
     log_setting("Renderer_TextureFilterName", values.texture_filter_name);
     log_setting("Stereoscopy_Render3d", values.render_3d);
     log_setting("Stereoscopy_Factor3d", values.factor_3d);
-    log_setting("Stereoscopy_MonoRenderLeftEye", values.mono_render_left_eye);
     log_setting("Layout_LayoutOption", values.layout_option);
     log_setting("Layout_SwapScreen", values.swap_screen);
     log_setting("Layout_UprightScreen", values.upright_screen);

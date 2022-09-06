@@ -17,12 +17,6 @@
 #include <QtGui>
 #include <QtWidgets>
 #include <fmt/format.h>
-#ifdef __APPLE__
-#include <unistd.h> // for chdir
-#endif
-#ifdef _WIN32
-#include <windows.h>
-#endif
 #include "citra_qt/aboutdialog.h"
 #include "citra_qt/applets/mii_selector.h"
 #include "citra_qt/applets/swkbd.h"
@@ -78,7 +72,6 @@
 #include "core/file_sys/archive_extsavedata.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/frontend/applets/default_applets.h"
-#include "core/frontend/scope_acquire_context.h"
 #include "core/gdbstub/gdbstub.h"
 #include "core/hle/service/fs/archive.h"
 #include "core/hle/service/nfc/nfc.h"
@@ -92,6 +85,13 @@
 #include "ui_main.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
+
+#ifdef __APPLE__
+#include <unistd.h> // for chdir
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #ifdef USE_DISCORD_PRESENCE
 #include "citra_qt/discord_impl.h"
@@ -947,16 +947,7 @@ bool GMainWindow::LoadROM(const QString& filename) {
     render_window->InitRenderTarget();
     secondary_window->InitRenderTarget();
 
-    Frontend::ScopeAcquireContext scope(*render_window);
-
-    const QString below_gl43_title = tr("OpenGL 4.3 Unsupported");
-    const QString below_gl43_message = tr("Your GPU may not support OpenGL 4.3, or you do not "
-                                          "have the latest graphics driver.");
-
-    if (!QOpenGLContext::globalShareContext()->versionFunctions<QOpenGLFunctions_4_3_Core>()) {
-        QMessageBox::critical(this, below_gl43_title, below_gl43_message);
-        return false;
-    }
+    const auto scope = render_window->Acquire();
 
     Core::System& system{Core::System::GetInstance()};
 
@@ -1010,7 +1001,7 @@ bool GMainWindow::LoadROM(const QString& filename) {
         case Core::System::ResultStatus::ErrorVideoCore:
             QMessageBox::critical(
                 this, tr("Video Core Error"),
-                tr("An error has occurred. Please <a "
+                tr("An error has occurred during intialization of the video backend. Please <a "
                    "href='https://community.citra-emu.org/t/how-to-upload-the-log-file/296'>see "
                    "the "
                    "log</a> for more details. "
@@ -1023,10 +1014,6 @@ bool GMainWindow::LoadROM(const QString& filename) {
                 tr("You are running default Windows drivers "
                    "for your GPU. You need to install the "
                    "proper drivers for your graphics card from the manufacturer's website."));
-            break;
-
-        case Core::System::ResultStatus::ErrorVideoCore_ErrorBelowGL43:
-            QMessageBox::critical(this, below_gl43_title, below_gl43_message);
             break;
 
         default:

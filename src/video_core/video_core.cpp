@@ -44,7 +44,7 @@ ResultStatus Init(Frontend::EmuWindow& emu_window, Frontend::EmuWindow* secondar
     g_memory = &memory;
     Pica::Init();
 
-    OpenGL::GLES = Settings::values.use_gles;
+    OpenGL::GLES = Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES;
 
     g_renderer = std::make_unique<OpenGL::RendererOpenGL>(emu_window, secondary_window);
     ResultStatus result = g_renderer->Init();

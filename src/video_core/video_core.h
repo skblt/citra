@@ -49,8 +49,8 @@ extern Memory::MemorySystem* g_memory;
 
 enum class ResultStatus {
     Success,
-    ErrorGenericDrivers,
-    ErrorBelowGL43,
+    ErrorRendererInit,
+    ErrorGenericDrivers
 };
 
 /// Initialize the video core

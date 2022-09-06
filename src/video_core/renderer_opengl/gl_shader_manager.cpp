@@ -7,7 +7,6 @@
 #include <thread>
 #include <unordered_map>
 #include <boost/variant.hpp>
-#include "core/frontend/scope_acquire_context.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 #include "video_core/renderer_opengl/gl_shader_disk_cache.h"
 #include "video_core/renderer_opengl/gl_shader_manager.h"
@@ -641,7 +640,7 @@ void ShaderProgramManager::LoadDiskCache(const std::atomic_bool& stop_loading,
     std::size_t built_shaders = 0; // It doesn't have be atomic since it's used behind a mutex
     const auto LoadRawSepareble = [&](Frontend::GraphicsContext* context, std::size_t begin,
                                       std::size_t end) {
-        Frontend::ScopeAcquireContext scope(*context);
+        const auto scope = context->Acquire();
         for (std::size_t i = begin; i < end; ++i) {
             if (stop_loading || compilation_failed) {
                 return;

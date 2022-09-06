@@ -28,7 +28,6 @@
 #include "core/file_sys/cia_container.h"
 #include "core/frontend/applets/default_applets.h"
 #include "core/frontend/framebuffer_layout.h"
-#include "core/frontend/scope_acquire_context.h"
 #include "core/gdbstub/gdbstub.h"
 #include "core/hle/service/am/am.h"
 #include "core/hle/service/cfg/cfg.h"
@@ -368,7 +367,7 @@ int main(int argc, char** argv) {
     const auto secondary_window =
         use_secondary_window ? std::make_unique<EmuWindow_SDL2>(false, true) : nullptr;
 
-    Frontend::ScopeAcquireContext scope(*emu_window);
+    const auto scope = emu_window->Acquire();
 
     LOG_INFO(Frontend, "Citra Version: {} | {}-{}", Common::g_build_fullname, Common::g_scm_branch,
              Common::g_scm_desc);
