@@ -42,10 +42,10 @@ class TextureDownloaderES;
 class TextureFilterer;
 class FormatReinterpreterOpenGL;
 
-class RasterizerCacheOpenGL : NonCopyable {
+class RasterizerCache : NonCopyable {
 public:
-    RasterizerCacheOpenGL(VideoCore::RasterizerAccelerated& rasterizer);
-    ~RasterizerCacheOpenGL();
+    RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer);
+    ~RasterizerCache();
 
     /// Blit one surface's texture to another
     bool BlitSurfaces(const Surface& src_surface, const Common::Rectangle<u32>& src_rect,

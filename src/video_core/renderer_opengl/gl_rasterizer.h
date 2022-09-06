@@ -252,7 +252,7 @@ private:
     OpenGLState state;
     GLuint default_texture;
 
-    RasterizerCacheOpenGL res_cache;
+    RasterizerCache res_cache;
 
     std::vector<HardwareVertex> vertex_batch;
 
