@@ -3,33 +3,10 @@
 // Refer to the license.txt file included.
 
 #pragma once
-#include "common/math_util.h"
-#include "common/vector_math.h"
+#include "video_core/rasterizer_cache/types.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 
 namespace OpenGL {
-
-// Describes the type of data a texture holds
-enum class Aspect { Color = 0, Depth = 1, DepthStencil = 2 };
-
-// A union for both color and depth/stencil clear values
-union ClearValue {
-    Common::Vec4f color;
-    struct {
-        float depth;
-        u8 stencil;
-    };
-};
-
-struct Subresource {
-    Subresource(Aspect aspect, Common::Rectangle<u32> region, u32 level = 0, u32 layer = 0)
-        : aspect(aspect), region(region), level(level), layer(layer) {}
-
-    Aspect aspect;
-    Common::Rectangle<u32> region;
-    u32 level = 0;
-    u32 layer = 0;
-};
 
 struct FormatTuple;
 

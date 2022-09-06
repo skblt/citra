@@ -3,7 +3,7 @@
 // Refer to the license.txt file included.
 
 #include "common/scope_exit.h"
-#include "video_core/rasterizer_cache/rasterizer_cache_utils.h"
+#include "video_core/rasterizer_cache/utils.h"
 #include "video_core/rasterizer_cache/texture_runtime.h"
 #include "video_core/renderer_opengl/gl_state.h"
 
