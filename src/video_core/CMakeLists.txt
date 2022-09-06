@@ -12,6 +12,8 @@ add_library(video_core STATIC
     pica_types.h
     primitive_assembly.cpp
     primitive_assembly.h
+    rasterizer_accelerated.cpp
+    rasterizer_accelerated.h
     rasterizer_interface.h
     regs.cpp
     regs.h
