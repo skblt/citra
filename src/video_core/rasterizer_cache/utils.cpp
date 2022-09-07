@@ -4,6 +4,7 @@
 
 #pragma once
 #include <glad/glad.h>
+#include "common/assert.h"
 #include "video_core/texture/texture_decode.h"
 #include "video_core/rasterizer_cache/morton_swizzle.h"
 #include "video_core/rasterizer_cache/surface_params.h"
@@ -99,10 +100,12 @@ void UnswizzleTexture(const SurfaceParams& params, u32 load_start, u32 load_end,
     }
 }
 
-ClearValue MakeClearValue(Aspect aspect, PixelFormat format, const u8* fill_data) {
+ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data) {
     ClearValue result{};
-    switch (aspect) {
-    case Aspect::Color: {
+    switch (type) {
+    case SurfaceType::Color:
+    case SurfaceType::Texture:
+    case SurfaceType::Fill: {
         Pica::Texture::TextureInfo tex_info{};
         tex_info.format = static_cast<Pica::TexturingRegs::TextureFormat>(format);
 
@@ -110,7 +113,7 @@ ClearValue MakeClearValue(Aspect aspect, PixelFormat format, const u8* fill_data
         result.color = color / 255.f;
         break;
     }
-    case Aspect::Depth: {
+    case SurfaceType::Depth: {
         u32 depth_uint = 0;
         if (format == PixelFormat::D16) {
             std::memcpy(&depth_uint, fill_data, 2);
@@ -121,7 +124,7 @@ ClearValue MakeClearValue(Aspect aspect, PixelFormat format, const u8* fill_data
         }
         break;
     }
-    case Aspect::DepthStencil: {
+    case SurfaceType::DepthStencil: {
         u32 clear_value_uint;
         std::memcpy(&clear_value_uint, fill_data, sizeof(u32));
 
@@ -129,27 +132,11 @@ ClearValue MakeClearValue(Aspect aspect, PixelFormat format, const u8* fill_data
         result.stencil = (clear_value_uint >> 24);
         break;
     }
+    default:
+        UNREACHABLE_MSG("Invalid surface type!");
     }
 
     return result;
-}
-
-Aspect ToAspect(SurfaceType type) {
-    switch (type) {
-    case SurfaceType::Color:
-    case SurfaceType::Texture:
-    case SurfaceType::Fill:
-        return Aspect::Color;
-    case SurfaceType::Depth:
-        return Aspect::Depth;
-    case SurfaceType::DepthStencil:
-        return Aspect::DepthStencil;
-    default:
-        LOG_CRITICAL(Render_OpenGL, "Unknown SurfaceType {}", type);
-        UNREACHABLE();
-    }
-
-    return Aspect::Color;
 }
 
 } // namespace OpenGL

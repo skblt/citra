@@ -23,6 +23,8 @@ struct Rectangle {
     constexpr Rectangle(T left, T top, T right, T bottom)
         : left(left), top(top), right(right), bottom(bottom) {}
 
+    auto operator<=>(const Rectangle&) const = default;
+
     [[nodiscard]] T GetWidth() const {
         return std::abs(static_cast<std::make_signed_t<T>>(right - left));
     }
