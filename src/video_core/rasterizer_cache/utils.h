@@ -4,6 +4,7 @@
 
 #pragma once
 #include <functional>
+#include <span>
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/rasterizer_cache/types.h"
@@ -46,6 +47,14 @@ struct TextureCubeConfig {
         return Common::ComputeHash64(this, sizeof(TextureCubeConfig));
     }
 };
+
+class SurfaceParams;
+
+void SwizzleTexture(const SurfaceParams& params, u32 flush_start, u32 flush_end,
+                    std::span<std::byte> source, std::span<std::byte> dest);
+
+void UnswizzleTexture(const SurfaceParams& params, u32 load_start, u32 load_end,
+                      std::span<const std::byte> source, std::span<std::byte> dest);
 
 [[nodiscard]] ClearValue MakeClearValue(Aspect aspect, PixelFormat format, const u8* fill_data);
 
