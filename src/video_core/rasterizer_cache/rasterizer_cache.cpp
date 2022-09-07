@@ -449,7 +449,8 @@ Surface RasterizerCache::GetTextureSurface(const Pica::Texture::TextureInfo& inf
 
                     const Subresource dst_subresource = {
                         .aspect = aspect,
-                        .region = surface_params.GetScaledRect()
+                        .region = surface_params.GetScaledRect(),
+                        .level = level
                     };
 
                     runtime.BlitTextures(level_surface->texture, src_subresource,
