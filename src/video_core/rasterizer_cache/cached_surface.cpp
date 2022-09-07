@@ -32,12 +32,17 @@ void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
     const bool need_swap =
         GLES && (pixel_format == PixelFormat::RGBA8 || pixel_format == PixelFormat::RGB8);
 
-    const u8* const texture_src_data = VideoCore::g_memory->GetPhysicalPointer(addr);
-    if (texture_src_data == nullptr)
+    const u8* texture_ptr = VideoCore::g_memory->GetPhysicalPointer(addr);
+    if (texture_ptr == nullptr) {
         return;
+    }
+
+    const u32 byte_size = width * height * GetBytesPerPixel(pixel_format);
+    const auto texture_data = std::span<const std::byte>{reinterpret_cast<const std::byte*>(texture_ptr),
+                                                         byte_size};
 
     if (gl_buffer.empty()) {
-        gl_buffer.resize(width * height * GetBytesPerPixel(pixel_format));
+        gl_buffer.resize(byte_size);
     }
 
     // TODO: Should probably be done in ::Memory:: and check for other regions too
@@ -59,58 +64,38 @@ void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
             // cannot fully test this
             if (pixel_format == PixelFormat::RGBA8) {
                 for (std::size_t i = start_offset; i < load_end - addr; i += 4) {
-                    gl_buffer[i] = texture_src_data[i + 3];
-                    gl_buffer[i + 1] = texture_src_data[i + 2];
-                    gl_buffer[i + 2] = texture_src_data[i + 1];
-                    gl_buffer[i + 3] = texture_src_data[i];
+                    gl_buffer[i] = texture_ptr[i + 3];
+                    gl_buffer[i + 1] = texture_ptr[i + 2];
+                    gl_buffer[i + 2] = texture_ptr[i + 1];
+                    gl_buffer[i + 3] = texture_ptr[i];
                 }
             } else if (pixel_format == PixelFormat::RGB8) {
                 for (std::size_t i = start_offset; i < load_end - addr; i += 3) {
-                    gl_buffer[i] = texture_src_data[i + 2];
-                    gl_buffer[i + 1] = texture_src_data[i + 1];
-                    gl_buffer[i + 2] = texture_src_data[i];
+                    gl_buffer[i] = texture_ptr[i + 2];
+                    gl_buffer[i + 1] = texture_ptr[i + 1];
+                    gl_buffer[i + 2] = texture_ptr[i];
                 }
             }
         } else {
-            std::memcpy(&gl_buffer[start_offset], texture_src_data + start_offset,
+            std::memcpy(&gl_buffer[start_offset], texture_ptr + start_offset,
                         load_end - load_start);
         }
     } else {
-        if (type == SurfaceType::Texture) {
-            Pica::Texture::TextureInfo tex_info{};
-            tex_info.width = width;
-            tex_info.height = height;
-            tex_info.format = static_cast<Pica::TexturingRegs::TextureFormat>(pixel_format);
-            tex_info.SetDefaultStride();
-            tex_info.physical_address = addr;
-
-            const SurfaceInterval load_interval(load_start, load_end);
-            const auto rect = GetSubRect(FromInterval(load_interval));
-            ASSERT(FromInterval(load_interval).GetInterval() == load_interval);
-
-            for (unsigned y = rect.bottom; y < rect.top; ++y) {
-                for (unsigned x = rect.left; x < rect.right; ++x) {
-                    auto vec4 =
-                        Pica::Texture::LookupTexture(texture_src_data, x, height - 1 - y, tex_info);
-                    const std::size_t offset = (x + (width * y)) * 4;
-                    std::memcpy(&gl_buffer[offset], vec4.AsArray(), 4);
-                }
-            }
-        } else {
-            const u32 func_index = static_cast<u32>(pixel_format);
-            const MortonFunc func = UNSWIZZLE_TABLE[func_index];
-            func(stride, height, &gl_buffer[0], addr, load_start, load_end);
-        }
+        const auto dest_data = std::span<std::byte>{reinterpret_cast<std::byte*>(gl_buffer.data()),
+                                                    byte_size};
+        UnswizzleTexture(*this, load_start, load_end, texture_data, dest_data);
     }
 }
 
 MICROPROFILE_DEFINE(RasterizerCache_SurfaceFlush, "RasterizerCache", "Surface Flush", MP_RGB(128, 192, 64));
 void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
     u8* const dst_buffer = VideoCore::g_memory->GetPhysicalPointer(addr);
-    if (dst_buffer == nullptr)
+    if (dst_buffer == nullptr) {
         return;
+    }
 
-    ASSERT(gl_buffer.size() == width * height * GetBytesPerPixel(pixel_format));
+    const u32 byte_size = width * height * GetBytesPerPixel(pixel_format);
+    DEBUG_ASSERT(gl_buffer.size() == byte_size);
 
     // TODO: Should probably be done in ::Memory:: and check for other regions too
     // same as loadglbuffer()
@@ -130,8 +115,9 @@ void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
         const u32 coarse_start_offset = start_offset - (start_offset % fill_size);
         const u32 backup_bytes = start_offset % fill_size;
         std::array<u8, 4> backup_data;
-        if (backup_bytes)
+        if (backup_bytes) {
             std::memcpy(&backup_data[0], &dst_buffer[coarse_start_offset], backup_bytes);
+        }
 
         for (u32 offset = coarse_start_offset; offset < end_offset; offset += fill_size) {
             std::memcpy(&dst_buffer[offset], &fill_data[0],
@@ -160,9 +146,9 @@ void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
                         flush_end - flush_start);
         }
     } else {
-        const u32 func_index = static_cast<u32>(pixel_format);
-        const MortonFunc func = SWIZZLE_TABLE[func_index];
-        func(stride, height, &gl_buffer[0], addr, flush_start, flush_end);
+        const auto source_data = std::span<std::byte>{reinterpret_cast<std::byte*>(gl_buffer.data()),
+                                                      byte_size};
+        SwizzleTexture(*this, flush_start, flush_end, source_data, {});
     }
 }
 
