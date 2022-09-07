@@ -350,7 +350,11 @@ public:
     u8* GetPointer(VAddr vaddr);
     const u8* GetPointer(VAddr vaddr) const;
 
+    /// Returns true if the address refers to a valid memory region
     bool IsValidPhysicalAddress(PAddr paddr) const;
+
+    /// Clamps the address to the boundaries of the memory region pointed by base
+    PAddr ClampPhysicalAddress(PAddr base, PAddr address) const;
 
     /// Gets offset in FCRAM from a pointer inside FCRAM range
     u32 GetFCRAMOffset(const u8* pointer) const;
