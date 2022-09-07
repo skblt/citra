@@ -554,6 +554,33 @@ bool MemorySystem::IsValidPhysicalAddress(const PAddr paddr) const {
     return GetPhysicalRef(paddr);
 }
 
+PAddr MemorySystem::ClampPhysicalAddress(PAddr base, PAddr address) const {
+    struct MemoryArea {
+        PAddr paddr_base;
+        u32 size;
+    };
+
+    constexpr std::array memory_areas = {
+        MemoryArea{VRAM_PADDR, VRAM_SIZE},
+        MemoryArea{DSP_RAM_PADDR, DSP_RAM_SIZE},
+        MemoryArea{FCRAM_PADDR, FCRAM_N3DS_SIZE},
+        MemoryArea{N3DS_EXTRA_RAM_PADDR, N3DS_EXTRA_RAM_SIZE},
+    };
+
+    const auto area =
+        std::ranges::find_if(memory_areas, [&](const MemoryArea& area) {
+            return base >= area.paddr_base && base <= area.paddr_base + area.size;
+        });
+
+    if (area == memory_areas.end()) {
+        LOG_ERROR(HW_Memory, "Unknown base address used for clamping {:#08X} at PC {:#08X}", base,
+                  Core::GetRunningCore().GetPC());
+        return address;
+    }
+
+    return std::clamp(address, area->paddr_base, area->paddr_base + area->size);
+}
+
 u8* MemorySystem::GetPointer(const VAddr vaddr) {
     u8* page_pointer = impl->current_page_table->pointers[vaddr >> CITRA_PAGE_BITS];
     if (page_pointer) {

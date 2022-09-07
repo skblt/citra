@@ -73,7 +73,7 @@ static void MortonCopy(u32 stride, u32 height, u8* linear_buffer, PAddr base, PA
 
     const PAddr aligned_down_start = base + Common::AlignDown(start - base, tile_size);
     const PAddr aligned_start = base + Common::AlignUp(start - base, tile_size);
-    const PAddr aligned_end = base + Common::AlignDown(end - base, tile_size);
+    PAddr aligned_end = base + Common::AlignDown(end - base, tile_size);
 
     ASSERT(!morton_to_linear || (aligned_start == start && aligned_end == end));
 
@@ -81,9 +81,12 @@ static void MortonCopy(u32 stride, u32 height, u8* linear_buffer, PAddr base, PA
     u32 x = (begin_pixel_index % (stride * 8)) / 8;
     u32 y = (begin_pixel_index / (stride * 8)) * 8;
 
+    // In OpenGL the texture origin is in the bottom left corner as opposed to other
+    // APIs that have it at the top left. To avoid flipping texture coordinates in
+    // the shader we read/write the linear buffer backwards
     linear_buffer += ((height - 8 - y) * stride + x) * aligned_bytes_per_pixel;
 
-    auto linearbuf_next_tile = [&] {
+    auto linear_next_tile = [&] {
         x = (x + 8) % stride;
         linear_buffer += 8 * aligned_bytes_per_pixel;
         if (!x) {
@@ -94,36 +97,38 @@ static void MortonCopy(u32 stride, u32 height, u8* linear_buffer, PAddr base, PA
 
     u8* tile_buffer = VideoCore::g_memory->GetPhysicalPointer(start);
 
+    // If during a texture download the start coordinate is inside a tile, swizzle
+    // the tile to a temporary buffer and copy the part we are interested in
     if (start < aligned_start && !morton_to_linear) {
         std::array<u8, tile_size> tmp_buf;
-        MortonCopyTile<morton_to_linear, format>(stride, &tmp_buf[0], linear_buffer);
-        std::memcpy(tile_buffer, &tmp_buf[start - aligned_down_start],
+        MortonCopyTile<morton_to_linear, format>(stride, tmp_buf.data(), linear_buffer);
+        std::memcpy(tile_buffer, tmp_buf.data() + start - aligned_down_start,
                     std::min(aligned_start, end) - start);
 
         tile_buffer += aligned_start - start;
-        linearbuf_next_tile();
+        linear_next_tile();
     }
 
-    const u8* const buffer_end = tile_buffer + aligned_end - aligned_start;
-    PAddr current_paddr = aligned_start;
+    // Pokemon Super Mystery Dungeon will try to use textures that go beyond
+    // the end address of VRAM. Clamp the address to the end of VRAM if that happens
+    // TODO: Move this to the rasterizer cache
+    if (const u32 clamped_end = VideoCore::g_memory->ClampPhysicalAddress(aligned_start, aligned_end);
+            clamped_end != aligned_end) {
+        LOG_ERROR(Render_OpenGL, "Out of bound texture read address {:#x}, clamping to {:#x}", aligned_end, clamped_end);
+        aligned_end = clamped_end;
+    }
+
+    const u8* buffer_end = tile_buffer + aligned_end - aligned_start;
     while (tile_buffer < buffer_end) {
-        // Pokemon Super Mystery Dungeon will try to use textures that go beyond
-        // the end address of VRAM. Stop reading if reaches invalid address
-        if (!VideoCore::g_memory->IsValidPhysicalAddress(current_paddr) ||
-            !VideoCore::g_memory->IsValidPhysicalAddress(current_paddr + tile_size)) {
-            LOG_ERROR(Render_OpenGL, "Out of bound texture");
-            break;
-        }
         MortonCopyTile<morton_to_linear, format>(stride, tile_buffer, linear_buffer);
         tile_buffer += tile_size;
-        current_paddr += tile_size;
-        linearbuf_next_tile();
+        linear_next_tile();
     }
 
     if (end > std::max(aligned_start, aligned_end) && !morton_to_linear) {
         std::array<u8, tile_size> tmp_buf;
-        MortonCopyTile<morton_to_linear, format>(stride, &tmp_buf[0], linear_buffer);
-        std::memcpy(tile_buffer, &tmp_buf[0], end - aligned_end);
+        MortonCopyTile<morton_to_linear, format>(stride, tmp_buf.data(), linear_buffer);
+        std::memcpy(tile_buffer, tmp_buf.data(), end - aligned_end);
     }
 }
 
