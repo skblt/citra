@@ -2,10 +2,10 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <bit>
 #include "common/assert.h"
 #include "common/color.h"
 #include "common/logging/log.h"
-#include "common/math_util.h"
 #include "common/swap.h"
 #include "common/vector_math.h"
 #include "video_core/regs_texturing.h"
@@ -220,6 +220,25 @@ TextureInfo TextureInfo::FromPicaRegister(const TexturingRegs::TextureConfig& co
     info.format = format;
     info.SetDefaultStride();
     return info;
+}
+
+void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
+    u32 j = 0;
+    for (u32 i = 0; i < source.size(); i += 3) {
+        dest[j] = source[i + 2];
+        dest[j + 1] = source[i + 1];
+        dest[j + 2] = source[i];
+        dest[j + 3] = std::byte{0xFF};
+        j += 4;
+    }
+}
+
+void ConvertABGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
+    for (u32 i = 0; i < source.size(); i += 4) {
+        const u32 abgr = *reinterpret_cast<const u32*>(source.data() + i);
+        const u32 rgba = std::byteswap(abgr);
+        std::memcpy(dest.data() + i, &rgba, 4);
+    }
 }
 
 } // namespace Pica::Texture
