@@ -5,6 +5,8 @@
 #pragma once
 #include <glad/glad.h>
 #include "video_core/texture/texture_decode.h"
+#include "video_core/rasterizer_cache/morton_swizzle.h"
+#include "video_core/rasterizer_cache/surface_params.h"
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_opengl/gl_vars.h"
 
@@ -52,6 +54,49 @@ const FormatTuple& GetFormatTuple(PixelFormat pixel_format) {
     }
 
     return tex_tuple;
+}
+
+void SwizzleTexture(const SurfaceParams& params, u32 flush_start, u32 flush_end,
+                    std::span<std::byte> source, std::span<std::byte> dest) {
+    const u32 func_index = static_cast<u32>(params.pixel_format);
+    const MortonFunc swizzle = SWIZZLE_TABLE[func_index];
+    u8* source_data = reinterpret_cast<u8*>(source.data());
+
+    // TODO: Move memory access out of the morton function
+    swizzle(params.stride, params.height, source_data, params.addr, flush_start, flush_end);
+}
+
+void UnswizzleTexture(const SurfaceParams& params, u32 load_start, u32 load_end,
+                      std::span<const std::byte> source, std::span<std::byte> dest) {
+    // TODO: Integrate this to UNSWIZZLE_TABLE
+    if (params.type == SurfaceType::Texture) {
+        Pica::Texture::TextureInfo tex_info{};
+        tex_info.width = params.width;
+        tex_info.height = params.height;
+        tex_info.format = static_cast<Pica::TexturingRegs::TextureFormat>(params.pixel_format);
+        tex_info.SetDefaultStride();
+        tex_info.physical_address = params.addr;
+
+        const SurfaceInterval load_interval(load_start, load_end);
+        const auto rect = params.GetSubRect(params.FromInterval(load_interval));
+        DEBUG_ASSERT(params.FromInterval(load_interval).GetInterval() == load_interval);
+
+        const u8* source_data = reinterpret_cast<const u8*>(source.data());
+        for (u32 y = rect.bottom; y < rect.top; y++) {
+            for (u32 x = rect.left; x < rect.right; x++) {
+                auto vec4 =
+                    Pica::Texture::LookupTexture(source_data, x, params.height - 1 - y, tex_info);
+                const std::size_t offset = (x + (params.width * y)) * 4;
+                std::memcpy(dest.data() + offset, vec4.AsArray(), 4);
+            }
+        }
+    } else {
+        const u32 func_index = static_cast<u32>(params.pixel_format);
+        const MortonFunc deswizzle = UNSWIZZLE_TABLE[func_index];
+        u8* dest_data = reinterpret_cast<u8*>(dest.data());
+
+        deswizzle(params.stride, params.height, dest_data, params.addr, load_start, load_end);
+    }
 }
 
 ClearValue MakeClearValue(Aspect aspect, PixelFormat format, const u8* fill_data) {
