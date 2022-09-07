@@ -6,12 +6,14 @@
 #include "common/scope_exit.h"
 #include "common/texture.h"
 #include "core/core.h"
+#include "core/settings.h"
 #include "video_core/rasterizer_cache/cached_surface.h"
-#include "video_core/rasterizer_cache/morton_swizzle.h"
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/renderer_opengl/gl_state.h"
+#include "video_core/renderer_opengl/gl_vars.h"
 #include "video_core/renderer_opengl/texture_downloader_es.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
+#include "video_core/video_core.h"
 
 namespace OpenGL {
 
@@ -337,8 +339,17 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect) {
         const Common::Rectangle<u32> from_rect{0, height, width, 0};
 
         if (!owner.texture_filterer->Filter(unscaled_tex, from_rect, texture, scaled_rect, type)) {
-            const Aspect aspect = ToAspect(type);
-            runtime.BlitTextures(unscaled_tex, {aspect, from_rect}, texture, {aspect, scaled_rect});
+            const Subresource src_subresource = {
+                .type = type,
+                .region = from_rect
+            };
+
+            const Subresource dst_subresource = {
+                .type = type,
+                .region = scaled_rect
+            };
+
+            runtime.BlitTextures(unscaled_tex, src_subresource, texture, dst_subresource);
         }
     }
 
@@ -370,7 +381,6 @@ void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
     const FormatTuple& tuple = GetFormatTuple(pixel_format);
 
     // If not 1x scale, blit scaled texture to a new 1x texture and use that to flush
-    const Aspect aspect = ToAspect(type);
     if (res_scale != 1) {
         auto scaled_rect = rect;
         scaled_rect.left *= res_scale;
@@ -380,9 +390,19 @@ void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
 
         const Common::Rectangle<u32> unscaled_tex_rect{0, rect.GetHeight(), rect.GetWidth(), 0};
         auto unscaled_tex = owner.AllocateSurfaceTexture(pixel_format, rect.GetWidth(), rect.GetHeight());
+
+        const Subresource src_subresource = {
+            .type = type,
+            .region = scaled_rect
+        };
+
+        const Subresource dst_subresource = {
+            .type = type,
+            .region = unscaled_tex_rect
+        };
+
         // Blit scaled texture to the unscaled one
-        runtime.BlitTextures(texture, {aspect, scaled_rect}, unscaled_tex,
-                             {aspect, unscaled_tex_rect});
+        runtime.BlitTextures(texture, src_subresource, unscaled_tex, dst_subresource);
 
         state.texture_units[0].texture_2d = unscaled_tex.handle;
         state.Apply();
@@ -396,7 +416,12 @@ void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
             glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, &gl_buffer[buffer_offset]);
         }
     } else {
-        runtime.ReadTexture(texture, {aspect, rect}, tuple, gl_buffer.data());
+        const Subresource subresource = {
+            .type = type,
+            .region = rect
+        };
+
+        runtime.ReadTexture(texture, subresource, tuple, gl_buffer.data());
     }
 
     glPixelStorei(GL_PACK_ROW_LENGTH, 0);

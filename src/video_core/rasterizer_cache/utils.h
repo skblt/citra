@@ -56,9 +56,7 @@ void SwizzleTexture(const SurfaceParams& params, u32 flush_start, u32 flush_end,
 void UnswizzleTexture(const SurfaceParams& params, u32 load_start, u32 load_end,
                       std::span<const std::byte> source, std::span<std::byte> dest);
 
-[[nodiscard]] ClearValue MakeClearValue(Aspect aspect, PixelFormat format, const u8* fill_data);
-
-[[nodiscard]] Aspect ToAspect(SurfaceType type);
+[[nodiscard]] ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data);
 
 } // namespace OpenGL
 

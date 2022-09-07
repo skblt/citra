@@ -9,15 +9,21 @@
 
 namespace OpenGL {
 
-GLbitfield ToBufferMask(Aspect aspect) {
-    switch (aspect) {
-    case Aspect::Color:
+GLbitfield MakeBufferMask(SurfaceType type) {
+    switch (type) {
+    case SurfaceType::Color:
+    case SurfaceType::Texture:
+    case SurfaceType::Fill:
         return GL_COLOR_BUFFER_BIT;
-    case Aspect::Depth:
+    case SurfaceType::Depth:
         return GL_DEPTH_BUFFER_BIT;
-    case Aspect::DepthStencil:
+    case SurfaceType::DepthStencil:
         return GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+    default:
+        UNREACHABLE_MSG("Invalid surface type!");
     }
+
+    return GL_COLOR_BUFFER_BIT;
 }
 
 TextureRuntime::TextureRuntime() {
@@ -37,24 +43,28 @@ void TextureRuntime::ReadTexture(const OGLTexture& tex, Subresource subresource,
     state.Apply();
 
     const u32 level = subresource.level;
-    switch (subresource.aspect) {
-    case Aspect::Color:
+    switch (subresource.type) {
+    case SurfaceType::Color:
+    case SurfaceType::Texture:
+    case SurfaceType::Fill:
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex.handle,
                                level);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
                                0);
         break;
-    case Aspect::Depth:
+    case SurfaceType::Depth:
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex.handle,
                                level);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
         break;
-    case Aspect::DepthStencil:
+    case SurfaceType::DepthStencil:
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D,
                                tex.handle, level);
         break;
+    default:
+        UNREACHABLE_MSG("Invalid surface type!");
     }
 
     const auto& rect = subresource.region;
@@ -79,8 +89,10 @@ bool TextureRuntime::ClearTexture(const OGLTexture& tex, Subresource subresource
     state.Apply();
 
     const u32 level = subresource.level;
-    switch (subresource.aspect) {
-    case Aspect::Color:
+    switch (subresource.type) {
+    case SurfaceType::Color:
+    case SurfaceType::Texture:
+    case SurfaceType::Fill:
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex.handle,
                                level);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
@@ -94,7 +106,7 @@ bool TextureRuntime::ClearTexture(const OGLTexture& tex, Subresource subresource
 
         glClearBufferfv(GL_COLOR, 0, value.color.AsArray());
         break;
-    case Aspect::Depth:
+    case SurfaceType::Depth:
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex.handle,
                                level);
@@ -105,7 +117,7 @@ bool TextureRuntime::ClearTexture(const OGLTexture& tex, Subresource subresource
 
         glClearBufferfv(GL_DEPTH, 0, &value.depth);
         break;
-    case Aspect::DepthStencil:
+    case SurfaceType::DepthStencil:
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D,
                                tex.handle, level);
@@ -116,6 +128,8 @@ bool TextureRuntime::ClearTexture(const OGLTexture& tex, Subresource subresource
 
         glClearBufferfi(GL_DEPTH_STENCIL, 0, value.depth, value.stencil);
         break;
+    default:
+        UNREACHABLE_MSG("Invalid surface type!");
     }
 
     return true;
@@ -146,24 +160,28 @@ bool TextureRuntime::BlitTextures(const OGLTexture& src_tex, Subresource src_sub
     };
 
     // Sanity check; Can't blit a color texture to a depth buffer
-    ASSERT(src_subresource.aspect == dst_subresource.aspect);
-    switch (src_subresource.aspect) {
-    case Aspect::Color:
+    ASSERT(src_subresource.type == dst_subresource.type);
+    switch (src_subresource.type) {
+    case SurfaceType::Color:
+    case SurfaceType::Texture:
+    case SurfaceType::Fill:
         // Bind only color
         BindAttachment(GL_COLOR_ATTACHMENT0, src_tex.handle, dst_tex.handle);
         BindAttachment(GL_DEPTH_STENCIL_ATTACHMENT, 0, 0);
         break;
-    case Aspect::Depth:
+    case SurfaceType::Depth:
         // Bind only depth
         BindAttachment(GL_COLOR_ATTACHMENT0, 0, 0);
         BindAttachment(GL_DEPTH_ATTACHMENT, src_tex.handle, dst_tex.handle);
         BindAttachment(GL_STENCIL_ATTACHMENT, 0, 0);
         break;
-    case Aspect::DepthStencil:
+    case SurfaceType::DepthStencil:
         // Bind to combined depth + stencil
         BindAttachment(GL_COLOR_ATTACHMENT0, 0, 0);
         BindAttachment(GL_DEPTH_STENCIL_ATTACHMENT, src_tex.handle, dst_tex.handle);
         break;
+    default:
+        UNREACHABLE_MSG("Invalid surface type!");
     }
 
     // TODO (wwylele): use GL_NEAREST for shadow map texture
@@ -171,12 +189,13 @@ bool TextureRuntime::BlitTextures(const OGLTexture& src_tex, Subresource src_sub
     // doing linear intepolation componentwise would cause incorrect value. However, for a
     // well-programmed game this code path should be rarely executed for shadow map with
     // inconsistent scale.
-    const GLenum filter = src_subresource.aspect == Aspect::Color ? GL_LINEAR : GL_NEAREST;
+    const GLbitfield buffer_mask = MakeBufferMask(src_subresource.type);
+    const GLenum filter = buffer_mask == GL_COLOR_BUFFER_BIT ? GL_LINEAR : GL_NEAREST;
     const auto& src_rect = src_subresource.region;
     const auto& dst_rect = dst_subresource.region;
     glBlitFramebuffer(src_rect.left, src_rect.bottom, src_rect.right, src_rect.top, dst_rect.left,
                       dst_rect.bottom, dst_rect.right, dst_rect.top,
-                      ToBufferMask(src_subresource.aspect), filter);
+                      buffer_mask, filter);
 
     return true;
 }
