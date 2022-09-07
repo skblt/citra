@@ -48,9 +48,8 @@ void RasterizerCache::CopySurface(const Surface& src_surface, const Surface& dst
     SurfaceParams subrect_params = dst_surface->FromInterval(copy_interval);
     ASSERT(subrect_params.GetInterval() == copy_interval && src_surface != dst_surface);
 
-    const Aspect aspect = ToAspect(dst_surface->type);
     const Subresource dst_subresource = {
-        .aspect = aspect,
+        .type = dst_surface->type,
         .region = dst_surface->GetScaledSubRect(subrect_params)
     };
 
@@ -66,7 +65,7 @@ void RasterizerCache::CopySurface(const Surface& src_surface, const Surface& dst
         }
 
         const ClearValue clear_value =
-            MakeClearValue(aspect, dst_surface->pixel_format, fill_buffer.data());
+            MakeClearValue(dst_surface->type, dst_surface->pixel_format, fill_buffer.data());
 
         runtime.ClearTexture(dst_surface->texture, dst_subresource, clear_value);
         return;
@@ -74,7 +73,7 @@ void RasterizerCache::CopySurface(const Surface& src_surface, const Surface& dst
 
     if (src_surface->CanSubRect(subrect_params)) {
         const Subresource src_subresource = {
-            .aspect = aspect,
+            .type = src_surface->type,
             .region = src_surface->GetScaledSubRect(subrect_params)
         };
 
@@ -209,14 +208,13 @@ bool RasterizerCache::BlitSurfaces(const Surface& src_surface,
     if (CheckFormatsBlittable(src_surface->pixel_format, dst_surface->pixel_format)) {
         dst_surface->InvalidateAllWatcher();
 
-        const Aspect aspect = ToAspect(src_surface->type);
         const Subresource src_subresource = {
-            .aspect = aspect,
+            .type = src_surface->type,
             .region = src_rect
         };
 
         const Subresource dst_subresource = {
-            .aspect = aspect,
+            .type = dst_surface->type,
             .region = dst_rect
         };
 
@@ -441,14 +439,13 @@ Surface RasterizerCache::GetTextureSurface(const Pica::Texture::TextureInfo& inf
                 }
 
                 if (!surface->is_custom && texture_filterer->IsNull()) {
-                    const Aspect aspect = ToAspect(surface->type);
                     const Subresource src_subresource = {
-                        .aspect = aspect,
+                        .type = surface->type,
                         .region = level_surface->GetScaledRect()
                     };
 
                     const Subresource dst_subresource = {
-                        .aspect = aspect,
+                        .type = surface->type,
                         .region = surface_params.GetScaledRect(),
                         .level = level
                     };
@@ -531,14 +528,13 @@ const CachedTextureCube& RasterizerCache::GetTextureCube(const TextureCubeConfig
                 ValidateSurface(surface, surface->addr, surface->size);
             }
 
-            const Aspect aspect = ToAspect(surface->type);
             const Subresource src_subresource = {
-                .aspect = aspect,
+                .type = surface->type,
                 .region = surface->GetScaledRect()
             };
 
             const Subresource dst_subresource = {
-                .aspect = aspect,
+                .type = surface->type,
                 .region = Common::Rectangle<u32>{0, scaled_size, scaled_size, 0}
             };
 
@@ -862,14 +858,13 @@ bool RasterizerCache::ValidateByReinterpretation(const Surface& surface,
                 if (!texture_filterer->Filter(tmp_tex, tmp_rect, surface->texture, dest_rect,
                                               type)) {
 
-                    const Aspect aspect = ToAspect(type);
                     const Subresource src_subresource = {
-                        .aspect = aspect,
+                        .type = type,
                         .region = tmp_rect
                     };
 
                     const Subresource dst_subresource = {
-                        .aspect = aspect,
+                        .type = type,
                         .region = dest_rect
                     };
 
