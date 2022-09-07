@@ -90,7 +90,11 @@ static void MortonCopy(u32 stride, u32 height, u8* linear_buffer, PAddr base, PA
         x = (x + 8) % stride;
         linear_buffer += 8 * aligned_bytes_per_pixel;
         if (!x) {
-            y += 8;
+            y  = (y + 8) % height;
+            if (!y) {
+                return;
+            }
+
             linear_buffer -= stride * 9 * aligned_bytes_per_pixel;
         }
     };
