@@ -337,8 +337,7 @@ ResultVal<std::shared_ptr<Thread>> KernelSystem::CreateThread(
     }
 
     // TODO(yuriks): Other checks, returning 0xD9001BEA
-
-    if (!Memory::IsValidVirtualAddress(*owner_process, entry_point)) {
+    if (!memory.IsValidVirtualAddress(*owner_process, entry_point)) {
         LOG_ERROR(Kernel_SVC, "(name={}): invalid entry {:08x}", name, entry_point);
         // TODO: Verify error
         return ResultCode(ErrorDescription::InvalidAddress, ErrorModule::Kernel,
