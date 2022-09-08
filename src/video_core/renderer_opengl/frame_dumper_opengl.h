@@ -29,7 +29,7 @@ class RendererOpenGL;
 class FrameDumperOpenGL {
 public:
     explicit FrameDumperOpenGL(VideoDumper::Backend& video_dumper, Frontend::EmuWindow& emu_window);
-    ~FrameDumperOpenGL();
+    ~FrameDumperOpenGL() = default;
 
     bool IsDumping() const;
     Layout::FramebufferLayout GetLayout() const;
@@ -41,12 +41,11 @@ public:
 private:
     void InitializeOpenGLObjects();
     void CleanupOpenGLObjects();
-    void PresentLoop();
+    void PresentLoop(std::stop_token stop_token);
 
     VideoDumper::Backend& video_dumper;
     std::unique_ptr<Frontend::GraphicsContext> context;
-    std::thread present_thread;
-    std::atomic_bool stop_requested{false};
+    std::jthread present_thread;
 
     // PBOs used to dump frames faster
     std::array<OGLBuffer, 2> pbos;

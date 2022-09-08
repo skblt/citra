@@ -13,11 +13,6 @@ FrameDumperOpenGL::FrameDumperOpenGL(VideoDumper::Backend& video_dumper_,
                                      Frontend::EmuWindow& emu_window)
     : video_dumper(video_dumper_), context(emu_window.CreateSharedContext()) {}
 
-FrameDumperOpenGL::~FrameDumperOpenGL() {
-    if (present_thread.joinable())
-        present_thread.join();
-}
-
 bool FrameDumperOpenGL::IsDumping() const {
     return video_dumper.IsDumping();
 }
@@ -27,22 +22,21 @@ Layout::FramebufferLayout FrameDumperOpenGL::GetLayout() const {
 }
 
 void FrameDumperOpenGL::StartDumping() {
-    if (present_thread.joinable())
-        present_thread.join();
-
-    present_thread = std::thread(&FrameDumperOpenGL::PresentLoop, this);
+    present_thread = std::jthread([&](std::stop_token stop_token) {
+        PresentLoop(stop_token);
+    });
 }
 
 void FrameDumperOpenGL::StopDumping() {
-    stop_requested.store(true, std::memory_order_relaxed);
+    present_thread.request_stop();
 }
 
-void FrameDumperOpenGL::PresentLoop() {
+void FrameDumperOpenGL::PresentLoop(std::stop_token stop_token) {
     const auto scope = context->Acquire();
     InitializeOpenGLObjects();
 
     const auto& layout = GetLayout();
-    while (!stop_requested.exchange(false)) {
+    while (!stop_token.stop_requested()) {
         auto frame = mailbox->TryGetPresentFrame(200);
         if (!frame) {
             continue;
