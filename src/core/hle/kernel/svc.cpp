@@ -10,7 +10,6 @@
 #include "common/logging/log.h"
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
-#include "common/scope_exit.h"
 #include "core/arm/arm_interface.h"
 #include "core/core.h"
 #include "core/core_timing.h"
@@ -39,7 +38,6 @@
 #include "core/hle/kernel/wait_object.h"
 #include "core/hle/lock.h"
 #include "core/hle/result.h"
-#include "core/hle/service/service.h"
 
 namespace Kernel {
 
@@ -374,7 +372,7 @@ ResultCode SVC::UnmapMemoryBlock(Handle handle, u32 addr) {
 
 /// Connect to an OS service given the port name, returns the handle to the port to out
 ResultCode SVC::ConnectToPort(Handle* out_handle, VAddr port_name_address) {
-    if (!Memory::IsValidVirtualAddress(*kernel.GetCurrentProcess(), port_name_address))
+    if (!memory.IsValidVirtualAddress(*kernel.GetCurrentProcess(), port_name_address))
         return ERR_NOT_FOUND;
 
     static constexpr std::size_t PortNameMaxLength = 11;
@@ -541,7 +539,7 @@ ResultCode SVC::WaitSynchronizationN(s32* out, VAddr handles_address, s32 handle
                                      bool wait_all, s64 nano_seconds) {
     Thread* thread = kernel.GetCurrentThreadManager().GetCurrentThread();
 
-    if (!Memory::IsValidVirtualAddress(*kernel.GetCurrentProcess(), handles_address))
+    if (!memory.IsValidVirtualAddress(*kernel.GetCurrentProcess(), handles_address))
         return ERR_INVALID_POINTER;
 
     // NOTE: on real hardware, there is no nullptr check for 'out' (tested with firmware 4.4). If
@@ -687,7 +685,7 @@ static ResultCode ReceiveIPCRequest(Kernel::KernelSystem& kernel, Memory::Memory
 /// In a single operation, sends a IPC reply and waits for a new request.
 ResultCode SVC::ReplyAndReceive(s32* index, VAddr handles_address, s32 handle_count,
                                 Handle reply_target) {
-    if (!Memory::IsValidVirtualAddress(*kernel.GetCurrentProcess(), handles_address))
+    if (!memory.IsValidVirtualAddress(*kernel.GetCurrentProcess(), handles_address))
         return ERR_INVALID_POINTER;
 
     // Check if 'handle_count' is invalid
