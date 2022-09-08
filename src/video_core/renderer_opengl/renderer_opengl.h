@@ -24,8 +24,8 @@ struct Frame {
     OpenGL::OGLRenderbuffer color{};  /// Buffer shared between the render/present FBO
     OpenGL::OGLFramebuffer render{};  /// FBO created on the render thread
     OpenGL::OGLFramebuffer present{}; /// FBO created on the present thread
-    GLsync render_fence{};            /// Fence created on the render thread
-    GLsync present_fence{};           /// Fence created on the presentation thread
+    OpenGL::OGLSync render_fence{};   /// Fence created on the render thread
+    OpenGL::OGLSync present_fence{};  /// Fence created on the presentation thread
 };
 } // namespace Frontend
 

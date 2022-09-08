@@ -488,22 +488,14 @@ void RendererOpenGL::RenderToMailbox(const Layout::FramebufferLayout& layout,
 
         // INTEL driver workaround. We can't delete the previous render sync object until we are
         // sure that the presentation is done
-        if (frame->present_fence) {
-            glClientWaitSync(frame->present_fence, 0, GL_TIMEOUT_IGNORED);
-        }
+        frame->present_fence.WaitHost();
 
-        // delete the draw fence if the frame wasn't presented
-        if (frame->render_fence) {
-            glDeleteSync(frame->render_fence);
-            frame->render_fence = nullptr;
-        }
+        // Delete the draw fence if the frame wasn't presented
+        frame->render_fence.Release();
 
         // wait for the presentation to be done
-        if (frame->present_fence) {
-            glWaitSync(frame->present_fence, 0, GL_TIMEOUT_IGNORED);
-            glDeleteSync(frame->present_fence);
-            frame->present_fence = nullptr;
-        }
+        frame->present_fence.Wait();
+        frame->present_fence.Release();
     }
 
     {
@@ -518,7 +510,7 @@ void RendererOpenGL::RenderToMailbox(const Layout::FramebufferLayout& layout,
         state.Apply();
         DrawScreens(layout, flipped);
         // Create a fence for the frontend to wait on and swap this frame to OffTex
-        frame->render_fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        frame->render_fence.Create();
         glFlush();
         mailbox->ReleaseRenderFrame(frame);
     }
@@ -1127,7 +1119,9 @@ void RendererOpenGL::TryPresent(int timeout_ms) {
         LOG_DEBUG(Render_OpenGL, "Reloading present frame");
         render_window.mailbox->ReloadPresentFrame(frame, layout.width, layout.height);
     }
-    glWaitSync(frame->render_fence, 0, GL_TIMEOUT_IGNORED);
+
+    frame->render_fence.Wait();
+
     // INTEL workaround.
     // Normally we could just delete the draw fence here, but due to driver bugs, we can just delete
     // it on the emulation thread without too much penalty
@@ -1139,12 +1133,10 @@ void RendererOpenGL::TryPresent(int timeout_ms) {
                       GL_COLOR_BUFFER_BIT, GL_LINEAR);
 
     // Delete the fence if we're re-presenting to avoid leaking fences
-    if (frame->present_fence) {
-        glDeleteSync(frame->present_fence);
-    }
+    frame->present_fence.Release();
 
-    /* insert fence for the main thread to block on */
-    frame->present_fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    // Insert fence for the main thread to block on
+    frame->present_fence.Create();
     glFlush();
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
