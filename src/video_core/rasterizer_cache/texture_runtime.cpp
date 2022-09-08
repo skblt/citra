@@ -31,70 +31,69 @@ TextureRuntime::TextureRuntime() {
     draw_fbo.Create();
 }
 
-void TextureRuntime::ReadTexture(const OGLTexture& tex, Subresource subresource,
-                                 const FormatTuple& tuple, u8* pixels) {
+void TextureRuntime::ReadTexture(OGLTexture& texture, const BufferTextureCopy& copy,
+                                 PixelFormat format, std::span<std::byte> pixels) {
 
     OpenGLState prev_state = OpenGLState::GetCurState();
     SCOPE_EXIT({ prev_state.Apply(); });
 
-    OpenGLState state;
-    state.ResetTexture(tex.handle);
+    OpenGLState state{};
+    state.ResetTexture(texture.handle);
     state.draw.read_framebuffer = read_fbo.handle;
     state.Apply();
 
-    const u32 level = subresource.level;
-    switch (subresource.type) {
+    switch (copy.surface_type) {
     case SurfaceType::Color:
     case SurfaceType::Texture:
     case SurfaceType::Fill:
-        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex.handle,
-                               level);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture.handle,
+                               copy.texture_level);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
                                0);
         break;
     case SurfaceType::Depth:
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
-        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex.handle,
-                               level);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texture.handle,
+                               copy.texture_level);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
         break;
     case SurfaceType::DepthStencil:
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D,
-                               tex.handle, level);
+                               texture.handle, copy.texture_level);
         break;
     default:
         UNREACHABLE_MSG("Invalid surface type!");
     }
 
-    const auto& rect = subresource.region;
-    glReadPixels(rect.left, rect.bottom, rect.GetWidth(), rect.GetHeight(), tuple.format,
-                 tuple.type, pixels);
+    // TODO: Use PBO here
+    const FormatTuple& tuple = GetFormatTuple(format);
+    glReadPixels(copy.texture_offset.x, copy.texture_offset.y,
+                 copy.texture_offset.x + copy.texture_extent.width,
+                 copy.texture_offset.y + copy.texture_extent.height,
+                 tuple.format, tuple.type, pixels.data() + copy.buffer_offset);
 }
 
-bool TextureRuntime::ClearTexture(const OGLTexture& tex, Subresource subresource,
-                                  ClearValue value) {
+bool TextureRuntime::ClearTexture(OGLTexture& texture, const ClearRect& rect, ClearValue value) {
     OpenGLState prev_state = OpenGLState::GetCurState();
     SCOPE_EXIT({ prev_state.Apply(); });
 
     // Setup scissor rectangle according to the clear rectangle
-    const auto& clear_rect = subresource.region;
-    OpenGLState state;
+    OpenGLState state{};
     state.scissor.enabled = true;
-    state.scissor.x = clear_rect.left;
-    state.scissor.y = clear_rect.bottom;
-    state.scissor.width = clear_rect.GetWidth();
-    state.scissor.height = clear_rect.GetHeight();
+    state.scissor.x = rect.rect.offset.x;
+    state.scissor.y = rect.rect.offset.y;
+    state.scissor.width = rect.rect.extent.width;
+    state.scissor.height = rect.rect.extent.height;
     state.draw.draw_framebuffer = draw_fbo.handle;
     state.Apply();
 
-    const u32 level = subresource.level;
-    switch (subresource.type) {
+    switch (rect.surface_type) {
     case SurfaceType::Color:
     case SurfaceType::Texture:
     case SurfaceType::Fill:
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex.handle,
-                               level);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture.handle,
+                               rect.texture_level);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
                                0);
 
@@ -108,8 +107,8 @@ bool TextureRuntime::ClearTexture(const OGLTexture& tex, Subresource subresource
         break;
     case SurfaceType::Depth:
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex.handle,
-                               level);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texture.handle,
+                               rect.texture_level);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
 
         state.depth.write_mask = GL_TRUE;
@@ -120,7 +119,7 @@ bool TextureRuntime::ClearTexture(const OGLTexture& tex, Subresource subresource
     case SurfaceType::DepthStencil:
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D,
-                               tex.handle, level);
+                               texture.handle, rect.texture_level);
 
         state.depth.write_mask = GL_TRUE;
         state.stencil.write_mask = -1;
@@ -135,50 +134,42 @@ bool TextureRuntime::ClearTexture(const OGLTexture& tex, Subresource subresource
     return true;
 }
 
-bool TextureRuntime::CopyTextures(const OGLTexture& src_tex, Subresource src_subresource,
-                                  const OGLTexture& dst_tex, Subresource dst_subresource) {
+bool TextureRuntime::CopyTextures(OGLTexture& source, OGLTexture& dest, const TextureCopy& copy) {
     return true;
 }
 
-bool TextureRuntime::BlitTextures(const OGLTexture& src_tex, Subresource src_subresource,
-                                  const OGLTexture& dst_tex, Subresource dst_subresource,
-                                  bool dst_cube) {
+bool TextureRuntime::BlitTextures(OGLTexture& source, OGLTexture& dest, const TextureBlit& blit) {
     OpenGLState prev_state = OpenGLState::GetCurState();
     SCOPE_EXIT({ prev_state.Apply(); });
 
-    OpenGLState state;
+    OpenGLState state{};
     state.draw.read_framebuffer = read_fbo.handle;
     state.draw.draw_framebuffer = draw_fbo.handle;
     state.Apply();
 
-    auto BindAttachment =
-        [dst_cube, src_level = src_subresource.level, dst_level = dst_subresource.level,
-         dst_layer = dst_subresource.layer](GLenum target, u32 src_tex, u32 dst_tex) -> void {
-        GLenum dst_target = dst_cube ? GL_TEXTURE_CUBE_MAP_POSITIVE_X + dst_layer : GL_TEXTURE_2D;
-        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, target, GL_TEXTURE_2D, src_tex, src_level);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, target, dst_target, dst_tex, dst_level);
+    auto BindAttachment = [&blit](GLenum target, u32 src_tex, u32 dst_tex) -> void {
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, target, GL_TEXTURE_2D, src_tex, blit.src_level);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, target, GL_TEXTURE_2D, dst_tex, blit.dst_level);
     };
 
-    // Sanity check; Can't blit a color texture to a depth buffer
-    ASSERT(src_subresource.type == dst_subresource.type);
-    switch (src_subresource.type) {
+    switch (blit.surface_type) {
     case SurfaceType::Color:
     case SurfaceType::Texture:
     case SurfaceType::Fill:
         // Bind only color
-        BindAttachment(GL_COLOR_ATTACHMENT0, src_tex.handle, dst_tex.handle);
+        BindAttachment(GL_COLOR_ATTACHMENT0, source.handle, dest.handle);
         BindAttachment(GL_DEPTH_STENCIL_ATTACHMENT, 0, 0);
         break;
     case SurfaceType::Depth:
         // Bind only depth
         BindAttachment(GL_COLOR_ATTACHMENT0, 0, 0);
-        BindAttachment(GL_DEPTH_ATTACHMENT, src_tex.handle, dst_tex.handle);
+        BindAttachment(GL_DEPTH_ATTACHMENT, source.handle, dest.handle);
         BindAttachment(GL_STENCIL_ATTACHMENT, 0, 0);
         break;
     case SurfaceType::DepthStencil:
         // Bind to combined depth + stencil
         BindAttachment(GL_COLOR_ATTACHMENT0, 0, 0);
-        BindAttachment(GL_DEPTH_STENCIL_ATTACHMENT, src_tex.handle, dst_tex.handle);
+        BindAttachment(GL_DEPTH_STENCIL_ATTACHMENT, source.handle, dest.handle);
         break;
     default:
         UNREACHABLE_MSG("Invalid surface type!");
@@ -189,23 +180,23 @@ bool TextureRuntime::BlitTextures(const OGLTexture& src_tex, Subresource src_sub
     // doing linear intepolation componentwise would cause incorrect value. However, for a
     // well-programmed game this code path should be rarely executed for shadow map with
     // inconsistent scale.
-    const GLbitfield buffer_mask = MakeBufferMask(src_subresource.type);
+    const GLbitfield buffer_mask = MakeBufferMask(blit.surface_type);
     const GLenum filter = buffer_mask == GL_COLOR_BUFFER_BIT ? GL_LINEAR : GL_NEAREST;
-    const auto& src_rect = src_subresource.region;
-    const auto& dst_rect = dst_subresource.region;
-    glBlitFramebuffer(src_rect.left, src_rect.bottom, src_rect.right, src_rect.top, dst_rect.left,
-                      dst_rect.bottom, dst_rect.right, dst_rect.top,
+    glBlitFramebuffer(blit.src_region.start.x, blit.src_region.start.y,
+                      blit.src_region.end.x, blit.src_region.end.y,
+                      blit.dst_region.start.x, blit.dst_region.start.y,
+                      blit.dst_region.end.x, blit.dst_region.end.y,
                       buffer_mask, filter);
 
     return true;
 }
 
-void TextureRuntime::GenerateMipmaps(const OGLTexture& tex, u32 max_level) {
+void TextureRuntime::GenerateMipmaps(OGLTexture& texture, u32 max_level) {
     OpenGLState prev_state = OpenGLState::GetCurState();
     SCOPE_EXIT({ prev_state.Apply(); });
 
-    OpenGLState state;
-    state.texture_units[0].texture_2d = tex.handle;
+    OpenGLState state{};
+    state.texture_units[0].texture_2d = texture.handle;
     state.Apply();
 
     glActiveTexture(GL_TEXTURE0);
