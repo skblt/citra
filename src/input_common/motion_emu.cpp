@@ -7,6 +7,7 @@
 #include <mutex>
 #include <thread>
 #include <tuple>
+#include <numbers>
 #include "common/math_util.h"
 #include "common/quaternion.h"
 #include "common/thread.h"
@@ -46,7 +47,7 @@ public:
             } else {
                 tilt_direction = mouse_move.Cast<float>();
                 tilt_angle = std::clamp(tilt_direction.Normalize() * sensitivity, 0.0f,
-                                        Common::PI * this->tilt_clamp / 180.0f);
+                                        std::numbers::pi_v<float> * this->tilt_clamp / 180.0f);
             }
         }
     }
@@ -109,7 +110,7 @@ private:
 
             // Find the angular rate vector in world space
             auto angular_rate = ((q - old_q) * inv_q).xyz * 2;
-            angular_rate *= 1000 / update_millisecond / Common::PI * 180;
+            angular_rate *= 1000 / update_millisecond / std::numbers::pi_v<float> * 180;
 
             // Transform the two vectors from world space to 3DS space
             gravity = QuaternionRotate(inv_q, gravity);
