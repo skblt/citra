@@ -51,10 +51,10 @@ struct TextureCubeConfig {
 class SurfaceParams;
 
 void SwizzleTexture(const SurfaceParams& params, u32 flush_start, u32 flush_end,
-                    std::span<std::byte> source, std::span<std::byte> dest);
+                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled);
 
 void UnswizzleTexture(const SurfaceParams& params, u32 load_start, u32 load_end,
-                      std::span<const std::byte> source, std::span<std::byte> dest);
+                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear);
 
 [[nodiscard]] ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data);
 

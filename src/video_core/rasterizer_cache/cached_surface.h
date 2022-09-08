@@ -104,7 +104,7 @@ public:
 public:
     bool registered = false;
     SurfaceRegions invalid_regions;
-    std::vector<u8> gl_buffer;
+    std::vector<std::byte> gl_buffer;
 
     // Number of bytes to read from fill_data
     u32 fill_size = 0;

@@ -58,17 +58,16 @@ const FormatTuple& GetFormatTuple(PixelFormat pixel_format) {
 }
 
 void SwizzleTexture(const SurfaceParams& params, u32 flush_start, u32 flush_end,
-                    std::span<std::byte> source, std::span<std::byte> dest) {
+                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled) {
     const u32 func_index = static_cast<u32>(params.pixel_format);
-    const MortonFunc swizzle = SWIZZLE_TABLE[func_index];
-    u8* source_data = reinterpret_cast<u8*>(source.data());
+    const MortonFunc SwizzleImpl = SWIZZLE_TABLE[func_index];
 
     // TODO: Move memory access out of the morton function
-    swizzle(params.stride, params.height, source_data, params.addr, flush_start, flush_end);
+    SwizzleImpl(params.stride, params.height, source_linear, dest_tiled, params.addr, flush_start, flush_end);
 }
 
 void UnswizzleTexture(const SurfaceParams& params, u32 load_start, u32 load_end,
-                      std::span<const std::byte> source, std::span<std::byte> dest) {
+                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear) {
     // TODO: Integrate this to UNSWIZZLE_TABLE
     if (params.type == SurfaceType::Texture) {
         Pica::Texture::TextureInfo tex_info{};
@@ -82,21 +81,19 @@ void UnswizzleTexture(const SurfaceParams& params, u32 load_start, u32 load_end,
         const auto rect = params.GetSubRect(params.FromInterval(load_interval));
         DEBUG_ASSERT(params.FromInterval(load_interval).GetInterval() == load_interval);
 
-        const u8* source_data = reinterpret_cast<const u8*>(source.data());
+        const u8* source_data = reinterpret_cast<const u8*>(source_tiled.data());
         for (u32 y = rect.bottom; y < rect.top; y++) {
             for (u32 x = rect.left; x < rect.right; x++) {
                 auto vec4 =
                     Pica::Texture::LookupTexture(source_data, x, params.height - 1 - y, tex_info);
                 const std::size_t offset = (x + (params.width * y)) * 4;
-                std::memcpy(dest.data() + offset, vec4.AsArray(), 4);
+                std::memcpy(dest_linear.data() + offset, vec4.AsArray(), 4);
             }
         }
     } else {
         const u32 func_index = static_cast<u32>(params.pixel_format);
-        const MortonFunc deswizzle = UNSWIZZLE_TABLE[func_index];
-        u8* dest_data = reinterpret_cast<u8*>(dest.data());
-
-        deswizzle(params.stride, params.height, dest_data, params.addr, load_start, load_end);
+        const MortonFunc UnswizzleImpl = UNSWIZZLE_TABLE[func_index];
+        UnswizzleImpl(params.stride, params.height, dest_linear, source_tiled, params.addr, load_start, load_end);
     }
 }
 

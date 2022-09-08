@@ -3,6 +3,8 @@
 // Refer to the license.txt file included.
 
 #pragma once
+#include <span>
+#include <bit>
 #include "common/alignment.h"
 #include "core/memory.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
@@ -12,50 +14,54 @@
 
 namespace OpenGL {
 
+inline u32 MakeInt(std::span<std::byte> bytes) {
+    u32 integer{};
+    std::memcpy(&integer, bytes.data(), sizeof(u32));
+
+    return integer;
+}
+
 template <bool morton_to_linear, PixelFormat format>
-static void MortonCopyTile(u32 stride, u8* tile_buffer, u8* linear_buffer) {
+inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer, std::span<std::byte> linear_buffer) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
-    constexpr u32 aligned_bytes_per_pixel = GetBytesPerPixel(format);
+    constexpr u32 linear_bytes_per_pixel = GetBytesPerPixel(format);
 
     for (u32 y = 0; y < 8; y++) {
         for (u32 x = 0; x < 8; x++) {
-            u8* tile_ptr = tile_buffer + VideoCore::MortonInterleave(x, y) * bytes_per_pixel;
-            u8* linear_ptr = linear_buffer + ((7 - y) * stride + x) * aligned_bytes_per_pixel;
+            const u32 tile_offset = VideoCore::MortonInterleave(x, y) * bytes_per_pixel;
+            const u32 linear_offset = ((7 - y) * stride + x) * linear_bytes_per_pixel;
+            auto tile_pixel = tile_buffer.subspan(tile_offset, bytes_per_pixel);
+            auto linear_pixel = linear_buffer.subspan(linear_offset, linear_bytes_per_pixel);
+
             if constexpr (morton_to_linear) {
                 if constexpr (format == PixelFormat::D24S8) {
-                    linear_ptr[0] = tile_ptr[3];
-                    std::memcpy(linear_ptr + 1, tile_ptr, 3);
+                    const u32 s8d24 = MakeInt(tile_pixel);
+                    const u32 d24s8 = std::rotl(s8d24, 8);
+                    std::memcpy(linear_pixel.data(), &d24s8, sizeof(u32));
                 } else if (format == PixelFormat::RGBA8 && GLES) {
-                    // because GLES does not have ABGR format
-                    // so we will do byteswapping here
-                    linear_ptr[0] = tile_ptr[3];
-                    linear_ptr[1] = tile_ptr[2];
-                    linear_ptr[2] = tile_ptr[1];
-                    linear_ptr[3] = tile_ptr[0];
+                    const u32 abgr = MakeInt(tile_pixel);
+                    const u32 rgba = std::byteswap(abgr);
+                    std::memcpy(linear_pixel.data(), &rgba, sizeof(u32));
                 } else if (format == PixelFormat::RGB8 && GLES) {
-                    linear_ptr[0] = tile_ptr[2];
-                    linear_ptr[1] = tile_ptr[1];
-                    linear_ptr[2] = tile_ptr[0];
+                    std::memcpy(linear_pixel.data(), tile_pixel.data(), 3);
+                    std::swap(linear_pixel[0], linear_pixel[2]);
                 } else {
-                    std::memcpy(linear_ptr, tile_ptr, bytes_per_pixel);
+                    std::memcpy(linear_pixel.data(), tile_pixel.data(), bytes_per_pixel);
                 }
             } else {
                 if constexpr (format == PixelFormat::D24S8) {
-                    std::memcpy(tile_ptr, linear_ptr + 1, 3);
-                    tile_ptr[3] = linear_ptr[0];
+                    const u32 d24s8 = MakeInt(linear_pixel);
+                    const u32 s8d24 = std::rotr(d24s8, 8);
+                    std::memcpy(tile_pixel.data(), &s8d24, sizeof(u32));
                 } else if (format == PixelFormat::RGBA8 && GLES) {
-                    // because GLES does not have ABGR format
-                    // so we will do byteswapping here
-                    tile_ptr[0] = linear_ptr[3];
-                    tile_ptr[1] = linear_ptr[2];
-                    tile_ptr[2] = linear_ptr[1];
-                    tile_ptr[3] = linear_ptr[0];
+                    const u32 rgba = MakeInt(linear_pixel);
+                    const u32 abgr = std::byteswap(rgba);
+                    std::memcpy(tile_pixel.data(), &abgr, sizeof(u32));
                 } else if (format == PixelFormat::RGB8 && GLES) {
-                    tile_ptr[0] = linear_ptr[2];
-                    tile_ptr[1] = linear_ptr[1];
-                    tile_ptr[2] = linear_ptr[0];
+                    std::memcpy(tile_pixel.data(), linear_pixel.data(), 3);
+                    std::swap(tile_pixel[0], tile_pixel[2]);
                 } else {
-                    std::memcpy(tile_ptr, linear_ptr, bytes_per_pixel);
+                    std::memcpy(tile_pixel.data(), linear_pixel.data(), bytes_per_pixel);
                 }
             }
         }
@@ -63,13 +69,20 @@ static void MortonCopyTile(u32 stride, u8* tile_buffer, u8* linear_buffer) {
 }
 
 template <bool morton_to_linear, PixelFormat format>
-static void MortonCopy(u32 stride, u32 height, u8* linear_buffer, PAddr base, PAddr start, PAddr end) {
-    constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
-    constexpr u32 tile_size = bytes_per_pixel * 64;
+static void MortonCopy(u32 stride, u32 height,
+                       std::span<std::byte> linear_buffer, std::span<std::byte> tiled_buffer,
+                       PAddr base, PAddr start, PAddr end) {
 
+    constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
     constexpr u32 aligned_bytes_per_pixel = GetBytesPerPixel(format);
     static_assert(aligned_bytes_per_pixel >= bytes_per_pixel, "");
-    linear_buffer += aligned_bytes_per_pixel - bytes_per_pixel;
+
+    constexpr u32 tile_size = bytes_per_pixel * 64;
+    const u32 linear_tile_size = (7 * stride + 8) * aligned_bytes_per_pixel;
+
+    // This only applies for D24 format, by shifting the span one byte all pixels
+    // are written properly without byteswap
+    u32 linear_offset = aligned_bytes_per_pixel - bytes_per_pixel;
 
     const PAddr aligned_down_start = base + Common::AlignDown(start - base, tile_size);
     const PAddr aligned_start = base + Common::AlignUp(start - base, tile_size);
@@ -84,18 +97,19 @@ static void MortonCopy(u32 stride, u32 height, u8* linear_buffer, PAddr base, PA
     // In OpenGL the texture origin is in the bottom left corner as opposed to other
     // APIs that have it at the top left. To avoid flipping texture coordinates in
     // the shader we read/write the linear buffer backwards
-    linear_buffer += ((height - 8 - y) * stride + x) * aligned_bytes_per_pixel;
+    //linear_buffer += ((height - 8 - y) * stride + x) * aligned_bytes_per_pixel;
+    linear_offset += ((height - 8 - y) * stride + x) * aligned_bytes_per_pixel;
 
     auto linear_next_tile = [&] {
         x = (x + 8) % stride;
-        linear_buffer += 8 * aligned_bytes_per_pixel;
+        linear_offset += 8 * aligned_bytes_per_pixel;
         if (!x) {
             y  = (y + 8) % height;
             if (!y) {
                 return;
             }
 
-            linear_buffer -= stride * 9 * aligned_bytes_per_pixel;
+            linear_offset -= stride * 9 * aligned_bytes_per_pixel;
         }
     };
 
@@ -104,8 +118,10 @@ static void MortonCopy(u32 stride, u32 height, u8* linear_buffer, PAddr base, PA
     // If during a texture download the start coordinate is inside a tile, swizzle
     // the tile to a temporary buffer and copy the part we are interested in
     if (start < aligned_start && !morton_to_linear) {
-        std::array<u8, tile_size> tmp_buf;
-        MortonCopyTile<morton_to_linear, format>(stride, tmp_buf.data(), linear_buffer);
+        std::array<std::byte, tile_size> tmp_buf;
+        std::span<std::byte> linear_data = linear_buffer.last(linear_buffer.size() - linear_offset);
+
+        MortonCopyTile<morton_to_linear, format>(stride, tmp_buf, linear_data);
         std::memcpy(tile_buffer, tmp_buf.data() + start - aligned_down_start,
                     std::min(aligned_start, end) - start);
 
@@ -124,19 +140,23 @@ static void MortonCopy(u32 stride, u32 height, u8* linear_buffer, PAddr base, PA
 
     const u8* buffer_end = tile_buffer + aligned_end - aligned_start;
     while (tile_buffer < buffer_end) {
-        MortonCopyTile<morton_to_linear, format>(stride, tile_buffer, linear_buffer);
+        std::span<std::byte> linear_data = linear_buffer.last(linear_buffer.size() - linear_offset);
+        auto tiled_data = std::span<std::byte>{(std::byte*)tile_buffer, tile_size};
+
+        MortonCopyTile<morton_to_linear, format>(stride, tiled_data, linear_data);
         tile_buffer += tile_size;
         linear_next_tile();
     }
 
     if (end > std::max(aligned_start, aligned_end) && !morton_to_linear) {
-        std::array<u8, tile_size> tmp_buf;
-        MortonCopyTile<morton_to_linear, format>(stride, tmp_buf.data(), linear_buffer);
+        std::array<std::byte, tile_size> tmp_buf;
+        std::span<std::byte> linear_data = linear_buffer.last(linear_buffer.size() - linear_offset);
+        MortonCopyTile<morton_to_linear, format>(stride, tmp_buf, linear_data);
         std::memcpy(tile_buffer, tmp_buf.data(), end - aligned_end);
     }
 }
 
-using MortonFunc = void (*)(u32, u32, u8*, PAddr, PAddr, PAddr);
+using MortonFunc = void (*)(u32, u32, std::span<std::byte>, std::span<std::byte>, PAddr, PAddr, PAddr);
 
 static constexpr std::array<MortonFunc, 18> UNSWIZZLE_TABLE = {
     MortonCopy<true, PixelFormat::RGBA8>,  // 0
