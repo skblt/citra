@@ -334,17 +334,21 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect) {
         const Common::Rectangle<u32> from_rect{0, height, width, 0};
 
         if (!owner.texture_filterer->Filter(unscaled_tex, from_rect, texture, scaled_rect, type)) {
-            const Subresource src_subresource = {
-                .type = type,
-                .region = from_rect
+            const TextureBlit texture_blit = {
+                .surface_type = type,
+                .src_level = 0,
+                .dst_level = 0,
+                .src_region = Region2D{
+                    .start = {0, 0},
+                    .end = {width, height}
+                },
+                .dst_region = Region2D{
+                    .start = {rect.left, rect.bottom},
+                    .end = {rect.right, rect.top}
+                }
             };
 
-            const Subresource dst_subresource = {
-                .type = type,
-                .region = scaled_rect
-            };
-
-            runtime.BlitTextures(unscaled_tex, src_subresource, texture, dst_subresource);
+            runtime.BlitTextures(unscaled_tex, texture, texture_blit);
         }
     }
 
@@ -359,8 +363,10 @@ void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
 
     MICROPROFILE_SCOPE(RasterizerCache_TextureDL);
 
+    const u32 download_size = width * height * GetBytesPerPixel(pixel_format);
+
     if (gl_buffer.empty()) {
-        gl_buffer.resize(width * height * GetBytesPerPixel(pixel_format));
+        gl_buffer.resize(download_size);
     }
 
     OpenGLState state = OpenGLState::GetCurState();
@@ -370,10 +376,7 @@ void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
     // Ensure no bad interactions with GL_PACK_ALIGNMENT
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
     glPixelStorei(GL_PACK_ROW_LENGTH, static_cast<GLint>(stride));
-    const std::size_t buffer_offset =
-        (rect.bottom * stride + rect.left) * GetBytesPerPixel(pixel_format);
-
-    const FormatTuple& tuple = GetFormatTuple(pixel_format);
+    const u32 buffer_offset = (rect.bottom * stride + rect.left) * GetBytesPerPixel(pixel_format);
 
     // If not 1x scale, blit scaled texture to a new 1x texture and use that to flush
     if (res_scale != 1) {
@@ -386,23 +389,29 @@ void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
         const Common::Rectangle<u32> unscaled_tex_rect{0, rect.GetHeight(), rect.GetWidth(), 0};
         auto unscaled_tex = owner.AllocateSurfaceTexture(pixel_format, rect.GetWidth(), rect.GetHeight());
 
-        const Subresource src_subresource = {
-            .type = type,
-            .region = scaled_rect
-        };
-
-        const Subresource dst_subresource = {
-            .type = type,
-            .region = unscaled_tex_rect
+        const TextureBlit texture_blit = {
+            .surface_type = type,
+            .src_level = 0,
+            .dst_level = 0,
+            .src_region = Region2D{
+                .start = {scaled_rect.left, scaled_rect.bottom},
+                .end = {scaled_rect.right, scaled_rect.top}
+            },
+            .dst_region = Region2D{
+                .start = {unscaled_tex_rect.left, unscaled_tex_rect.bottom},
+                .end = {unscaled_tex_rect.right, unscaled_tex_rect.top}
+            }
         };
 
         // Blit scaled texture to the unscaled one
-        runtime.BlitTextures(texture, src_subresource, unscaled_tex, dst_subresource);
+        runtime.BlitTextures(texture, unscaled_tex, texture_blit);
 
         state.texture_units[0].texture_2d = unscaled_tex.handle;
         state.Apply();
 
         glActiveTexture(GL_TEXTURE0);
+
+        const FormatTuple& tuple = GetFormatTuple(pixel_format);
         if (GLES) {
             owner.texture_downloader_es->GetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type,
                                                      rect.GetHeight(), rect.GetWidth(),
@@ -411,12 +420,18 @@ void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
             glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, &gl_buffer[buffer_offset]);
         }
     } else {
-        const Subresource subresource = {
-            .type = type,
-            .region = rect
+        const BufferTextureCopy texture_download = {
+            .buffer_offset = buffer_offset,
+            .buffer_size = download_size,
+            .buffer_row_length = stride,
+            .buffer_height = height,
+            .surface_type = type,
+            .texture_level = 0,
+            .texture_offset = {rect.bottom, rect.left},
+            .texture_extent = {rect.GetWidth(), rect.GetHeight()}
         };
 
-        runtime.ReadTexture(texture, subresource, tuple, (u8*)gl_buffer.data());
+        runtime.ReadTexture(texture, texture_download, pixel_format, gl_buffer);
     }
 
     glPixelStorei(GL_PACK_ROW_LENGTH, 0);
