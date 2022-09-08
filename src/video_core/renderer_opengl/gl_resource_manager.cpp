@@ -199,6 +199,38 @@ void OGLBuffer::Release() {
     handle = 0;
 }
 
+void OGLSync::Create() {
+    if (handle != 0)
+        return;
+
+    handle = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+}
+
+void OGLSync::Release() {
+    if (!handle) {
+        return;
+    }
+
+    glDeleteSync(handle);
+    handle = 0;
+}
+
+void OGLSync::WaitHost() {
+    if (!handle) {
+        return;
+    }
+
+    glClientWaitSync(handle, 0, GL_TIMEOUT_IGNORED);
+}
+
+void OGLSync::Wait() {
+    if (!handle) {
+        return;
+    }
+
+    glWaitSync(handle, 0, GL_TIMEOUT_IGNORED);
+}
+
 void OGLVertexArray::Create() {
     if (handle != 0)
         return;
