@@ -892,8 +892,8 @@ void RasterizerCache::ClearAll(bool flush) {
     for (auto& pair : RangeFromInterval(cached_pages, flush_interval)) {
         const auto interval = pair.first & flush_interval;
 
-        const PAddr interval_start_addr = boost::icl::first(interval) << Memory::PAGE_BITS;
-        const PAddr interval_end_addr = boost::icl::last_next(interval) << Memory::PAGE_BITS;
+        const PAddr interval_start_addr = boost::icl::first(interval) << Memory::CITRA_PAGE_BITS;
+        const PAddr interval_end_addr = boost::icl::last_next(interval) << Memory::CITRA_PAGE_BITS;
         const u32 interval_size = interval_end_addr - interval_start_addr;
 
         VideoCore::g_memory->RasterizerMarkRegionCached(interval_start_addr, interval_size, false);

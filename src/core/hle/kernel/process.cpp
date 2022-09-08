@@ -127,7 +127,7 @@ void Process::ParseKernelCaps(const u32* kernel_caps, std::size_t len) {
             // Mapped memory page
             AddressMapping mapping;
             mapping.address = descriptor << 12;
-            mapping.size = Memory::PAGE_SIZE;
+            mapping.size = Memory::CITRA_PAGE_SIZE;
             mapping.read_only = false;
             mapping.unk_flag = false;
 

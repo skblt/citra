@@ -51,20 +51,20 @@ public:
 private:
     bool* At(VAddr addr) {
         if (addr >= VRAM_VADDR && addr < VRAM_VADDR_END) {
-            return &vram[(addr - VRAM_VADDR) / PAGE_SIZE];
+            return &vram[(addr - VRAM_VADDR) / CITRA_PAGE_SIZE];
         }
         if (addr >= LINEAR_HEAP_VADDR && addr < LINEAR_HEAP_VADDR_END) {
-            return &linear_heap[(addr - LINEAR_HEAP_VADDR) / PAGE_SIZE];
+            return &linear_heap[(addr - LINEAR_HEAP_VADDR) / CITRA_PAGE_SIZE];
         }
         if (addr >= NEW_LINEAR_HEAP_VADDR && addr < NEW_LINEAR_HEAP_VADDR_END) {
-            return &new_linear_heap[(addr - NEW_LINEAR_HEAP_VADDR) / PAGE_SIZE];
+            return &new_linear_heap[(addr - NEW_LINEAR_HEAP_VADDR) / CITRA_PAGE_SIZE];
         }
         return nullptr;
     }
 
-    std::array<bool, VRAM_SIZE / PAGE_SIZE> vram{};
-    std::array<bool, LINEAR_HEAP_SIZE / PAGE_SIZE> linear_heap{};
-    std::array<bool, NEW_LINEAR_HEAP_SIZE / PAGE_SIZE> new_linear_heap{};
+    std::array<bool, VRAM_SIZE / CITRA_PAGE_SIZE> vram{};
+    std::array<bool, LINEAR_HEAP_SIZE / CITRA_PAGE_SIZE> linear_heap{};
+    std::array<bool, NEW_LINEAR_HEAP_SIZE / CITRA_PAGE_SIZE> new_linear_heap{};
 
     static_assert(sizeof(bool) == 1);
     friend class boost::serialization::access;
@@ -147,12 +147,12 @@ public:
         auto& page_table = *process.vm_manager.page_table;
 
         std::size_t remaining_size = size;
-        std::size_t page_index = src_addr >> PAGE_BITS;
-        std::size_t page_offset = src_addr & PAGE_MASK;
+        std::size_t page_index = src_addr >> CITRA_PAGE_BITS;
+        std::size_t page_offset = src_addr & CITRA_PAGE_MASK;
 
         while (remaining_size > 0) {
-            const std::size_t copy_amount = std::min(PAGE_SIZE - page_offset, remaining_size);
-            const VAddr current_vaddr = static_cast<VAddr>((page_index << PAGE_BITS) + page_offset);
+            const std::size_t copy_amount = std::min(CITRA_PAGE_SIZE - page_offset, remaining_size);
+            const VAddr current_vaddr = static_cast<VAddr>((page_index << CITRA_PAGE_BITS) + page_offset);
 
             switch (page_table.attributes[page_index]) {
             case PageType::Unmapped: {
@@ -356,10 +356,10 @@ std::shared_ptr<PageTable> MemorySystem::GetCurrentPageTable() const {
 
 void MemorySystem::MapPages(PageTable& page_table, u32 base, u32 size, MemoryRef memory,
                             PageType type) {
-    LOG_DEBUG(HW_Memory, "Mapping {} onto {:08X}-{:08X}", (void*)memory.GetPtr(), base * PAGE_SIZE,
-              (base + size) * PAGE_SIZE);
+    LOG_DEBUG(HW_Memory, "Mapping {} onto {:08X}-{:08X}", (void*)memory.GetPtr(), base * CITRA_PAGE_SIZE,
+              (base + size) * CITRA_PAGE_SIZE);
 
-    RasterizerFlushVirtualRegion(base << PAGE_BITS, size * PAGE_SIZE,
+    RasterizerFlushVirtualRegion(base << CITRA_PAGE_BITS, size * CITRA_PAGE_SIZE,
                                  FlushMode::FlushAndInvalidate);
 
     u32 end = base + size;
@@ -370,36 +370,36 @@ void MemorySystem::MapPages(PageTable& page_table, u32 base, u32 size, MemoryRef
         page_table.pointers[base] = memory;
 
         // If the memory to map is already rasterizer-cached, mark the page
-        if (type == PageType::Memory && impl->cache_marker.IsCached(base * PAGE_SIZE)) {
+        if (type == PageType::Memory && impl->cache_marker.IsCached(base * CITRA_PAGE_SIZE)) {
             page_table.attributes[base] = PageType::RasterizerCachedMemory;
             page_table.pointers[base] = nullptr;
         }
 
         base += 1;
-        if (memory != nullptr && memory.GetSize() > PAGE_SIZE)
-            memory += PAGE_SIZE;
+        if (memory != nullptr && memory.GetSize() > CITRA_PAGE_SIZE)
+            memory += CITRA_PAGE_SIZE;
     }
 }
 
 void MemorySystem::MapMemoryRegion(PageTable& page_table, VAddr base, u32 size, MemoryRef target) {
-    ASSERT_MSG((size & PAGE_MASK) == 0, "non-page aligned size: {:08X}", size);
-    ASSERT_MSG((base & PAGE_MASK) == 0, "non-page aligned base: {:08X}", base);
-    MapPages(page_table, base / PAGE_SIZE, size / PAGE_SIZE, target, PageType::Memory);
+    ASSERT_MSG((size & CITRA_PAGE_MASK) == 0, "non-page aligned size: {:08X}", size);
+    ASSERT_MSG((base & CITRA_PAGE_MASK) == 0, "non-page aligned base: {:08X}", base);
+    MapPages(page_table, base / CITRA_PAGE_SIZE, size / CITRA_PAGE_SIZE, target, PageType::Memory);
 }
 
 void MemorySystem::MapIoRegion(PageTable& page_table, VAddr base, u32 size,
                                MMIORegionPointer mmio_handler) {
-    ASSERT_MSG((size & PAGE_MASK) == 0, "non-page aligned size: {:08X}", size);
-    ASSERT_MSG((base & PAGE_MASK) == 0, "non-page aligned base: {:08X}", base);
-    MapPages(page_table, base / PAGE_SIZE, size / PAGE_SIZE, nullptr, PageType::Special);
+    ASSERT_MSG((size & CITRA_PAGE_MASK) == 0, "non-page aligned size: {:08X}", size);
+    ASSERT_MSG((base & CITRA_PAGE_MASK) == 0, "non-page aligned base: {:08X}", base);
+    MapPages(page_table, base / CITRA_PAGE_SIZE, size / CITRA_PAGE_SIZE, nullptr, PageType::Special);
 
     page_table.special_regions.emplace_back(SpecialRegion{base, size, mmio_handler});
 }
 
 void MemorySystem::UnmapRegion(PageTable& page_table, VAddr base, u32 size) {
-    ASSERT_MSG((size & PAGE_MASK) == 0, "non-page aligned size: {:08X}", size);
-    ASSERT_MSG((base & PAGE_MASK) == 0, "non-page aligned base: {:08X}", base);
-    MapPages(page_table, base / PAGE_SIZE, size / PAGE_SIZE, nullptr, PageType::Unmapped);
+    ASSERT_MSG((size & CITRA_PAGE_MASK) == 0, "non-page aligned size: {:08X}", size);
+    ASSERT_MSG((base & CITRA_PAGE_MASK) == 0, "non-page aligned base: {:08X}", base);
+    MapPages(page_table, base / CITRA_PAGE_SIZE, size / CITRA_PAGE_SIZE, nullptr, PageType::Unmapped);
 }
 
 MemoryRef MemorySystem::GetPointerForRasterizerCache(VAddr addr) const {
@@ -422,15 +422,15 @@ T ReadMMIO(MMIORegionPointer mmio_handler, VAddr addr);
 
 template <typename T>
 T MemorySystem::Read(const VAddr vaddr) {
-    const u8* page_pointer = impl->current_page_table->pointers[vaddr >> PAGE_BITS];
+    const u8* page_pointer = impl->current_page_table->pointers[vaddr >> CITRA_PAGE_BITS];
     if (page_pointer) {
         // NOTE: Avoid adding any extra logic to this fast-path block
         T value;
-        std::memcpy(&value, &page_pointer[vaddr & PAGE_MASK], sizeof(T));
+        std::memcpy(&value, &page_pointer[vaddr & CITRA_PAGE_MASK], sizeof(T));
         return value;
     }
 
-    PageType type = impl->current_page_table->attributes[vaddr >> PAGE_BITS];
+    PageType type = impl->current_page_table->attributes[vaddr >> CITRA_PAGE_BITS];
     switch (type) {
     case PageType::Unmapped:
         LOG_ERROR(HW_Memory, "unmapped Read{} @ 0x{:08X} at PC 0x{:08X}", sizeof(T) * 8, vaddr,
@@ -460,14 +460,14 @@ void WriteMMIO(MMIORegionPointer mmio_handler, VAddr addr, const T data);
 
 template <typename T>
 void MemorySystem::Write(const VAddr vaddr, const T data) {
-    u8* page_pointer = impl->current_page_table->pointers[vaddr >> PAGE_BITS];
+    u8* page_pointer = impl->current_page_table->pointers[vaddr >> CITRA_PAGE_BITS];
     if (page_pointer) {
         // NOTE: Avoid adding any extra logic to this fast-path block
-        std::memcpy(&page_pointer[vaddr & PAGE_MASK], &data, sizeof(T));
+        std::memcpy(&page_pointer[vaddr & CITRA_PAGE_MASK], &data, sizeof(T));
         return;
     }
 
-    PageType type = impl->current_page_table->attributes[vaddr >> PAGE_BITS];
+    PageType type = impl->current_page_table->attributes[vaddr >> CITRA_PAGE_BITS];
     switch (type) {
     case PageType::Unmapped:
         LOG_ERROR(HW_Memory, "unmapped Write{} 0x{:08X} @ 0x{:08X} at PC 0x{:08X}",
@@ -492,14 +492,14 @@ void MemorySystem::Write(const VAddr vaddr, const T data) {
 bool MemorySystem::IsValidVirtualAddress(const Kernel::Process& process, const VAddr vaddr) {
     auto& page_table = *process.vm_manager.page_table;
 
-    auto page_pointer = page_table.pointers[vaddr >> PAGE_BITS];
+    auto page_pointer = page_table.pointers[vaddr >> CITRA_PAGE_BITS];
     if (page_pointer)
         return true;
 
-    if (page_table.attributes[vaddr >> PAGE_BITS] == PageType::RasterizerCachedMemory)
+    if (page_table.attributes[vaddr >> CITRA_PAGE_BITS] == PageType::RasterizerCachedMemory)
         return true;
 
-    if (page_table.attributes[vaddr >> PAGE_BITS] != PageType::Special)
+    if (page_table.attributes[vaddr >> CITRA_PAGE_BITS] != PageType::Special)
         return false;
 
     MMIORegionPointer mmio_region = impl->GetMMIOHandler(page_table, vaddr);
@@ -542,12 +542,12 @@ PAddr MemorySystem::ClampPhysicalAddress(PAddr base, PAddr address) const {
 }
 
 u8* MemorySystem::GetPointer(const VAddr vaddr) {
-    u8* page_pointer = impl->current_page_table->pointers[vaddr >> PAGE_BITS];
+    u8* page_pointer = impl->current_page_table->pointers[vaddr >> CITRA_PAGE_BITS];
     if (page_pointer) {
-        return page_pointer + (vaddr & PAGE_MASK);
+        return page_pointer + (vaddr & CITRA_PAGE_MASK);
     }
 
-    if (impl->current_page_table->attributes[vaddr >> PAGE_BITS] ==
+    if (impl->current_page_table->attributes[vaddr >> CITRA_PAGE_BITS] ==
         PageType::RasterizerCachedMemory) {
         return GetPointerForRasterizerCache(vaddr);
     }
@@ -558,12 +558,12 @@ u8* MemorySystem::GetPointer(const VAddr vaddr) {
 }
 
 const u8* MemorySystem::GetPointer(const VAddr vaddr) const {
-    const u8* page_pointer = impl->current_page_table->pointers[vaddr >> PAGE_BITS];
+    const u8* page_pointer = impl->current_page_table->pointers[vaddr >> CITRA_PAGE_BITS];
     if (page_pointer) {
-        return page_pointer + (vaddr & PAGE_MASK);
+        return page_pointer + (vaddr & CITRA_PAGE_MASK);
     }
 
-    if (impl->current_page_table->attributes[vaddr >> PAGE_BITS] ==
+    if (impl->current_page_table->attributes[vaddr >> CITRA_PAGE_BITS] ==
         PageType::RasterizerCachedMemory) {
         return GetPointerForRasterizerCache(vaddr);
     }
@@ -671,14 +671,14 @@ void MemorySystem::RasterizerMarkRegionCached(PAddr start, u32 size, bool cached
         return;
     }
 
-    u32 num_pages = ((start + size - 1) >> PAGE_BITS) - (start >> PAGE_BITS) + 1;
+    u32 num_pages = ((start + size - 1) >> CITRA_PAGE_BITS) - (start >> CITRA_PAGE_BITS) + 1;
     PAddr paddr = start;
 
-    for (unsigned i = 0; i < num_pages; ++i, paddr += PAGE_SIZE) {
+    for (unsigned i = 0; i < num_pages; ++i, paddr += CITRA_PAGE_SIZE) {
         for (VAddr vaddr : PhysicalToVirtualAddressForRasterizer(paddr)) {
             impl->cache_marker.Mark(vaddr, cached);
             for (auto page_table : impl->page_table_list) {
-                PageType& page_type = page_table->attributes[vaddr >> PAGE_BITS];
+                PageType& page_type = page_table->attributes[vaddr >> CITRA_PAGE_BITS];
 
                 if (cached) {
                     // Switch page type to cached if now cached
@@ -689,7 +689,7 @@ void MemorySystem::RasterizerMarkRegionCached(PAddr start, u32 size, bool cached
                         break;
                     case PageType::Memory:
                         page_type = PageType::RasterizerCachedMemory;
-                        page_table->pointers[vaddr >> PAGE_BITS] = nullptr;
+                        page_table->pointers[vaddr >> CITRA_PAGE_BITS] = nullptr;
                         break;
                     default:
                         UNREACHABLE();
@@ -703,8 +703,8 @@ void MemorySystem::RasterizerMarkRegionCached(PAddr start, u32 size, bool cached
                         break;
                     case PageType::RasterizerCachedMemory: {
                         page_type = PageType::Memory;
-                        page_table->pointers[vaddr >> PAGE_BITS] =
-                            GetPointerForRasterizerCache(vaddr & ~PAGE_MASK);
+                        page_table->pointers[vaddr >> CITRA_PAGE_BITS] =
+                            GetPointerForRasterizerCache(vaddr & ~CITRA_PAGE_MASK);
                         break;
                     }
                     default:
@@ -845,7 +845,7 @@ void MemorySystem::WriteBlock(const VAddr dest_addr, const void* src_buffer, con
 
 void MemorySystem::ZeroBlock(const Kernel::Process& process, const VAddr dest_addr,
                              const std::size_t size) {
-    static const std::array<u8, PAGE_SIZE> zeros{0};
+    static const std::array<u8, CITRA_PAGE_SIZE> zeros{0};
 
     impl->WalkBlock(
         process, dest_addr, size,
@@ -879,7 +879,7 @@ void MemorySystem::CopyBlock(const Kernel::Process& process, VAddr dest_addr, VA
 void MemorySystem::CopyBlock(const Kernel::Process& dest_process,
                              const Kernel::Process& src_process, VAddr dest_addr, VAddr src_addr,
                              std::size_t size) {
-    std::array<u8, PAGE_SIZE> copy_buffer{};
+    std::array<u8, CITRA_PAGE_SIZE> copy_buffer{};
 
     impl->WalkBlock(
         src_process, src_addr, size,
