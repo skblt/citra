@@ -10,8 +10,8 @@
 namespace VideoCore {
 
 void RasterizerAccelerated::UpdatePagesCachedCount(PAddr addr, u32 size, int delta) {
-    const u32 page_start = addr >> Memory::PAGE_BITS;
-    const u32 page_end = ((addr + size - 1) >> Memory::PAGE_BITS);
+    const u32 page_start = addr >> Memory::CITRA_PAGE_BITS;
+    const u32 page_end = ((addr + size - 1) >> Memory::CITRA_PAGE_BITS);
 
     u32 uncache_start_addr = 0;
     u32 cache_start_addr = 0;
@@ -36,10 +36,10 @@ void RasterizerAccelerated::UpdatePagesCachedCount(PAddr addr, u32 size, int del
         // Assume delta is either -1 or 1
         if (count == 0) {
             if (uncache_bytes == 0) {
-                uncache_start_addr = page << Memory::PAGE_BITS;
+                uncache_start_addr = page << Memory::CITRA_PAGE_BITS;
             }
 
-            uncache_bytes += Memory::PAGE_SIZE;
+            uncache_bytes += Memory::CITRA_PAGE_SIZE;
         } else if (uncache_bytes > 0) {
             VideoCore::g_memory->RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes,
                                                             false);
@@ -48,10 +48,10 @@ void RasterizerAccelerated::UpdatePagesCachedCount(PAddr addr, u32 size, int del
 
         if (count == 1 && delta > 0) {
             if (cache_bytes == 0) {
-                cache_start_addr = page << Memory::PAGE_BITS;
+                cache_start_addr = page << Memory::CITRA_PAGE_BITS;
             }
 
-            cache_bytes += Memory::PAGE_SIZE;
+            cache_bytes += Memory::CITRA_PAGE_SIZE;
         } else if (cache_bytes > 0) {
             VideoCore::g_memory->RasterizerMarkRegionCached(cache_start_addr, cache_bytes,
                                                             true);

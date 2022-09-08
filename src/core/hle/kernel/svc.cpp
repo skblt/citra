@@ -219,10 +219,10 @@ ResultCode SVC::ControlMemory(u32* out_addr, u32 addr0, u32 addr1, u32 size, u32
               "size=0x{:X}, permissions=0x{:08X}",
               operation, addr0, addr1, size, permissions);
 
-    if ((addr0 & Memory::PAGE_MASK) != 0 || (addr1 & Memory::PAGE_MASK) != 0) {
+    if ((addr0 & Memory::CITRA_PAGE_MASK) != 0 || (addr1 & Memory::CITRA_PAGE_MASK) != 0) {
         return ERR_MISALIGNED_ADDRESS;
     }
-    if ((size & Memory::PAGE_MASK) != 0) {
+    if ((size & Memory::CITRA_PAGE_MASK) != 0) {
         return ERR_MISALIGNED_SIZE;
     }
 
@@ -1288,7 +1288,7 @@ s64 SVC::GetSystemTick() {
 /// Creates a memory block at the specified address with the specified permissions and size
 ResultCode SVC::CreateMemoryBlock(Handle* out_handle, u32 addr, u32 size, u32 my_permission,
                                   u32 other_permission) {
-    if (size % Memory::PAGE_SIZE != 0)
+    if (size % Memory::CITRA_PAGE_SIZE != 0)
         return ERR_MISALIGNED_SIZE;
 
     std::shared_ptr<SharedMemory> shared_memory = nullptr;
@@ -1509,7 +1509,7 @@ ResultCode SVC::GetProcessInfo(s64* out, Handle process_handle, u32 type) {
         // TODO(yuriks): Type 0 returns a slightly higher number than type 2, but I'm not sure
         // what's the difference between them.
         *out = process->memory_used;
-        if (*out % Memory::PAGE_SIZE != 0) {
+        if (*out % Memory::CITRA_PAGE_SIZE != 0) {
             LOG_ERROR(Kernel_SVC, "called, memory size not page-aligned");
             return ERR_MISALIGNED_SIZE;
         }
