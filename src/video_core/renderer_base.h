@@ -63,7 +63,6 @@ public:
         return render_window;
     }
 
-    void RefreshRasterizerSetting();
     void Sync();
 
 protected:
@@ -71,7 +70,4 @@ protected:
     std::unique_ptr<VideoCore::RasterizerInterface> rasterizer;
     f32 m_current_fps = 0.0f; ///< Current framerate, should be set by the renderer
     int m_current_frame = 0;  ///< Current frame, should be set by the renderer
-
-private:
-    bool opengl_rasterizer_active = false;
 };
