@@ -63,8 +63,9 @@ void RasterizerCache::CopySurface(const Surface& src_surface, const Surface& dst
         const ClearValue clear_value =
             MakeClearValue(dst_surface->type, dst_surface->pixel_format, fill_buffer.data());
 
-        const ClearRect clear_rect = {
+        const TextureClear clear_rect = {
             .surface_type = dst_surface->type,
+            .texture_format = dst_surface->pixel_format,
             .texture_level = 0,
             .rect = Rect2D{
                 .offset = {dst_rect.left, dst_rect.bottom},
