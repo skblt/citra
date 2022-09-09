@@ -222,6 +222,14 @@ TextureInfo TextureInfo::FromPicaRegister(const TexturingRegs::TextureConfig& co
     return info;
 }
 
+void ConvertBGRToRGB(std::span<const std::byte> source, std::span<std::byte> dest) {
+    for (std::size_t i = 0; i < source.size(); i += 3) {
+        dest[i] = source[i + 2];
+        dest[i + 1] = source[i + 1];
+        dest[i + 2] = source[i];
+    }
+}
+
 void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
     u32 j = 0;
     for (u32 i = 0; i < source.size(); i += 3) {

@@ -61,6 +61,14 @@ Common::Vec4<u8> LookupTexelInTile(const u8* source, unsigned int x, unsigned in
  * @param source Span to the source pixel data
  * @param dest Span to the destination pixel data
  */
+void ConvertBGRToRGB(std::span<const std::byte> source, std::span<std::byte> dest);
+
+/**
+ * Converts pixel data encoded in BGR format to RGBA
+ *
+ * @param source Span to the source pixel data
+ * @param dest Span to the destination pixel data
+ */
 void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest);
 
 
