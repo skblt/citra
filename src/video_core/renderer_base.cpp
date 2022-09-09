@@ -5,9 +5,6 @@
 #include <memory>
 #include "core/frontend/emu_window.h"
 #include "video_core/renderer_base.h"
-#include "video_core/renderer_opengl/gl_rasterizer.h"
-#include "video_core/swrasterizer/swrasterizer.h"
-#include "video_core/video_core.h"
 
 RendererBase::RendererBase(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window_)
     : render_window{window}, secondary_window{secondary_window_} {}
@@ -22,19 +19,6 @@ void RendererBase::UpdateCurrentFramebufferLayout(bool is_portrait_mode) {
     update_layout(render_window);
     if (secondary_window) {
         update_layout(*secondary_window);
-    }
-}
-
-void RendererBase::RefreshRasterizerSetting() {
-    bool hw_renderer_enabled = VideoCore::g_hw_renderer_enabled;
-    if (rasterizer == nullptr || opengl_rasterizer_active != hw_renderer_enabled) {
-        opengl_rasterizer_active = hw_renderer_enabled;
-
-        if (hw_renderer_enabled) {
-            rasterizer = std::make_unique<OpenGL::RasterizerOpenGL>(render_window);
-        } else {
-            rasterizer = std::make_unique<VideoCore::SWRasterizer>();
-        }
     }
 }
 

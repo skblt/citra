@@ -7,6 +7,7 @@
 #include <array>
 #include "core/hw/gpu.h"
 #include "video_core/renderer_base.h"
+#include "video_core/renderer_opengl/gl_driver.h"
 #include "video_core/renderer_opengl/frame_dumper_opengl.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 #include "video_core/renderer_opengl/gl_state.h"
@@ -104,6 +105,8 @@ private:
     // Fills active OpenGL texture with the given RGB color.
     void LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture);
 
+private:
+    Driver driver;
     OpenGLState state;
 
     // OpenGL object IDs

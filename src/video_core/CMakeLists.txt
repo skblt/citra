@@ -40,6 +40,8 @@ add_library(video_core STATIC
     rasterizer_cache/texture_runtime.h
     renderer_opengl/frame_dumper_opengl.cpp
     renderer_opengl/frame_dumper_opengl.h
+    renderer_opengl/gl_driver.cpp
+    renderer_opengl/gl_driver.h
     renderer_opengl/gl_rasterizer.cpp
     renderer_opengl/gl_rasterizer.h
     renderer_opengl/gl_resource_manager.cpp

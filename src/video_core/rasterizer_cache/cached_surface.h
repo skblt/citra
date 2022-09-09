@@ -3,7 +3,6 @@
 // Refer to the license.txt file included.
 
 #pragma once
-#include <list>
 #include "common/assert.h"
 #include "core/custom_tex_cache.h"
 #include "video_core/rasterizer_cache/surface_params.h"
@@ -78,7 +77,7 @@ public:
 
     std::shared_ptr<SurfaceWatcher> CreateWatcher() {
         auto watcher = std::make_shared<SurfaceWatcher>(weak_from_this());
-        watchers.push_front(watcher);
+        watchers[watcher_count++] = watcher;
         return watcher;
     }
 
@@ -98,7 +97,8 @@ public:
             }
         }
 
-        watchers.clear();
+        watchers = {};
+        watcher_count = 0;
     }
 
 public:
@@ -111,7 +111,6 @@ public:
     std::array<u8, 4> fill_data;
     OGLTexture texture;
 
-    // level_watchers[i] watches the (i+1)-th level mipmap source surface
     std::array<std::shared_ptr<SurfaceWatcher>, 7> level_watchers;
     u32 max_level = 0;
 
@@ -122,7 +121,8 @@ public:
 private:
     RasterizerCache& owner;
     TextureRuntime& runtime;
-    std::list<std::weak_ptr<SurfaceWatcher>> watchers;
+    u32 watcher_count = 0;
+    std::array<std::weak_ptr<SurfaceWatcher>, 8> watchers;
 };
 
 struct CachedTextureCube {
