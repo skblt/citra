@@ -39,8 +39,8 @@ void TextureDownloaderES::Test() {
     }
     glActiveTexture(GL_TEXTURE0);
 
-    const auto test = [this, &state](FormatTuple tuple, auto original_data, std::size_t tex_size,
-                                     auto data_generator) {
+    const auto test = [this, &state]<typename T>(FormatTuple tuple, std::vector<T> original_data,
+                                                 std::size_t tex_size, auto data_generator) {
         OGLTexture texture;
         texture.Create();
         state.texture_units[0].texture_2d = texture.handle;
@@ -55,7 +55,7 @@ void TextureDownloaderES::Test() {
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tex_sizei, tex_sizei, tuple.format, tuple.type,
                         original_data.data());
 
-        decltype(original_data) new_data(original_data.size());
+        std::vector<T> new_data(original_data.size());
         glFinish();
         auto start = std::chrono::high_resolution_clock::now();
         GetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, tex_sizei, tex_sizei,
@@ -131,7 +131,7 @@ void main(){
     state.draw.draw_framebuffer = depth32_fbo.handle;
     state.renderbuffer = r32ui_renderbuffer.handle;
     state.Apply();
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_R32UI, max_size, max_size);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_R32UI, MAX_SIZE, MAX_SIZE);
     glFramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
                               r32ui_renderbuffer.handle);
     glUniform1i(glGetUniformLocation(d24s8_r32ui_conversion_shader.program.handle, "depth"), 1);
@@ -139,7 +139,7 @@ void main(){
     state.draw.draw_framebuffer = depth16_fbo.handle;
     state.renderbuffer = r16_renderbuffer.handle;
     state.Apply();
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_R16, max_size, max_size);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_R16, MAX_SIZE, MAX_SIZE);
     glFramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
                               r16_renderbuffer.handle);
 
@@ -152,7 +152,7 @@ void main(){
  */
 GLuint TextureDownloaderES::ConvertDepthToColor(GLuint level, GLenum& format, GLenum& type,
                                                 GLint height, GLint width) {
-    ASSERT(width <= max_size && height <= max_size);
+    ASSERT(width <= MAX_SIZE && height <= MAX_SIZE);
     const OpenGLState cur_state = OpenGLState::GetCurState();
     OpenGLState state;
     state.texture_units[0] = {cur_state.texture_units[0].texture_2d, sampler.handle};

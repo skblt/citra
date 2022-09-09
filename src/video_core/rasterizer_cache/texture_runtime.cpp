@@ -6,6 +6,7 @@
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/rasterizer_cache/texture_runtime.h"
 #include "video_core/renderer_opengl/gl_state.h"
+#include "video_core/renderer_opengl/gl_vars.h"
 
 namespace OpenGL {
 
@@ -74,26 +75,26 @@ void TextureRuntime::ReadTexture(OGLTexture& texture, const BufferTextureCopy& c
                  tuple.format, tuple.type, pixels.data() + copy.buffer_offset);
 }
 
-bool TextureRuntime::ClearTexture(OGLTexture& texture, const ClearRect& rect, ClearValue value) {
+bool TextureRuntime::ClearTexture(OGLTexture& texture, const TextureClear& clear, ClearValue value) {
     OpenGLState prev_state = OpenGLState::GetCurState();
     SCOPE_EXIT({ prev_state.Apply(); });
 
     // Setup scissor rectangle according to the clear rectangle
     OpenGLState state{};
     state.scissor.enabled = true;
-    state.scissor.x = rect.rect.offset.x;
-    state.scissor.y = rect.rect.offset.y;
-    state.scissor.width = rect.rect.extent.width;
-    state.scissor.height = rect.rect.extent.height;
+    state.scissor.x = clear.rect.offset.x;
+    state.scissor.y = clear.rect.offset.y;
+    state.scissor.width = clear.rect.extent.width;
+    state.scissor.height = clear.rect.extent.height;
     state.draw.draw_framebuffer = draw_fbo.handle;
     state.Apply();
 
-    switch (rect.surface_type) {
+    switch (clear.surface_type) {
     case SurfaceType::Color:
     case SurfaceType::Texture:
     case SurfaceType::Fill:
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture.handle,
-                               rect.texture_level);
+                               clear.texture_level);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
                                0);
 
@@ -108,7 +109,7 @@ bool TextureRuntime::ClearTexture(OGLTexture& texture, const ClearRect& rect, Cl
     case SurfaceType::Depth:
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texture.handle,
-                               rect.texture_level);
+                               clear.texture_level);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
 
         state.depth.write_mask = GL_TRUE;
@@ -119,7 +120,7 @@ bool TextureRuntime::ClearTexture(OGLTexture& texture, const ClearRect& rect, Cl
     case SurfaceType::DepthStencil:
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D,
-                               texture.handle, rect.texture_level);
+                               texture.handle, clear.texture_level);
 
         state.depth.write_mask = GL_TRUE;
         state.stencil.write_mask = -1;
@@ -203,6 +204,45 @@ void TextureRuntime::GenerateMipmaps(OGLTexture& texture, u32 max_level) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, max_level);
 
     glGenerateMipmap(GL_TEXTURE_2D);
+}
+
+const StagingBuffer& TextureRuntime::FindStaging(u32 size, bool upload) {
+    const GLbitfield access = upload ? GL_MAP_WRITE_BIT : GL_MAP_READ_BIT;
+    auto& search = upload ? upload_buffers : download_buffers;
+
+    const StagingBuffer key = {
+        .size = size
+    };
+
+    if (auto it = search.lower_bound(key); it != search.end()) {
+        return *it;
+    }
+
+    StagingBuffer staging{};
+    staging.buffer.Create();
+
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, staging.buffer.handle);
+
+    // Allocate a new buffer and map the data to the host
+    void* data = nullptr;
+    if (GLES) {
+        const GLbitfield storage = upload ? GL_MAP_WRITE_BIT : GL_MAP_READ_BIT | GL_CLIENT_STORAGE_BIT_EXT;
+        glBufferStorageEXT(GL_PIXEL_UNPACK_BUFFER, size, nullptr, storage | GL_MAP_PERSISTENT_BIT_EXT |
+                                                                         GL_MAP_COHERENT_BIT_EXT);
+        data = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, access | GL_MAP_PERSISTENT_BIT_EXT |
+                                                                                GL_MAP_COHERENT_BIT_EXT);
+    } else {
+        const GLbitfield storage = upload ? GL_MAP_WRITE_BIT : GL_MAP_READ_BIT | GL_CLIENT_STORAGE_BIT;
+        glBufferStorage(GL_PIXEL_UNPACK_BUFFER, size, nullptr, storage | GL_MAP_PERSISTENT_BIT |
+                                                                         GL_MAP_COHERENT_BIT);
+        data = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, access | GL_MAP_PERSISTENT_BIT |
+                                                                          GL_MAP_COHERENT_BIT);
+    }
+
+    // Insert it to the cache and return the memory
+    staging.mapped = std::span{reinterpret_cast<std::byte*>(data), size};
+    const auto& [it, _] = search.insert(std::move(staging));
+    return *it;
 }
 
 } // namespace OpenGL

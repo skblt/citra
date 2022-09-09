@@ -488,14 +488,18 @@ void RendererOpenGL::RenderToMailbox(const Layout::FramebufferLayout& layout,
 
         // INTEL driver workaround. We can't delete the previous render sync object until we are
         // sure that the presentation is done
-        frame->present_fence.WaitHost();
+        if (frame->present_fence.handle) {
+            glClientWaitSync(frame->present_fence.handle, 0, GL_TIMEOUT_IGNORED);
+        }
 
-        // Delete the draw fence if the frame wasn't presented
+        // delete the draw fence if the frame wasn't presented
         frame->render_fence.Release();
 
         // wait for the presentation to be done
-        frame->present_fence.Wait();
-        frame->present_fence.Release();
+        if (frame->present_fence.handle) {
+            glWaitSync(frame->present_fence.handle, 0, GL_TIMEOUT_IGNORED);
+            frame->present_fence.Release();
+        }
     }
 
     {
@@ -1120,7 +1124,7 @@ void RendererOpenGL::TryPresent(int timeout_ms) {
         render_window.mailbox->ReloadPresentFrame(frame, layout.width, layout.height);
     }
 
-    frame->render_fence.Wait();
+    glWaitSync(frame->render_fence.handle, 0, GL_TIMEOUT_IGNORED);
 
     // INTEL workaround.
     // Normally we could just delete the draw fence here, but due to driver bugs, we can just delete
@@ -1231,10 +1235,8 @@ VideoCore::ResultStatus RendererOpenGL::Init() {
 
     // Qualcomm has some spammy info messages that are marked as errors but not important
     // https://developer.qualcomm.com/comment/11845
-    if (GLAD_GL_KHR_debug) {
-        glEnable(GL_DEBUG_OUTPUT);
-        glDebugMessageCallback(DebugHandler, nullptr);
-    }
+    glEnable(GL_DEBUG_OUTPUT);
+    glDebugMessageCallback(DebugHandler, nullptr);
 #endif
 
     const std::string_view gl_version{reinterpret_cast<char const*>(glGetString(GL_VERSION))};
@@ -1247,20 +1249,24 @@ VideoCore::ResultStatus RendererOpenGL::Init() {
 
     auto& telemetry_session = Core::System::GetInstance().TelemetrySession();
     constexpr auto user_system = Common::Telemetry::FieldType::UserSystem;
-    telemetry_session.AddField(user_system, "GPU_Vendor", std::string(gpu_vendor));
-    telemetry_session.AddField(user_system, "GPU_Model", std::string(gpu_model));
-    telemetry_session.AddField(user_system, "GPU_OpenGL_Version", std::string(gl_version));
+    telemetry_session.AddField(user_system, "GPU_Vendor", std::string{gpu_vendor});
+    telemetry_session.AddField(user_system, "GPU_Model", std::string{gpu_model});
+    telemetry_session.AddField(user_system, "GPU_OpenGL_Version", std::string{gl_version});
 
     if (gpu_vendor == "GDI Generic") {
         return VideoCore::ResultStatus::ErrorGenericDrivers;
     }
 
-    if (!(GLAD_GL_VERSION_4_3 || GLAD_GL_ES_VERSION_3_1)) {
+    if (!(GLAD_GL_VERSION_4_4 || GLAD_GL_ES_VERSION_3_2)) {
+        return VideoCore::ResultStatus::ErrorRendererInit;
+    }
+
+    // We require glBufferStorage(EXT)
+    if (GLES && !GLAD_GL_EXT_buffer_storage) {
         return VideoCore::ResultStatus::ErrorRendererInit;
     }
 
     InitOpenGLObjects();
-
     RefreshRasterizerSetting();
 
     return VideoCore::ResultStatus::Success;
