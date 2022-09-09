@@ -22,13 +22,15 @@ struct StagingBuffer {
     }
 };
 
+class Driver;
+
 /**
  * Provides texture manipulation functions to the rasterizer cache
  * Separating this into a class makes it easier to abstract graphics API code
  */
 class TextureRuntime {
 public:
-    TextureRuntime();
+    TextureRuntime(Driver& driver);
     ~TextureRuntime() = default;
 
     /// Copies the GPU pixel data to the provided pixels buffer
@@ -51,6 +53,7 @@ public:
     const StagingBuffer& FindStaging(u32 size, bool upload);
 
 private:
+    Driver& driver;
     OGLFramebuffer read_fbo, draw_fbo;
     std::set<StagingBuffer> upload_buffers;
     std::set<StagingBuffer> download_buffers;
