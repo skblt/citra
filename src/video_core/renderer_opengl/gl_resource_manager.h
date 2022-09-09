@@ -164,12 +164,6 @@ public:
     /// Deletes the internal OpenGL resource
     void Release();
 
-    /// Causes the host to wait for the OpenGL semaphore
-    void WaitHost();
-
-    /// Causes the GPU to wait for the OpenGL semaphore
-    void Wait();
-
     GLsync handle = 0;
 };
 

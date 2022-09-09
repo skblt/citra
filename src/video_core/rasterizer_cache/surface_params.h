@@ -48,6 +48,10 @@ public:
         end = addr + size;
     }
 
+    bool IsScaled() const {
+        return res_scale > 1;
+    }
+
     SurfaceInterval GetInterval() const {
         return SurfaceInterval(addr, end);
     }

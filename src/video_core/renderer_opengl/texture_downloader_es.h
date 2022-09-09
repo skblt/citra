@@ -11,26 +11,33 @@ namespace OpenGL {
 class OpenGLState;
 
 class TextureDownloaderES {
-    static constexpr u16 max_size = 1024;
+public:
+    TextureDownloaderES(bool enable_depth_stencil);
+
+    void GetTexImage(GLenum target, GLuint level, GLenum format, const GLenum type,
+                     GLint height, GLint width, void* pixels);
+
+private:
+    void Test();
+    GLuint ConvertDepthToColor(GLuint level, GLenum& format, GLenum& type,
+                               GLint height, GLint width);
+
+private:
+    static constexpr u16 MAX_SIZE = 1024;
+
+    struct ConversionShader {
+        OGLProgram program;
+        GLint lod_location{-1};
+    };
 
     OGLVertexArray vao;
     OGLFramebuffer read_fbo_generic;
     OGLFramebuffer depth32_fbo, depth16_fbo;
     OGLRenderbuffer r32ui_renderbuffer, r16_renderbuffer;
-    struct ConversionShader {
-        OGLProgram program;
-        GLint lod_location{-1};
-    } d24_r32ui_conversion_shader, d16_r16_conversion_shader, d24s8_r32ui_conversion_shader;
+
+    ConversionShader d24_r32ui_conversion_shader;
+    ConversionShader d16_r16_conversion_shader;
+    ConversionShader d24s8_r32ui_conversion_shader;
     OGLSampler sampler;
-
-    void Test();
-    GLuint ConvertDepthToColor(GLuint level, GLenum& format, GLenum& type, GLint height,
-                               GLint width);
-
-public:
-    TextureDownloaderES(bool enable_depth_stencil);
-
-    void GetTexImage(GLenum target, GLuint level, GLenum format, const GLenum type, GLint height,
-                     GLint width, void* pixels);
 };
 } // namespace OpenGL
