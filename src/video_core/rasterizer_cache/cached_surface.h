@@ -55,10 +55,6 @@ public:
     void LoadGLBuffer(PAddr load_start, PAddr load_end);
     void FlushGLBuffer(PAddr flush_start, PAddr flush_end);
 
-    /// Custom texture loading and dumping
-    bool LoadCustomTexture(u64 tex_hash);
-    void DumpTexture(GLuint target_tex, u64 tex_hash);
-
     /// Upload/Download data in gl_buffer in/to this surface's texture
     void UploadGLTexture(Common::Rectangle<u32> rect);
     void DownloadGLTexture(const Common::Rectangle<u32>& rect);
@@ -113,10 +109,6 @@ public:
 
     std::array<std::shared_ptr<SurfaceWatcher>, 7> level_watchers;
     u32 max_level = 0;
-
-    // Information about custom textures
-    bool is_custom = false;
-    Core::CustomTexInfo custom_tex_info;
 
 private:
     RasterizerCache& owner;

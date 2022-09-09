@@ -421,7 +421,7 @@ Surface RasterizerCache::GetTextureSurface(const Pica::Texture::TextureInfo& inf
 
         // Allocate more mipmap level if necessary
         if (surface->max_level < max_level) {
-            if (surface->is_custom || !texture_filterer->IsNull()) {
+            if (!texture_filterer->IsNull()) {
                 // TODO: proper mipmap support for custom textures
                 runtime.GenerateMipmaps(surface->texture, max_level);
             }
@@ -456,7 +456,7 @@ Surface RasterizerCache::GetTextureSurface(const Pica::Texture::TextureInfo& inf
                     ValidateSurface(level_surface, level_surface->addr, level_surface->size);
                 }
 
-                if (!surface->is_custom && texture_filterer->IsNull()) {
+                if (texture_filterer->IsNull()) {
                     const auto src_rect = level_surface->GetScaledRect();
                     const auto dst_rect = surface_params.GetScaledRect();
                     const TextureBlit texture_blit = {
