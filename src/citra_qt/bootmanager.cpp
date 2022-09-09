@@ -114,7 +114,7 @@ public:
     /// Create the original context that should be shared from
     explicit OpenGLSharedContext(QSurface* surface) : surface(surface) {
         QSurfaceFormat format;
-        format.setVersion(4, 3);
+        format.setVersion(4, 4);
         format.setProfile(QSurfaceFormat::CoreProfile);
         // TODO: expose a setting for buffer value (ie default/single/double/triple)
         format.setSwapBehavior(QSurfaceFormat::DefaultSwapBehavior);

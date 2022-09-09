@@ -45,8 +45,9 @@ union ClearValue {
     };
 };
 
-struct ClearRect {
+struct TextureClear {
     SurfaceType surface_type;
+    PixelFormat texture_format;
     u32 texture_level;
     Rect2D rect;
 };
