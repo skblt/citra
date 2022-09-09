@@ -77,19 +77,16 @@ void UnswizzleTexture(const SurfaceParams& params, u32 load_start, u32 load_end,
         tex_info.SetDefaultStride();
         tex_info.physical_address = params.addr;
 
-        const SurfaceInterval load_interval(load_start, load_end);
-        const auto rect = params.GetSubRect(params.FromInterval(load_interval));
-        DEBUG_ASSERT(params.FromInterval(load_interval).GetInterval() == load_interval);
-
+        const u32 start_pixel = params.PixelsInBytes(load_start - params.addr);
         const u8* source_data = reinterpret_cast<const u8*>(source_tiled.data());
-        for (u32 y = rect.bottom; y < rect.top; y++) {
-            for (u32 x = rect.left; x < rect.right; x++) {
-                auto vec4 =
-                    Pica::Texture::LookupTexture(source_data, x, params.height - 1 - y, tex_info);
-                const std::size_t offset = (x + (params.width * y)) * 4;
-                std::memcpy(dest_linear.data() + offset, vec4.AsArray(), 4);
-            }
+        for (u32 i = 0; i < params.PixelsInBytes(load_end - load_start); i++) {
+            const u32 x = (i + start_pixel) % params.stride;
+            const u32 y = (i + start_pixel) / params.stride;
+
+            auto vec4 = Pica::Texture::LookupTexture(source_data, x, params.height - 1 - y, tex_info);
+            std::memcpy(dest_linear.data() + i * sizeof(u32), vec4.AsArray(), sizeof(u32));
         }
+
     } else {
         const u32 func_index = static_cast<u32>(params.pixel_format);
         const MortonFunc UnswizzleImpl = UNSWIZZLE_TABLE[func_index];

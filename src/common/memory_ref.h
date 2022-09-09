@@ -96,7 +96,9 @@ public:
     u8* GetPtr() {
         return cptr;
     }
-
+    std::byte* GetBytes() {
+        return reinterpret_cast<std::byte*>(cptr);
+    }
     operator const u8*() const {
         return cptr;
     }
@@ -104,7 +106,9 @@ public:
     const u8* GetPtr() const {
         return cptr;
     }
-
+    const std::byte* GetBytes() const {
+        return reinterpret_cast<const std::byte*>(cptr);
+    }
     std::size_t GetSize() const {
         return csize;
     }

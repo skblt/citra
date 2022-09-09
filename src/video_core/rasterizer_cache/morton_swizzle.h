@@ -113,7 +113,12 @@ static void MortonCopy(u32 stride, u32 height,
         }
     };
 
-    u8* tile_buffer = VideoCore::g_memory->GetPhysicalPointer(start);
+    u8* tile_buffer;
+    if constexpr (morton_to_linear) {
+        tile_buffer = (u8*)tiled_buffer.data();
+    } else {
+        tile_buffer = VideoCore::g_memory->GetPhysicalPointer(start);
+    }
 
     // If during a texture download the start coordinate is inside a tile, swizzle
     // the tile to a temporary buffer and copy the part we are interested in
