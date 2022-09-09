@@ -47,7 +47,7 @@ void FrameDumperOpenGL::PresentLoop(std::stop_token stop_token) {
             mailbox->ReloadPresentFrame(frame, layout.width, layout.height);
         }
 
-        frame->render_fence.Wait();
+        glWaitSync(frame->render_fence.handle, 0, GL_TIMEOUT_IGNORED);
 
         glBindFramebuffer(GL_READ_FRAMEBUFFER, frame->present.handle);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[current_pbo].handle);

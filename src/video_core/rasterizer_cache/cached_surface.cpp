@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <bit>
 #include "common/microprofile.h"
 #include "common/scope_exit.h"
 #include "common/texture.h"
@@ -150,8 +151,9 @@ void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
 }
 
 bool CachedSurface::LoadCustomTexture(u64 tex_hash) {
-    auto& custom_tex_cache = Core::System::GetInstance().CustomTexCache();
-    const auto& image_interface = Core::System::GetInstance().GetImageInterface();
+    Core::System& system = Core::System::GetInstance();
+    auto& custom_tex_cache = system.CustomTexCache();
+    const auto& image_interface = system.GetImageInterface();
 
     if (custom_tex_cache.IsTextureCached(tex_hash)) {
         custom_tex_info = custom_tex_cache.LookupTexture(tex_hash);
@@ -169,9 +171,7 @@ bool CachedSurface::LoadCustomTexture(u64 tex_hash) {
         return false;
     }
 
-    const std::bitset<32> width_bits(custom_tex_info.width);
-    const std::bitset<32> height_bits(custom_tex_info.height);
-    if (width_bits.count() != 1 || height_bits.count() != 1) {
+    if (std::popcount(custom_tex_info.width) != 1 || std::popcount(custom_tex_info.height) != 1) {
         LOG_ERROR(Render_OpenGL, "Texture {} size is not a power of 2", path_info.path);
         return false;
     }
@@ -186,20 +186,19 @@ bool CachedSurface::LoadCustomTexture(u64 tex_hash) {
 void CachedSurface::DumpTexture(GLuint target_tex, u64 tex_hash) {
     // Make sure the texture size is a power of 2
     // If not, the surface is actually a framebuffer
-    std::bitset<32> width_bits(width);
-    std::bitset<32> height_bits(height);
-    if (width_bits.count() != 1 || height_bits.count() != 1) {
+    if (std::popcount(width) != 1 || std::popcount(height) != 1) {
         LOG_WARNING(Render_OpenGL, "Not dumping {:016X} because size isn't a power of 2 ({}x{})",
                     tex_hash, width, height);
         return;
     }
 
     // Dump texture to RGBA8 and encode as PNG
-    const auto& image_interface = Core::System::GetInstance().GetImageInterface();
-    auto& custom_tex_cache = Core::System::GetInstance().CustomTexCache();
+    Core::System& system = Core::System::GetInstance();
+    const auto& image_interface = system.GetImageInterface();
+    auto& custom_tex_cache = system.CustomTexCache();
     std::string dump_path =
         fmt::format("{}textures/{:016X}/", FileUtil::GetUserPath(FileUtil::UserPath::DumpDir),
-                    Core::System::GetInstance().Kernel().GetCurrentProcess()->codeset->program_id);
+                    system.Kernel().GetCurrentProcess()->codeset->program_id);
     if (!FileUtil::CreateFullPath(dump_path)) {
         LOG_ERROR(Render, "Unable to create {}", dump_path);
         return;
@@ -266,7 +265,7 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect) {
     // If not 1x scale, create 1x texture that we will blit from to replace texture subrect in
     // surface
     OGLTexture unscaled_tex;
-    if (res_scale != 1) {
+    if (IsScaled()) {
         x0 = 0;
         y0 = 0;
 
@@ -357,11 +356,11 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect) {
 
 MICROPROFILE_DEFINE(RasterizerCache_TextureDL, "RasterizerCache", "Texture Download", MP_RGB(128, 192, 64));
 void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
-    if (type == SurfaceType::Fill) {
-        return;
-    }
-
     MICROPROFILE_SCOPE(RasterizerCache_TextureDL);
+
+    OpenGLState state = OpenGLState::GetCurState();
+    OpenGLState prev_state = state;
+    SCOPE_EXIT({ prev_state.Apply(); });
 
     const u32 download_size = width * height * GetBytesPerPixel(pixel_format);
 
@@ -369,25 +368,20 @@ void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
         gl_buffer.resize(download_size);
     }
 
-    OpenGLState state = OpenGLState::GetCurState();
-    OpenGLState prev_state = state;
-    SCOPE_EXIT({ prev_state.Apply(); });
-
     // Ensure no bad interactions with GL_PACK_ALIGNMENT
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
     glPixelStorei(GL_PACK_ROW_LENGTH, static_cast<GLint>(stride));
     const u32 buffer_offset = (rect.bottom * stride + rect.left) * GetBytesPerPixel(pixel_format);
 
     // If not 1x scale, blit scaled texture to a new 1x texture and use that to flush
-    if (res_scale != 1) {
+    if (IsScaled()) {
         auto scaled_rect = rect;
         scaled_rect.left *= res_scale;
         scaled_rect.top *= res_scale;
         scaled_rect.right *= res_scale;
         scaled_rect.bottom *= res_scale;
 
-        const Common::Rectangle<u32> unscaled_tex_rect{0, rect.GetHeight(), rect.GetWidth(), 0};
-        auto unscaled_tex = owner.AllocateSurfaceTexture(pixel_format, rect.GetWidth(), rect.GetHeight());
+        OGLTexture unscaled_tex = owner.AllocateSurfaceTexture(pixel_format, rect.GetWidth(), rect.GetHeight());
 
         const TextureBlit texture_blit = {
             .surface_type = type,
@@ -398,8 +392,8 @@ void CachedSurface::DownloadGLTexture(const Common::Rectangle<u32>& rect) {
                 .end = {scaled_rect.right, scaled_rect.top}
             },
             .dst_region = Region2D{
-                .start = {unscaled_tex_rect.left, unscaled_tex_rect.bottom},
-                .end = {unscaled_tex_rect.right, unscaled_tex_rect.top}
+                .start = {0, 0},
+                .end = {rect.GetWidth(), rect.GetHeight()}
             }
         };
 
