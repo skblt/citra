@@ -5,8 +5,8 @@
 #include "common/scope_exit.h"
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/rasterizer_cache/texture_runtime.h"
+#include "video_core/renderer_opengl/gl_driver.h"
 #include "video_core/renderer_opengl/gl_state.h"
-#include "video_core/renderer_opengl/gl_vars.h"
 
 namespace OpenGL {
 
@@ -27,7 +27,7 @@ GLbitfield MakeBufferMask(SurfaceType type) {
     return GL_COLOR_BUFFER_BIT;
 }
 
-TextureRuntime::TextureRuntime() {
+TextureRuntime::TextureRuntime(Driver& driver) : driver(driver) {
     read_fbo.Create();
     draw_fbo.Create();
 }
@@ -225,18 +225,20 @@ const StagingBuffer& TextureRuntime::FindStaging(u32 size, bool upload) {
 
     // Allocate a new buffer and map the data to the host
     void* data = nullptr;
-    if (GLES) {
+    if (driver.IsOpenGLES() && driver.HasExtBufferStorage()) {
         const GLbitfield storage = upload ? GL_MAP_WRITE_BIT : GL_MAP_READ_BIT | GL_CLIENT_STORAGE_BIT_EXT;
         glBufferStorageEXT(GL_PIXEL_UNPACK_BUFFER, size, nullptr, storage | GL_MAP_PERSISTENT_BIT_EXT |
                                                                          GL_MAP_COHERENT_BIT_EXT);
         data = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, access | GL_MAP_PERSISTENT_BIT_EXT |
                                                                                 GL_MAP_COHERENT_BIT_EXT);
-    } else {
+    } else if (driver.HasArbBufferStorage()) {
         const GLbitfield storage = upload ? GL_MAP_WRITE_BIT : GL_MAP_READ_BIT | GL_CLIENT_STORAGE_BIT;
         glBufferStorage(GL_PIXEL_UNPACK_BUFFER, size, nullptr, storage | GL_MAP_PERSISTENT_BIT |
                                                                          GL_MAP_COHERENT_BIT);
         data = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, access | GL_MAP_PERSISTENT_BIT |
                                                                           GL_MAP_COHERENT_BIT);
+    } else {
+        UNIMPLEMENTED();
     }
 
     // Insert it to the cache and return the memory

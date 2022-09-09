@@ -202,8 +202,8 @@ static Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams&
     return match_surface;
 }
 
-RasterizerCache::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer)
-    : rasterizer(rasterizer) {
+RasterizerCache::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer, Driver& driver)
+    : rasterizer(rasterizer), runtime(driver) {
     resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
     texture_filterer = std::make_unique<TextureFilterer>(Settings::values.texture_filter_name,
                                                          resolution_scale_factor);

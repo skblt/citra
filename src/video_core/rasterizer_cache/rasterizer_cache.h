@@ -38,13 +38,14 @@ enum class ScaleMatch {
     Ignore   // Accept every scaled res
 };
 
+class Driver;
 class TextureDownloaderES;
 class TextureFilterer;
 class FormatReinterpreterOpenGL;
 
 class RasterizerCache : NonCopyable {
 public:
-    RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer);
+    RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer, Driver& driver);
     ~RasterizerCache();
 
     /// Blit one surface's texture to another
