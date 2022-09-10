@@ -303,7 +303,7 @@ if(UNIX AND NOT APPLE)
     install(TARGETS citra-qt RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}/bin")
 endif()
 
-if (MSVC)
+if (MSVC OR MINGW)
     include(CopyCitraQt5Deps)
     include(CopyCitraSDLDeps)
     copy_citra_Qt5_deps(citra-qt)
