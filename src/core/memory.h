@@ -3,7 +3,6 @@
 // Refer to the license.txt file included.
 
 #pragma once
-#include <span>
 #include <array>
 #include <cstddef>
 #include <string>
