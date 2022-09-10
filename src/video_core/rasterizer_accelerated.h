@@ -14,6 +14,6 @@ public:
     void UpdatePagesCachedCount(PAddr addr, u32 size, int delta) override;
 
 private:
-    std::array<u16, 0x30000> cached_pages;
+    std::array<u16, 0x30000> cached_pages{};
 };
 } // namespace VideoCore
