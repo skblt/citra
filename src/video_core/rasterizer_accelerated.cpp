@@ -11,7 +11,7 @@ namespace VideoCore {
 
 void RasterizerAccelerated::UpdatePagesCachedCount(PAddr addr, u32 size, int delta) {
     const u32 page_start = addr >> Memory::CITRA_PAGE_BITS;
-    const u32 page_end = ((addr + size - 1) >> Memory::CITRA_PAGE_BITS);
+    const u32 page_end = ((addr + size - 1) >> Memory::CITRA_PAGE_BITS) + 1;
 
     u32 uncache_start_addr = 0;
     u32 cache_start_addr = 0;
