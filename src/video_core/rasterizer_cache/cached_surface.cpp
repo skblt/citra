@@ -26,13 +26,16 @@ MICROPROFILE_DEFINE(RasterizerCache_SurfaceLoad, "RasterizerCache", "Surface Loa
 void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
     DEBUG_ASSERT(load_start >= addr && load_end <= end);
 
-    auto source_ptr = VideoCore::g_memory->GetPhysicalRef(load_start);
-    if (!source_ptr) {
+    // We start reading from addr instead of load_start, otherwise LookupTexture
+    // in UnswizzleTexture will not sample texels correctly
+    auto source_ptr = VideoCore::g_memory->GetPhysicalRef(addr);
+    if (!source_ptr) [[unlikely]] {
         return;
     }
 
-    const auto upload_size = std::clamp<std::size_t>(load_end - load_start, 0u, source_ptr.GetSize());
-    const auto upload_data = source_ptr.GetBytes(upload_size);
+    const auto start_offset = load_start - addr;
+    const auto texture_data = source_ptr.GetBytes(load_end - addr);
+    const auto upload_size = texture_data.size() - start_offset;
 
     if (gl_buffer.empty()) {
         gl_buffer.resize(width * height * GetBytesPerPixel(pixel_format));
@@ -42,15 +45,18 @@ void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
 
     if (!is_tiled) {
         ASSERT(type == SurfaceType::Color);
+
+        auto upload_data = texture_data.subspan(start_offset, upload_size);
+        auto dest_buffer = std::span{gl_buffer}.subspan(start_offset, upload_size);
         if (pixel_format == PixelFormat::RGBA8 && GLES) {
-            Pica::Texture::ConvertABGRToRGBA(upload_data, gl_buffer);
+            Pica::Texture::ConvertABGRToRGBA(upload_data, dest_buffer);
         } else if (pixel_format == PixelFormat::RGB8 && GLES) {
-            Pica::Texture::ConvertBGRToRGB(upload_data, gl_buffer);
+            Pica::Texture::ConvertBGRToRGB(upload_data, dest_buffer);
         } else {
-            std::memcpy(gl_buffer.data() + load_start - addr, source_ptr, upload_size);
+            std::memcpy(dest_buffer.data(), upload_data.data(), upload_size);
         }
     } else {
-        UnswizzleTexture(*this, load_start, load_end, upload_data, gl_buffer);
+        UnswizzleTexture(*this, load_start, load_end, texture_data, gl_buffer);
     }
 }
 
@@ -59,15 +65,14 @@ void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
     DEBUG_ASSERT(flush_start >= addr && flush_end <= end);
 
     auto dest_ptr = VideoCore::g_memory->GetPhysicalRef(addr);
-    if (!dest_ptr) {
+    if (!dest_ptr) [[unlikely]] {
         return;
     }
 
-    const auto download_size = std::clamp<std::size_t>(flush_end - flush_start, 0u, dest_ptr.GetSize());
-    const auto download_loc = dest_ptr.GetBytes(download_size);
-
-    const u32 start_offset = flush_start - addr;
-    const u32 end_offset = flush_end - addr;
+    const auto start_offset = flush_start - addr;
+    const auto end_offset = flush_end - addr;
+    const auto texture_data = dest_ptr.GetBytes(flush_end - addr);
+    const auto download_size = texture_data.size() - start_offset;
 
     MICROPROFILE_SCOPE(RasterizerCache_SurfaceFlush);
 
@@ -88,15 +93,18 @@ void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
             std::memcpy(&dest_ptr[coarse_start_offset], &backup_data[0], backup_bytes);
     } else if (!is_tiled) {
         ASSERT(type == SurfaceType::Color);
+
+        auto dest_buffer = texture_data.subspan(start_offset, download_size);
+        auto download_data = std::span{gl_buffer}.subspan(start_offset, download_size);
         if (pixel_format == PixelFormat::RGBA8 && GLES) {
-            Pica::Texture::ConvertABGRToRGBA(gl_buffer, download_loc);
+            Pica::Texture::ConvertABGRToRGBA(gl_buffer, download_data);
         } else if (pixel_format == PixelFormat::RGB8 && GLES) {
-            Pica::Texture::ConvertBGRToRGB(gl_buffer, download_loc);
+            Pica::Texture::ConvertBGRToRGB(gl_buffer, download_data);
         } else {
-            std::memcpy(download_loc.data() + start_offset, gl_buffer.data() + start_offset, flush_end - flush_start);
+            std::memcpy(dest_buffer.data(), download_data.data(), download_size);
         }
     } else {
-        SwizzleTexture(*this, flush_start, flush_end, gl_buffer, download_loc);
+        SwizzleTexture(*this, flush_start, flush_end, gl_buffer, texture_data);
     }
 }
 
