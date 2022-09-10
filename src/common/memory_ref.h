@@ -105,11 +105,11 @@ public:
         return cptr;
     }
 
-    std::span<std::byte> GetBytes(std::size_t size) {
+    auto GetWriteBytes(std::size_t size) {
         return std::span{reinterpret_cast<std::byte*>(cptr), size > csize ? csize : size};
     }
 
-    std::span<const std::byte> GetBytes(std::size_t size) const {
+    auto GetReadBytes(std::size_t size) const {
         return std::span{reinterpret_cast<const std::byte*>(cptr), size > csize ? csize : size};
     }
 
