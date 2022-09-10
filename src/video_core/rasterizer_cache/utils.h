@@ -53,6 +53,14 @@ class SurfaceParams;
 void SwizzleTexture(const SurfaceParams& params, u32 flush_start, u32 flush_end,
                     std::span<std::byte> source_linear, std::span<std::byte> dest_tiled);
 
+/**
+ * Converts a morton swizzled texture to linear format.
+ *
+ * @param params Structure used to query the surface information.
+ * @param load_start, load_end The address range to unswizzle texture data.
+ * @param source_tiled The source swizzled data. The span begins at surface base address not load_start.
+ * @param dest_linear The output buffer where the generated linear data will be written to.
+ */
 void UnswizzleTexture(const SurfaceParams& params, u32 load_start, u32 load_end,
                       std::span<std::byte> source_tiled, std::span<std::byte> dest_linear);
 
