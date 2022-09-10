@@ -180,7 +180,7 @@ constexpr u32 GetFormatBpp(PixelFormat format) {
     case PixelFormat::ETC1:
         return 4;
     default:
-        return 0;
+        return 1;
     }
 }
 
