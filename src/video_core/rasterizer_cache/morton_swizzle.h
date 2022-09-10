@@ -69,8 +69,7 @@ inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer, std::sp
 }
 
 template <bool morton_to_linear, PixelFormat format>
-static void MortonCopy(u32 stride, u32 height,
-                       std::span<std::byte> linear_buffer, std::span<std::byte> tiled_buffer,
+static void MortonCopy(u32 stride, u32 height, std::span<std::byte> linear_buffer, std::span<std::byte> tiled_buffer,
                        PAddr base, PAddr start, PAddr end) {
 
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
@@ -83,6 +82,7 @@ static void MortonCopy(u32 stride, u32 height,
     // This only applies for D24 format, by shifting the span one byte all pixels
     // are written properly without byteswap
     u32 linear_offset = aligned_bytes_per_pixel - bytes_per_pixel;
+    u32 tiled_offset = 0;
 
     const PAddr aligned_down_start = base + Common::AlignDown(start - base, tile_size);
     const PAddr aligned_start = base + Common::AlignUp(start - base, tile_size);
@@ -97,7 +97,6 @@ static void MortonCopy(u32 stride, u32 height,
     // In OpenGL the texture origin is in the bottom left corner as opposed to other
     // APIs that have it at the top left. To avoid flipping texture coordinates in
     // the shader we read/write the linear buffer backwards
-    //linear_buffer += ((height - 8 - y) * stride + x) * aligned_bytes_per_pixel;
     linear_offset += ((height - 8 - y) * stride + x) * aligned_bytes_per_pixel;
 
     auto linear_next_tile = [&] {
@@ -113,24 +112,16 @@ static void MortonCopy(u32 stride, u32 height,
         }
     };
 
-    u8* tile_buffer;
-    if constexpr (morton_to_linear) {
-        tile_buffer = (u8*)tiled_buffer.data();
-    } else {
-        tile_buffer = VideoCore::g_memory->GetPhysicalPointer(start);
-    }
-
     // If during a texture download the start coordinate is inside a tile, swizzle
     // the tile to a temporary buffer and copy the part we are interested in
     if (start < aligned_start && !morton_to_linear) {
         std::array<std::byte, tile_size> tmp_buf;
-        std::span<std::byte> linear_data = linear_buffer.last(linear_buffer.size() - linear_offset);
-
+        auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_size);
         MortonCopyTile<morton_to_linear, format>(stride, tmp_buf, linear_data);
-        std::memcpy(tile_buffer, tmp_buf.data() + start - aligned_down_start,
+        std::memcpy(tiled_buffer.data(), tmp_buf.data() + start - aligned_down_start,
                     std::min(aligned_start, end) - start);
 
-        tile_buffer += aligned_start - start;
+        tiled_offset += aligned_start - start;
         linear_next_tile();
     }
 
@@ -143,21 +134,20 @@ static void MortonCopy(u32 stride, u32 height,
         aligned_end = clamped_end;
     }
 
-    const u8* buffer_end = tile_buffer + aligned_end - aligned_start;
-    while (tile_buffer < buffer_end) {
-        std::span<std::byte> linear_data = linear_buffer.last(linear_buffer.size() - linear_offset);
-        auto tiled_data = std::span<std::byte>{(std::byte*)tile_buffer, tile_size};
-
+    const u32 buffer_end = tiled_offset + aligned_end - aligned_start;
+    while (tiled_offset < buffer_end) {
+        auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_size);
+        auto tiled_data = tiled_buffer.subspan(tiled_offset, tile_size);
         MortonCopyTile<morton_to_linear, format>(stride, tiled_data, linear_data);
-        tile_buffer += tile_size;
+        tiled_offset += tile_size;
         linear_next_tile();
     }
 
     if (end > std::max(aligned_start, aligned_end) && !morton_to_linear) {
         std::array<std::byte, tile_size> tmp_buf;
-        std::span<std::byte> linear_data = linear_buffer.last(linear_buffer.size() - linear_offset);
+        auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_size);
         MortonCopyTile<morton_to_linear, format>(stride, tmp_buf, linear_data);
-        std::memcpy(tile_buffer, tmp_buf.data(), end - aligned_end);
+        std::memcpy(tiled_buffer.data() + tiled_offset, tmp_buf.data(), end - aligned_end);
     }
 }
 
