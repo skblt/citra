@@ -50,21 +50,21 @@ struct TextureCubeConfig {
 
 class SurfaceParams;
 
-void SwizzleTexture(const SurfaceParams& params, u32 flush_start, u32 flush_end,
+[[nodiscard]] ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data);
+
+void SwizzleTexture(const SurfaceParams& params, u32 start_offset,
                     std::span<std::byte> source_linear, std::span<std::byte> dest_tiled);
 
 /**
  * Converts a morton swizzled texture to linear format.
  *
  * @param params Structure used to query the surface information.
- * @param load_start, load_end The address range to unswizzle texture data.
- * @param source_tiled The source swizzled data. The span begins at surface base address not load_start.
+ * @param start_offset Is the offset at which the source_tiled span begins
+ * @param source_tiled The source morton swizzled data.
  * @param dest_linear The output buffer where the generated linear data will be written to.
  */
-void UnswizzleTexture(const SurfaceParams& params, u32 load_start, u32 load_end,
+void UnswizzleTexture(const SurfaceParams& params, u32 start_offset,
                       std::span<std::byte> source_tiled, std::span<std::byte> dest_linear);
-
-[[nodiscard]] ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data);
 
 } // namespace OpenGL
 
