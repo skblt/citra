@@ -152,10 +152,15 @@ public:
     ~OGLSync() {
         Release();
     }
+
     OGLSync& operator=(OGLSync&& o) noexcept {
         Release();
         handle = std::exchange(o.handle, nullptr);
         return *this;
+    }
+
+    explicit operator bool() const noexcept {
+        return handle != 0;
     }
 
     /// Creates a new internal OpenGL resource and stores the handle
