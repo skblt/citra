@@ -214,8 +214,11 @@ const StagingBuffer& TextureRuntime::FindStaging(u32 size, bool upload) {
         .size = size
     };
 
-    if (auto it = search.lower_bound(key); it != search.end()) {
-        return *it;
+    for (auto it = search.lower_bound(key); it != search.end(); it++) {
+        // Attempt to find a free buffer that fits the requested data
+        if (it->IsFree()) {
+            return *it;
+        }
     }
 
     StagingBuffer staging{};
@@ -243,7 +246,7 @@ const StagingBuffer& TextureRuntime::FindStaging(u32 size, bool upload) {
 
     // Insert it to the cache and return the memory
     staging.mapped = std::span{reinterpret_cast<std::byte*>(data), size};
-    const auto& [it, _] = search.insert(std::move(staging));
+    const auto& it = search.insert(std::move(staging));
     return *it;
 }
 

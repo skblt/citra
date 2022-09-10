@@ -16,9 +16,26 @@ struct StagingBuffer {
     u32 size = 0;
     std::span<std::byte> mapped{};
     OGLBuffer buffer{};
+    mutable OGLSync buffer_lock{};
 
     bool operator<(const StagingBuffer& other) const {
         return size < other.size;
+    }
+
+    /// Returns true if the buffer does not take part in pending transfer operations
+    bool IsFree() const {
+        GLint status;
+        glGetSynciv(buffer_lock.handle, GL_SYNC_STATUS, 1, nullptr, &status);
+        return status == GL_SIGNALED;
+    }
+
+    /// Prevents the runtime from reusing the buffer until the transfer operation is complete
+    void Lock() const {
+        if (buffer_lock) {
+            buffer_lock.Release();
+        }
+
+        buffer_lock.Create();
     }
 };
 
@@ -32,6 +49,9 @@ class TextureRuntime {
 public:
     TextureRuntime(Driver& driver);
     ~TextureRuntime() = default;
+
+    /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
+    const StagingBuffer& FindStaging(u32 size, bool upload);
 
     /// Copies the GPU pixel data to the provided pixels buffer
     void ReadTexture(OGLTexture& texture, const BufferTextureCopy& copy,
@@ -49,14 +69,11 @@ public:
     /// Generates mipmaps for all the available levels of the texture
     void GenerateMipmaps(OGLTexture& texture, u32 max_level);
 
-    /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
-    const StagingBuffer& FindStaging(u32 size, bool upload);
-
 private:
     Driver& driver;
     OGLFramebuffer read_fbo, draw_fbo;
-    std::set<StagingBuffer> upload_buffers;
-    std::set<StagingBuffer> download_buffers;
+    std::multiset<StagingBuffer> upload_buffers;
+    std::multiset<StagingBuffer> download_buffers;
 };
 
 } // namespace OpenGL

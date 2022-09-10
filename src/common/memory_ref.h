@@ -3,7 +3,7 @@
 // Refer to the license.txt file included.
 
 #pragma once
-
+#include <span>
 #include <memory>
 #include <vector>
 #include <boost/serialization/export.hpp>
@@ -79,6 +79,7 @@ public:
         : backing_mem(std::move(backing_mem_)), offset(0) {
         Init();
     }
+
     MemoryRef(std::shared_ptr<BackingMem> backing_mem_, u64 offset_)
         : backing_mem(std::move(backing_mem_)), offset(offset_) {
         ASSERT(offset <= backing_mem->GetSize());
@@ -93,22 +94,26 @@ public:
         return cptr;
     }
 
-    u8* GetPtr() {
+    operator const u8*() const {
         return cptr;
     }
-    std::byte* GetBytes() {
-        return reinterpret_cast<std::byte*>(cptr);
-    }
-    operator const u8*() const {
+
+    u8* GetPtr() {
         return cptr;
     }
 
     const u8* GetPtr() const {
         return cptr;
     }
-    const std::byte* GetBytes() const {
-        return reinterpret_cast<const std::byte*>(cptr);
+
+    std::span<std::byte> GetBytes(std::size_t size) {
+        return std::span{reinterpret_cast<std::byte*>(cptr), size > csize ? csize : size};
     }
+
+    std::span<const std::byte> GetBytes(std::size_t size) const {
+        return std::span{reinterpret_cast<const std::byte*>(cptr), size > csize ? csize : size};
+    }
+
     std::size_t GetSize() const {
         return csize;
     }
