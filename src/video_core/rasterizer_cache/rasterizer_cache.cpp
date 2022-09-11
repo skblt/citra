@@ -21,88 +21,7 @@ static constexpr auto RangeFromInterval(Map& map, const Interval& interval) {
     return boost::make_iterator_range(map.equal_range(interval));
 }
 
-// Allocate an uninitialized texture of appropriate size and format for the surface
-OGLTexture RasterizerCache::AllocateSurfaceTexture(PixelFormat format, u32 width, u32 height) {
-    const FormatTuple& tuple = GetFormatTuple(format);
-    auto recycled_tex = host_texture_recycler.find({format, width, height});
-    if (recycled_tex != host_texture_recycler.end()) {
-        OGLTexture texture = std::move(recycled_tex->second);
-        host_texture_recycler.erase(recycled_tex);
-        return texture;
-    }
-
-    const GLsizei levels = static_cast<GLsizei>(std::log2(std::max(width, height))) + 1;
-
-    OGLTexture texture;
-    texture.Create();
-    texture.Allocate(GL_TEXTURE_2D, levels, tuple.internal_format, width, height);
-
-    return texture;
-}
-
-MICROPROFILE_DEFINE(RasterizerCache_CopySurface, "RasterizerCache", "CopySurface", MP_RGB(128, 192, 64));
-void RasterizerCache::CopySurface(const Surface& src_surface, const Surface& dst_surface,
-                                        SurfaceInterval copy_interval) {
-    MICROPROFILE_SCOPE(RasterizerCache_CopySurface);
-
-    SurfaceParams subrect_params = dst_surface->FromInterval(copy_interval);
-    ASSERT(subrect_params.GetInterval() == copy_interval && src_surface != dst_surface);
-
-    const auto dst_rect = dst_surface->GetScaledSubRect(subrect_params);
-    if (src_surface->type == SurfaceType::Fill) {
-        // FillSurface needs a 4 bytes buffer
-        const u32 fill_offset =
-            (boost::icl::first(copy_interval) - src_surface->addr) % src_surface->fill_size;
-        std::array<u8, 4> fill_buffer;
-
-        u32 fill_buff_pos = fill_offset;
-        for (std::size_t i = 0; i < fill_buffer.size(); i++) {
-            fill_buffer[i] = src_surface->fill_data[fill_buff_pos++ % src_surface->fill_size];
-        }
-
-        const ClearValue clear_value =
-            MakeClearValue(dst_surface->type, dst_surface->pixel_format, fill_buffer.data());
-
-        const TextureClear clear_rect = {
-            .surface_type = dst_surface->type,
-            .texture_format = dst_surface->pixel_format,
-            .texture_level = 0,
-            .rect = Rect2D{
-                .offset = {dst_rect.left, dst_rect.bottom},
-                .extent = {dst_rect.GetWidth(), dst_rect.GetHeight()}
-            }
-        };
-
-        runtime.ClearTexture(dst_surface->texture, clear_rect, clear_value);
-        return;
-    }
-
-    if (src_surface->CanSubRect(subrect_params)) {
-        const auto src_rect = src_surface->GetScaledSubRect(subrect_params);
-        const TextureBlit texture_blit = {
-            .surface_type = src_surface->type,
-            .src_level = 0,
-            .dst_level = 0,
-            .src_layer = 0,
-            .dst_layer = 0,
-            .src_region = Region2D{
-                .start = {src_rect.left, src_rect.bottom},
-                .end = {src_rect.right, src_rect.top}
-            },
-            .dst_region = Region2D{
-                .start = {dst_rect.left, dst_rect.bottom},
-                .end = {dst_rect.right, dst_rect.top}
-            }
-        };
-
-        runtime.BlitTextures(src_surface->texture, dst_surface->texture, texture_blit);
-        return;
-    }
-
-    UNREACHABLE();
-}
-
-enum MatchFlags {
+enum class MatchFlags {
     Invalid = 1,      ///< Surface is allowed to be only partially valid
     Exact = 1 << 1,   ///< Surface perfectly matches params
     SubRect = 1 << 2, ///< Surface encompasses params
@@ -111,9 +30,7 @@ enum MatchFlags {
     TexCopy = 1 << 5  ///< Surface that will match a display transfer "texture copy" parameters
 };
 
-static constexpr MatchFlags operator|(MatchFlags lhs, MatchFlags rhs) {
-    return static_cast<MatchFlags>(static_cast<int>(lhs) | static_cast<int>(rhs));
-}
+DECLARE_ENUM_FLAG_OPERATORS(MatchFlags);
 
 /// Get the best surface match (and its match type) for the given flags
 template <MatchFlags find_flags>
@@ -132,15 +49,15 @@ static Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams&
                                                : (params.res_scale <= surface->res_scale);
             // validity will be checked in GetCopyableInterval
             bool is_valid =
-                find_flags & MatchFlags::Copy
+                True(find_flags & MatchFlags::Copy)
                     ? true
                     : surface->IsRegionValid(validate_interval.value_or(params.GetInterval()));
 
-            if (!(find_flags & MatchFlags::Invalid) && !is_valid)
+            if (False(find_flags & MatchFlags::Invalid) && !is_valid)
                 continue;
 
             auto IsMatch_Helper = [&](auto check_type, auto match_fn) {
-                if (!(find_flags & check_type))
+                if (False(find_flags & check_type))
                     return;
 
                 bool matched;
@@ -246,6 +163,69 @@ bool RasterizerCache::BlitSurfaces(const Surface& src_surface,
 
     return false;
 }
+
+MICROPROFILE_DEFINE(RasterizerCache_CopySurface, "RasterizerCache", "CopySurface", MP_RGB(128, 192, 64));
+void RasterizerCache::CopySurface(const Surface& src_surface, const Surface& dst_surface,
+                                        SurfaceInterval copy_interval) {
+    MICROPROFILE_SCOPE(RasterizerCache_CopySurface);
+
+    SurfaceParams subrect_params = dst_surface->FromInterval(copy_interval);
+    ASSERT(subrect_params.GetInterval() == copy_interval && src_surface != dst_surface);
+
+    const auto dst_rect = dst_surface->GetScaledSubRect(subrect_params);
+    if (src_surface->type == SurfaceType::Fill) {
+        // FillSurface needs a 4 bytes buffer
+        const u32 fill_offset =
+            (boost::icl::first(copy_interval) - src_surface->addr) % src_surface->fill_size;
+        std::array<u8, 4> fill_buffer;
+
+        u32 fill_buff_pos = fill_offset;
+        for (std::size_t i = 0; i < fill_buffer.size(); i++) {
+            fill_buffer[i] = src_surface->fill_data[fill_buff_pos++ % src_surface->fill_size];
+        }
+
+        const ClearValue clear_value =
+            MakeClearValue(dst_surface->type, dst_surface->pixel_format, fill_buffer.data());
+
+        const TextureClear clear_rect = {
+            .surface_type = dst_surface->type,
+            .texture_format = dst_surface->pixel_format,
+            .texture_level = 0,
+            .rect = Rect2D{
+                .offset = {dst_rect.left, dst_rect.bottom},
+                .extent = {dst_rect.GetWidth(), dst_rect.GetHeight()}
+            }
+        };
+
+        runtime.ClearTexture(dst_surface->texture, clear_rect, clear_value);
+        return;
+    }
+
+    if (src_surface->CanSubRect(subrect_params)) {
+        const auto src_rect = src_surface->GetScaledSubRect(subrect_params);
+        const TextureBlit texture_blit = {
+            .surface_type = src_surface->type,
+            .src_level = 0,
+            .dst_level = 0,
+            .src_layer = 0,
+            .dst_layer = 0,
+            .src_region = Region2D{
+                .start = {src_rect.left, src_rect.bottom},
+                .end = {src_rect.right, src_rect.top}
+            },
+            .dst_region = Region2D{
+                .start = {dst_rect.left, dst_rect.bottom},
+                .end = {dst_rect.right, dst_rect.top}
+            }
+        };
+
+        runtime.BlitTextures(src_surface->texture, dst_surface->texture, texture_blit);
+        return;
+    }
+
+    UNREACHABLE();
+}
+
 
 Surface RasterizerCache::GetSurface(const SurfaceParams& params, ScaleMatch match_res_scale,
                                           bool load_if_create) {
@@ -1053,6 +1033,25 @@ void RasterizerCache::UnregisterSurface(const Surface& surface) {
     surface->registered = false;
     rasterizer.UpdatePagesCachedCount(surface->addr, surface->size, -1);
     surface_cache.subtract({surface->GetInterval(), SurfaceSet{surface}});
+}
+
+// Allocate an uninitialized texture of appropriate size and format for the surface
+OGLTexture RasterizerCache::AllocateSurfaceTexture(PixelFormat format, u32 width, u32 height) {
+    const FormatTuple& tuple = GetFormatTuple(format);
+    auto recycled_tex = host_texture_recycler.find({format, width, height});
+    if (recycled_tex != host_texture_recycler.end()) {
+        OGLTexture texture = std::move(recycled_tex->second);
+        host_texture_recycler.erase(recycled_tex);
+        return texture;
+    }
+
+    const GLsizei levels = static_cast<GLsizei>(std::log2(std::max(width, height))) + 1;
+
+    OGLTexture texture;
+    texture.Create();
+    texture.Allocate(GL_TEXTURE_2D, levels, tuple.internal_format, width, height);
+
+    return texture;
 }
 
 } // namespace OpenGL
