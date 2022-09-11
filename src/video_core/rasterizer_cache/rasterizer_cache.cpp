@@ -83,6 +83,8 @@ void RasterizerCache::CopySurface(const Surface& src_surface, const Surface& dst
             .surface_type = src_surface->type,
             .src_level = 0,
             .dst_level = 0,
+            .src_layer = 0,
+            .dst_layer = 0,
             .src_region = Region2D{
                 .start = {src_rect.left, src_rect.bottom},
                 .end = {src_rect.right, src_rect.top}
@@ -227,6 +229,8 @@ bool RasterizerCache::BlitSurfaces(const Surface& src_surface,
             .surface_type = src_surface->type,
             .src_level = 0,
             .dst_level = 0,
+            .src_layer = 0,
+            .dst_layer = 0,
             .src_region = Region2D{
                 .start = {src_rect.left, src_rect.bottom},
                 .end = {src_rect.right, src_rect.top}
@@ -463,6 +467,8 @@ Surface RasterizerCache::GetTextureSurface(const Pica::Texture::TextureInfo& inf
                         .surface_type = surface->type,
                         .src_level = 0,
                         .dst_level = level,
+                        .src_layer = 0,
+                        .dst_layer = 0,
                         .src_region = Region2D{
                             .start = {src_rect.left, src_rect.bottom},
                             .end = {src_rect.right, src_rect.top}
@@ -542,7 +548,8 @@ const CachedTextureCube& RasterizerCache::GetTextureCube(const TextureCubeConfig
 
     u32 scaled_size = cube.res_scale * config.width;
 
-    for (const Face& face : faces) {
+    for (std::size_t i = 0; i < faces.size(); i++) {
+        const Face& face = faces[i];
         if (face.watcher && !face.watcher->IsValid()) {
             auto surface = face.watcher->Get();
             if (!surface->invalid_regions.empty()) {
@@ -551,9 +558,11 @@ const CachedTextureCube& RasterizerCache::GetTextureCube(const TextureCubeConfig
 
             const auto src_rect = surface->GetScaledRect();
             const TextureBlit texture_blit = {
-                .surface_type = surface->type,
+                .surface_type = SurfaceType::Color,
                 .src_level = 0,
                 .dst_level = 0,
+                .src_layer = 0,
+                .dst_layer = static_cast<u32>(i),
                 .src_region = Region2D{
                     .start = {src_rect.left, src_rect.bottom},
                     .end = {src_rect.right, src_rect.top}
@@ -884,6 +893,8 @@ bool RasterizerCache::ValidateByReinterpretation(const Surface& surface,
                         .surface_type = type,
                         .src_level = 0,
                         .dst_level = 0,
+                        .src_layer = 0,
+                        .dst_layer = 0,
                         .src_region = Region2D{
                             .start = {0, 0},
                             .end = {width, height}
