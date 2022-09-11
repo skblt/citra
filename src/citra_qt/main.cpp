@@ -2426,14 +2426,6 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationName(QStringLiteral("Citra team"));
     QCoreApplication::setApplicationName(QStringLiteral("Citra"));
 
-    QSurfaceFormat format;
-    format.setVersion(4, 3);
-    format.setProfile(QSurfaceFormat::CoreProfile);
-    format.setSwapInterval(0);
-    // TODO: expose a setting for buffer value (ie default/single/double/triple)
-    format.setSwapBehavior(QSurfaceFormat::DefaultSwapBehavior);
-    QSurfaceFormat::setDefaultFormat(format);
-
 #ifdef __APPLE__
     std::string bin_path = FileUtil::GetBundleDirectory() + DIR_SEP + "..";
     chdir(bin_path.c_str());

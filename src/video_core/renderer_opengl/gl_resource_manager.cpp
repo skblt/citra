@@ -52,11 +52,13 @@ void OGLTexture::Release() {
     handle = 0;
 }
 
-void OGLTexture::Allocate(GLenum target, GLsizei levels, GLenum internalformat, GLsizei width,
+void OGLTexture::Allocate(GLenum _target, GLsizei levels, GLenum internalformat, GLsizei width,
                           GLsizei height, GLsizei depth) {
+    target = _target;
+
     GLuint old_tex = OpenGLState::GetCurState().texture_units[0].texture_2d;
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, handle);
+    glBindTexture(target, handle);
 
     switch (target) {
     case GL_TEXTURE_1D:
@@ -76,11 +78,11 @@ void OGLTexture::Allocate(GLenum target, GLsizei levels, GLenum internalformat, 
         break;
     }
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    glBindTexture(GL_TEXTURE_2D, old_tex);
+    glBindTexture(target, old_tex);
 }
 
 void OGLTexture::CopyFrom(const OGLTexture& other, GLenum target, GLsizei levels, GLsizei width,
