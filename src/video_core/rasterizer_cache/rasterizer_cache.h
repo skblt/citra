@@ -30,7 +30,6 @@ static_assert(std::is_same<SurfaceRegions::interval_type, SurfaceCache::interval
 
 using SurfaceRect_Tuple = std::tuple<Surface, Common::Rectangle<u32>>;
 using SurfaceSurfaceRect_Tuple = std::tuple<Surface, Surface, Common::Rectangle<u32>>;
-using PageMap = boost::icl::interval_map<u32, int>;
 
 enum class ScaleMatch {
     Exact,   // Only accept same res scale
@@ -91,9 +90,6 @@ public:
     /// Flush all cached resources tracked by this cache manager
     void FlushAll();
 
-    /// Clear all cached resources tracked by this cache manager
-    void ClearAll(bool flush);
-
     // Textures from destroyed surfaces are stored here to be recyled to reduce allocation overhead
     // in the driver
     // this must be placed above the surface_cache to ensure all cached surfaces are destroyed
@@ -130,7 +126,6 @@ private:
     VideoCore::RasterizerAccelerated& rasterizer;
     TextureRuntime runtime;
     SurfaceCache surface_cache;
-    PageMap cached_pages;
     SurfaceMap dirty_regions;
     SurfaceSet remove_surfaces;
 
