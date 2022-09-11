@@ -116,7 +116,6 @@ public:
         QSurfaceFormat format;
         format.setVersion(4, 4);
         format.setProfile(QSurfaceFormat::CoreProfile);
-        format.setOption(QSurfaceFormat::DebugContext);
         // TODO: expose a setting for buffer value (ie default/single/double/triple)
         format.setSwapBehavior(QSurfaceFormat::DefaultSwapBehavior);
         format.setSwapInterval(0);
