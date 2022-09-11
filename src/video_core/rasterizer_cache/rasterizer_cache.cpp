@@ -11,6 +11,7 @@
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
+#include "video_core/renderer_opengl/gl_vars.h"
 #include "video_core/renderer_opengl/texture_downloader_es.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
 
@@ -730,11 +731,11 @@ void RasterizerCache::DuplicateSurface(const Surface& src_surface,
 }
 
 void RasterizerCache::ValidateSurface(const Surface& surface, PAddr addr, u32 size) {
-    if (size == 0)
+    if (size == 0) [[unlikely]] {
         return;
+    }
 
     const SurfaceInterval validate_interval(addr, addr + size);
-
     if (surface->type == SurfaceType::Fill) {
         // Sanity check, fill surfaces will always be valid when used
         ASSERT(surface->IsRegionValid(validate_interval));
@@ -742,15 +743,16 @@ void RasterizerCache::ValidateSurface(const Surface& surface, PAddr addr, u32 si
     }
 
     auto validate_regions = surface->invalid_regions & validate_interval;
-    auto notify_validated = [&](SurfaceInterval interval) {
+    auto NotifyValidated = [&](SurfaceInterval interval) {
         surface->invalid_regions.erase(interval);
         validate_regions.erase(interval);
     };
 
     while (true) {
         const auto it = validate_regions.begin();
-        if (it == validate_regions.end())
+        if (it == validate_regions.end()) {
             break;
+        }
 
         const auto interval = *it & validate_interval;
         // Look for a valid surface to copy from
@@ -761,14 +763,14 @@ void RasterizerCache::ValidateSurface(const Surface& surface, PAddr addr, u32 si
         if (copy_surface != nullptr) {
             SurfaceInterval copy_interval = params.GetCopyableInterval(copy_surface);
             CopySurface(copy_surface, surface, copy_interval);
-            notify_validated(copy_interval);
+            NotifyValidated(copy_interval);
             continue;
         }
 
         // Try to find surface in cache with different format
         // that can can be reinterpreted to the requested format.
         if (ValidateByReinterpretation(surface, params, interval)) {
-            notify_validated(interval);
+            NotifyValidated(interval);
             continue;
         }
         // Could not find a matching reinterpreter, check if we need to implement a
@@ -788,11 +790,104 @@ void RasterizerCache::ValidateSurface(const Surface& surface, PAddr addr, u32 si
 
         // Load data from 3DS memory
         FlushRegion(params.addr, params.size);
-        surface->LoadGLBuffer(params.addr, params.end);
-        surface->UploadGLTexture(surface->GetSubRect(params));
-        notify_validated(params.GetInterval());
+        UploadSurface(surface, interval);
+        NotifyValidated(params.GetInterval());
     }
 }
+
+MICROPROFILE_DEFINE(RasterizerCache_SurfaceLoad, "RasterizerCache", "Surface Load", MP_RGB(128, 192, 64));
+void RasterizerCache::UploadSurface(const Surface& surface, const SurfaceInterval& interval) {
+    const SurfaceParams info = surface->FromInterval(interval);
+    const u32 load_start = info.addr;
+    const u32 load_end = info.end;
+    ASSERT(load_start >= surface->addr && load_end <= surface->end);
+
+    const StagingBuffer& staging = runtime.FindStaging(
+                surface->width * surface->height * GetBytesPerPixel(surface->pixel_format), true);
+    auto source_ptr = VideoCore::g_memory->GetPhysicalRef(info.addr);
+    if (!source_ptr) [[unlikely]] {
+        return;
+    }
+
+    const auto start_offset = load_start - surface->addr;
+    const auto upload_data = source_ptr.GetWriteBytes(load_end - load_start);
+    const auto upload_size = static_cast<u32>(upload_data.size());
+
+    MICROPROFILE_SCOPE(RasterizerCache_SurfaceLoad);
+
+    if (!surface->is_tiled) {
+        ASSERT(surface->type == SurfaceType::Color);
+
+        const auto dest_buffer = staging.mapped.subspan(start_offset, upload_size);
+        if (surface->pixel_format == PixelFormat::RGBA8 && GLES) {
+            Pica::Texture::ConvertABGRToRGBA(upload_data, dest_buffer);
+        } else if (surface->pixel_format == PixelFormat::RGB8 && GLES) {
+            Pica::Texture::ConvertBGRToRGB(upload_data, dest_buffer);
+        } else {
+            std::memcpy(dest_buffer.data(), upload_data.data(), upload_size);
+        }
+    } else {
+        UnswizzleTexture(*surface, start_offset, upload_data, staging.mapped);
+    }
+
+    surface->UploadTexture(surface->GetSubRect(info), staging);
+}
+
+MICROPROFILE_DEFINE(RasterizerCache_SurfaceFlush, "RasterizerCache", "Surface Flush", MP_RGB(128, 192, 64));
+void RasterizerCache::DownloadSurface(const Surface& surface, const SurfaceInterval& interval) {
+    const u32 flush_start = boost::icl::first(interval);
+    const u32 flush_end = boost::icl::last_next(interval);
+    ASSERT(flush_start >= surface->addr && flush_end <= surface->end);
+
+    const StagingBuffer& staging = runtime.FindStaging(
+                surface->width * surface->height * GetBytesPerPixel(surface->pixel_format), false);
+    if (surface->type != SurfaceType::Fill) {
+        SurfaceParams params = surface->FromInterval(interval);
+        surface->DownloadTexture(surface->GetSubRect(params), staging);
+    }
+
+    auto dest_ptr = VideoCore::g_memory->GetPhysicalRef(flush_start);
+    if (!dest_ptr) [[unlikely]] {
+        return;
+    }
+
+    const auto start_offset = flush_start - surface->addr;
+    const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
+    const auto download_size = static_cast<u32>(download_dest.size());
+
+    MICROPROFILE_SCOPE(RasterizerCache_SurfaceFlush);
+
+    if (surface->type == SurfaceType::Fill) {
+        const u32 coarse_start_offset = start_offset - (start_offset % surface->fill_size);
+        const u32 backup_bytes = start_offset % surface->fill_size;
+        std::array<u8, 4> backup_data;
+        if (backup_bytes) {
+            std::memcpy(backup_data.data(), &dest_ptr[coarse_start_offset], backup_bytes);
+        }
+
+        for (u32 offset = coarse_start_offset; offset < download_size; offset += surface->fill_size) {
+            std::memcpy(&dest_ptr[offset], &surface->fill_data[0],
+                        std::min(surface->fill_size, download_size - offset));
+        }
+
+        if (backup_bytes)
+            std::memcpy(&dest_ptr[coarse_start_offset], &backup_data[0], backup_bytes);
+    } else if (!surface->is_tiled) {
+        ASSERT(surface->type == SurfaceType::Color);
+
+        const auto download_data = staging.mapped.subspan(start_offset, download_size);
+        if (surface->pixel_format == PixelFormat::RGBA8 && GLES) {
+            Pica::Texture::ConvertABGRToRGBA(download_data, download_dest);
+        } else if (surface->pixel_format == PixelFormat::RGB8 && GLES) {
+            Pica::Texture::ConvertBGRToRGB(download_data, download_dest);
+        } else {
+            std::memcpy(download_dest.data(), download_data.data(), download_size);
+        }
+    } else {
+        SwizzleTexture(*surface, start_offset, staging.mapped, download_dest);
+    }
+}
+
 
 bool RasterizerCache::NoUnimplementedReinterpretations(const Surface& surface,
                                                              SurfaceParams& params,
@@ -903,8 +998,9 @@ bool RasterizerCache::ValidateByReinterpretation(const Surface& surface,
 void RasterizerCache::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
     std::lock_guard lock{mutex};
 
-    if (size == 0)
+    if (size == 0) [[unlikely]] {
         return;
+    }
 
     const SurfaceInterval flush_interval(addr, addr + size);
     SurfaceRegions flushed_intervals;
@@ -922,14 +1018,10 @@ void RasterizerCache::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
         // Sanity check, this surface is the last one that marked this region dirty
         ASSERT(surface->IsRegionValid(interval));
 
-        if (surface->type != SurfaceType::Fill) {
-            SurfaceParams params = surface->FromInterval(interval);
-            surface->DownloadGLTexture(surface->GetSubRect(params));
-        }
-
-        surface->FlushGLBuffer(boost::icl::first(interval), boost::icl::last_next(interval));
+        DownloadSurface(surface, interval);
         flushed_intervals += interval;
     }
+
     // Reset dirty regions
     dirty_regions -= flushed_intervals;
 }
