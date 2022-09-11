@@ -39,7 +39,8 @@ static bool IsVendorIntel() {
 #endif
 
 RasterizerOpenGL::RasterizerOpenGL(Frontend::EmuWindow& emu_window, Driver& driver)
-    : driver(driver), is_amd(IsVendorAmd()), vertex_buffer(GL_ARRAY_BUFFER, VERTEX_BUFFER_SIZE, is_amd),
+    : driver{driver}, runtime{driver}, res_cache{*this, runtime},
+      is_amd(IsVendorAmd()), vertex_buffer(GL_ARRAY_BUFFER, VERTEX_BUFFER_SIZE, is_amd),
       uniform_buffer(GL_UNIFORM_BUFFER, UNIFORM_BUFFER_SIZE, false),
       index_buffer(GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE, false),
       texture_buffer(GL_TEXTURE_BUFFER, TEXTURE_BUFFER_SIZE, false),
@@ -524,8 +525,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         regs.rasterizer.viewport_corner.y // bottom
     };
 
-    Surface color_surface;
-    Surface depth_surface;
+    RasterizerCache::Surface color_surface, depth_surface;
     Common::Rectangle<u32> surfaces_rect;
     std::tie(color_surface, depth_surface, surfaces_rect) =
         res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb, viewport_rect_unscaled);
@@ -636,7 +636,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
     const auto BindCubeFace = [&](GLuint& target, Pica::TexturingRegs::CubeFace face,
                                   Pica::Texture::TextureInfo& info) {
         info.physical_address = regs.texturing.GetCubePhysicalAddress(face);
-        Surface surface = res_cache.GetTextureSurface(info);
+        auto surface = res_cache.GetTextureSurface(info);
 
         if (surface != nullptr) {
             CheckBarrier(target = surface->texture.handle);
@@ -655,7 +655,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                 using TextureType = Pica::TexturingRegs::TextureConfig::TextureType;
                 switch (texture.config.type.Value()) {
                 case TextureType::Shadow2D: {
-                    Surface surface = res_cache.GetTextureSurface(texture);
+                    auto surface = res_cache.GetTextureSurface(texture);
                     if (surface != nullptr) {
                         CheckBarrier(state.image_shadow_texture_px = surface->texture.handle);
                     } else {
@@ -675,23 +675,26 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                     BindCubeFace(state.image_shadow_texture_nz, CubeFace::NegativeZ, info);
                     continue;
                 }
-                case TextureType::TextureCube:
+                case TextureType::TextureCube: {
                     using CubeFace = Pica::TexturingRegs::CubeFace;
-                    TextureCubeConfig config;
-                    config.px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX);
-                    config.nx = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX);
-                    config.py = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY);
-                    config.ny = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY);
-                    config.pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ);
-                    config.nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ);
-                    config.width = texture.config.width;
-                    config.format = texture.format;
+                    const VideoCore::TextureCubeConfig config = {
+                        .px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX),
+                        .nx = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX),
+                        .py = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY),
+                        .ny = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY),
+                        .pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ),
+                        .nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ),
+                        .width = texture.config.width,
+                        .format = texture.format
+                    };
+
                     state.texture_cube_unit.texture_cube =
-                        res_cache.GetTextureCube(config).texture.handle;
+                        res_cache.GetTextureCube(config)->texture.handle;
 
                     texture_cube_sampler.SyncWithConfig(texture.config);
                     state.texture_units[texture_index].texture_2d = 0;
                     continue; // Texture unit 0 setup finished. Continue to next unit
+                }
                 default:
                     break;
                 }
@@ -700,7 +703,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
             }
 
             texture_samplers[texture_index].SyncWithConfig(texture.config);
-            Surface surface = res_cache.GetTextureSurface(texture);
+            auto surface = res_cache.GetTextureSurface(texture);
             if (surface != nullptr) {
                 CheckBarrier(state.texture_units[texture_index].texture_2d =
                                  surface->texture.handle);
@@ -719,19 +722,15 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         }
     }
 
+    // The game is trying to use a surface as a texture and framebuffer at the same time
+    // which causes unpredictable behavior on the host.
+    // Making a copy to sample from eliminates this issue and seems to be fairly cheap.
     OGLTexture temp_tex;
     if (need_duplicate_texture) {
-        const auto& tuple = GetFormatTuple(color_surface->pixel_format);
-        const GLsizei levels = color_surface->max_level + 1;
+        temp_tex = runtime.Allocate2D(color_surface->GetScaledWidth(), color_surface->GetScaledHeight(),
+                                      color_surface->pixel_format);
 
-        // The game is trying to use a surface as a texture and framebuffer at the same time
-        // which causes unpredictable behavior on the host.
-        // Making a copy to sample from eliminates this issue and seems to be fairly cheap.
-        temp_tex.Create();
-        temp_tex.Allocate(GL_TEXTURE_2D, levels, tuple.internal_format,
-                          color_surface->GetScaledWidth(), color_surface->GetScaledHeight());
-
-        temp_tex.CopyFrom(color_surface->texture, GL_TEXTURE_2D, levels,
+        temp_tex.CopyFrom(color_surface->texture, GL_TEXTURE_2D, color_surface->max_level + 1,
                           color_surface->GetScaledWidth(), color_surface->GetScaledHeight());
 
         for (auto& unit : state.texture_units) {
@@ -1362,40 +1361,37 @@ void RasterizerOpenGL::FlushAndInvalidateRegion(PAddr addr, u32 size) {
 bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config) {
     MICROPROFILE_SCOPE(OpenGL_Blits);
 
-    SurfaceParams src_params;
+    VideoCore::SurfaceParams src_params;
     src_params.addr = config.GetPhysicalInputAddress();
     src_params.width = config.output_width;
     src_params.stride = config.input_width;
     src_params.height = config.output_height;
     src_params.is_tiled = !config.input_linear;
-    src_params.pixel_format = PixelFormatFromGPUPixelFormat(config.input_format);
+    src_params.pixel_format = VideoCore::PixelFormatFromGPUPixelFormat(config.input_format);
     src_params.UpdateParams();
 
-    SurfaceParams dst_params;
+    VideoCore::SurfaceParams dst_params;
     dst_params.addr = config.GetPhysicalOutputAddress();
     dst_params.width = config.scaling != config.NoScale ? config.output_width.Value() / 2
                                                         : config.output_width.Value();
     dst_params.height = config.scaling == config.ScaleXY ? config.output_height.Value() / 2
                                                          : config.output_height.Value();
     dst_params.is_tiled = config.input_linear != config.dont_swizzle;
-    dst_params.pixel_format = PixelFormatFromGPUPixelFormat(config.output_format);
+    dst_params.pixel_format = VideoCore::PixelFormatFromGPUPixelFormat(config.output_format);
     dst_params.UpdateParams();
 
-    Common::Rectangle<u32> src_rect;
-    Surface src_surface;
-    std::tie(src_surface, src_rect) =
-        res_cache.GetSurfaceSubRect(src_params, ScaleMatch::Ignore, true);
+    auto [src_surface, src_rect] =
+            res_cache.GetSurfaceSubRect(src_params, VideoCore::ScaleMatch::Ignore, true);
     if (src_surface == nullptr)
         return false;
 
     dst_params.res_scale = src_surface->res_scale;
 
-    Common::Rectangle<u32> dst_rect;
-    Surface dst_surface;
-    std::tie(dst_surface, dst_rect) =
-        res_cache.GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, false);
-    if (dst_surface == nullptr)
+    auto [dst_surface, dst_rect] =
+            res_cache.GetSurfaceSubRect(dst_params, VideoCore::ScaleMatch::Upscale, false);
+    if (dst_surface == nullptr) {
         return false;
+    }
 
     if (src_surface->is_tiled != dst_surface->is_tiled)
         std::swap(src_rect.top, src_rect.bottom);
@@ -1442,7 +1438,7 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
         return false;
     }
 
-    SurfaceParams src_params;
+    VideoCore::SurfaceParams src_params;
     src_params.addr = config.GetPhysicalInputAddress();
     src_params.stride = input_width + input_gap; // stride in bytes
     src_params.width = input_width;              // width in bytes
@@ -1450,9 +1446,7 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
     src_params.size = ((src_params.height - 1) * src_params.stride) + src_params.width;
     src_params.end = src_params.addr + src_params.size;
 
-    Common::Rectangle<u32> src_rect;
-    Surface src_surface;
-    std::tie(src_surface, src_rect) = res_cache.GetTexCopySurface(src_params);
+    auto [src_surface, src_rect] = res_cache.GetTexCopySurface(src_params);
     if (src_surface == nullptr) {
         return false;
     }
@@ -1464,7 +1458,7 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
         return false;
     }
 
-    SurfaceParams dst_params = *src_surface;
+    VideoCore::SurfaceParams dst_params = *src_surface;
     dst_params.addr = config.GetPhysicalOutputAddress();
     dst_params.width = src_rect.GetWidth() / src_surface->res_scale;
     dst_params.stride = dst_params.width + src_surface->PixelsInBytes(
@@ -1475,15 +1469,13 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
 
     // Since we are going to invalidate the gap if there is one, we will have to load it first
     const bool load_gap = output_gap != 0;
-    Common::Rectangle<u32> dst_rect;
-    Surface dst_surface;
-    std::tie(dst_surface, dst_rect) =
-        res_cache.GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, load_gap);
+    auto [dst_surface, dst_rect] =
+        res_cache.GetSurfaceSubRect(dst_params, VideoCore::ScaleMatch::Upscale, load_gap);
     if (dst_surface == nullptr) {
         return false;
     }
 
-    if (dst_surface->type == SurfaceType::Texture) {
+    if (dst_surface->type == VideoCore::SurfaceType::Texture) {
         return false;
     }
 
@@ -1496,7 +1488,7 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
 }
 
 bool RasterizerOpenGL::AccelerateFill(const GPU::Regs::MemoryFillConfig& config) {
-    Surface dst_surface = res_cache.GetFillSurface(config);
+    auto dst_surface = res_cache.GetFillSurface(config);
     if (dst_surface == nullptr)
         return false;
 
@@ -1512,19 +1504,17 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
     }
     MICROPROFILE_SCOPE(OpenGL_CacheManagement);
 
-    SurfaceParams src_params;
+    VideoCore::SurfaceParams src_params;
     src_params.addr = framebuffer_addr;
     src_params.width = std::min(config.width.Value(), pixel_stride);
     src_params.height = config.height;
     src_params.stride = pixel_stride;
     src_params.is_tiled = false;
-    src_params.pixel_format = PixelFormatFromGPUPixelFormat(config.color_format);
+    src_params.pixel_format = VideoCore::PixelFormatFromGPUPixelFormat(config.color_format);
     src_params.UpdateParams();
 
-    Common::Rectangle<u32> src_rect;
-    Surface src_surface;
-    std::tie(src_surface, src_rect) =
-        res_cache.GetSurfaceSubRect(src_params, ScaleMatch::Ignore, true);
+    const auto [src_surface, src_rect] =
+        res_cache.GetSurfaceSubRect(src_params, VideoCore::ScaleMatch::Ignore, true);
 
     if (src_surface == nullptr) {
         return false;
