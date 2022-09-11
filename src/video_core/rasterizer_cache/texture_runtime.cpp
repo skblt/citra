@@ -212,46 +212,49 @@ void TextureRuntime::GenerateMipmaps(OGLTexture& texture, u32 max_level) {
 }
 
 const StagingBuffer& TextureRuntime::FindStaging(u32 size, bool upload) {
+    const GLenum target = upload ? GL_PIXEL_UNPACK_BUFFER : GL_PIXEL_PACK_BUFFER;
     const GLbitfield access = upload ? GL_MAP_WRITE_BIT : GL_MAP_READ_BIT;
     auto& search = upload ? upload_buffers : download_buffers;
 
-    const StagingBuffer key = {
-        .size = size
-    };
-
-    for (auto it = search.lower_bound(key); it != search.end(); it++) {
-        // Attempt to find a free buffer that fits the requested data
-        if (it->IsFree()) {
+    // Attempt to find a free buffer that fits the requested data
+    for (auto it = search.lower_bound({.size = size}); it != search.end(); it++) {
+        if (!upload || it->IsFree()) {
             return *it;
         }
     }
 
-    StagingBuffer staging{};
-    staging.buffer.Create();
+    OGLBuffer buffer{};
+    buffer.Create();
 
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, staging.buffer.handle);
+    glBindBuffer(target, buffer.handle);
 
     // Allocate a new buffer and map the data to the host
-    void* data = nullptr;
+    std::byte* data = nullptr;
     if (driver.IsOpenGLES() && driver.HasExtBufferStorage()) {
         const GLbitfield storage = upload ? GL_MAP_WRITE_BIT : GL_MAP_READ_BIT | GL_CLIENT_STORAGE_BIT_EXT;
-        glBufferStorageEXT(GL_PIXEL_UNPACK_BUFFER, size, nullptr, storage | GL_MAP_PERSISTENT_BIT_EXT |
-                                                                         GL_MAP_COHERENT_BIT_EXT);
-        data = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, access | GL_MAP_PERSISTENT_BIT_EXT |
-                                                                                GL_MAP_COHERENT_BIT_EXT);
+        glBufferStorageEXT(target, size, nullptr, storage | GL_MAP_PERSISTENT_BIT_EXT |
+                                                            GL_MAP_COHERENT_BIT_EXT);
+        data = reinterpret_cast<std::byte*>(glMapBufferRange(target, 0, size, access | GL_MAP_PERSISTENT_BIT_EXT |
+                                                          GL_MAP_COHERENT_BIT_EXT));
     } else if (driver.HasArbBufferStorage()) {
         const GLbitfield storage = upload ? GL_MAP_WRITE_BIT : GL_MAP_READ_BIT | GL_CLIENT_STORAGE_BIT;
-        glBufferStorage(GL_PIXEL_UNPACK_BUFFER, size, nullptr, storage | GL_MAP_PERSISTENT_BIT |
-                                                                         GL_MAP_COHERENT_BIT);
-        data = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, access | GL_MAP_PERSISTENT_BIT |
-                                                                          GL_MAP_COHERENT_BIT);
+        glBufferStorage(target, size, nullptr, storage | GL_MAP_PERSISTENT_BIT |
+                                                         GL_MAP_COHERENT_BIT);
+        data = reinterpret_cast<std::byte*>(glMapBufferRange(target, 0, size, access | GL_MAP_PERSISTENT_BIT |
+                                                          GL_MAP_COHERENT_BIT));
     } else {
         UNIMPLEMENTED();
     }
 
-    // Insert it to the cache and return the memory
-    staging.mapped = std::span{reinterpret_cast<std::byte*>(data), size};
-    const auto& it = search.insert(std::move(staging));
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
+    StagingBuffer staging = {
+        .buffer = std::move(buffer),
+        .mapped = std::span{data, size},
+        .size = size
+    };
+
+    const auto& it = search.emplace(std::move(staging));
     return *it;
 }
 
