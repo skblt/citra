@@ -7,7 +7,7 @@
 #include "common/vector_math.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 
-namespace OpenGL {
+namespace VideoCore {
 
 struct Offset {
     constexpr auto operator<=>(const Offset&) const noexcept = default;
