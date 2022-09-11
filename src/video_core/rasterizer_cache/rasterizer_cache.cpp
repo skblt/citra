@@ -920,30 +920,6 @@ bool RasterizerCache::ValidateByReinterpretation(const Surface& surface,
     return false;
 }
 
-void RasterizerCache::ClearAll(bool flush) {
-    const auto flush_interval = PageMap::interval_type::right_open(0x0, 0xFFFFFFFF);
-    // Force flush all surfaces from the cache
-    if (flush) {
-        FlushRegion(0x0, 0xFFFFFFFF);
-    }
-    // Unmark all of the marked pages
-    for (auto& pair : RangeFromInterval(cached_pages, flush_interval)) {
-        const auto interval = pair.first & flush_interval;
-
-        const PAddr interval_start_addr = boost::icl::first(interval) << Memory::CITRA_PAGE_BITS;
-        const PAddr interval_end_addr = boost::icl::last_next(interval) << Memory::CITRA_PAGE_BITS;
-        const u32 interval_size = interval_end_addr - interval_start_addr;
-
-        VideoCore::g_memory->RasterizerMarkRegionCached(interval_start_addr, interval_size, false);
-    }
-
-    // Remove the whole cache without really looking at it.
-    cached_pages -= flush_interval;
-    dirty_regions -= SurfaceInterval(0x0, 0xFFFFFFFF);
-    surface_cache -= SurfaceInterval(0x0, 0xFFFFFFFF);
-    remove_surfaces.clear();
-}
-
 void RasterizerCache::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
     std::lock_guard lock{mutex};
 
