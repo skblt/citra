@@ -1,0 +1,129 @@
+// Copyright 2022 Citra Emulator Project
+// Licensed under GPLv2 or any later version
+// Refer to the license.txt file included.
+
+#pragma once
+#include <span>
+#include <set>
+#include "video_core/rasterizer_cache/rasterizer_cache.h"
+#include "video_core/rasterizer_cache/surface_base.h"
+#include "video_core/rasterizer_cache/types.h"
+#include "video_core/renderer_opengl/gl_resource_manager.h"
+
+namespace OpenGL {
+
+struct FormatTuple {
+    GLint internal_format;
+    GLenum format;
+    GLenum type;
+};
+
+struct StagingBuffer {
+    OGLBuffer buffer{};
+    mutable OGLSync buffer_lock{};
+    std::span<std::byte> mapped{};
+    u32 size{};
+
+    bool operator<(const StagingBuffer& other) const {
+        return size < other.size;
+    }
+
+    /// Returns true if the buffer does not take part in pending transfer operations
+    bool IsFree() const {
+        if (buffer_lock) {
+            GLint status;
+            glGetSynciv(buffer_lock.handle, GL_SYNC_STATUS, 1, nullptr, &status);
+            return status == GL_SIGNALED;
+        }
+
+        return true;
+    }
+
+    /// Prevents the runtime from reusing the buffer until the transfer operation is complete
+    void Lock() const {
+        if (buffer_lock) {
+            buffer_lock.Release();
+        }
+
+        buffer_lock.Create();
+    }
+};
+
+class Driver;
+
+/**
+ * Provides texture manipulation functions to the rasterizer cache
+ * Separating this into a class makes it easier to abstract graphics API code
+ */
+class TextureRuntime {
+    friend class CachedSurface;
+public:
+    TextureRuntime(Driver& driver);
+    ~TextureRuntime() = default;
+
+    /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
+    const StagingBuffer& FindStaging(u32 size, bool upload);
+
+    /// Returns the OpenGL format tuple associated with the provided pixel format
+    const FormatTuple& GetFormatTuple(VideoCore::PixelFormat pixel_format);
+
+    /// Allocates a 2D OpenGL texture with the specified dimentions and format
+    OGLTexture Allocate2D(u32 width, u32 height, VideoCore::PixelFormat format);
+
+    /// Allocates an OpenGL cube map texture with the specified dimentions and format
+    OGLTexture AllocateCubeMap(u32 width, VideoCore::PixelFormat format);
+
+    /// Copies the GPU pixel data to the provided pixels buffer
+    void ReadTexture(OGLTexture& texture, const VideoCore::BufferTextureCopy& copy,
+                     VideoCore::PixelFormat format);
+
+    /// Fills the rectangle of the texture with the clear value provided
+    bool ClearTexture(OGLTexture& texture, const VideoCore::TextureClear& clear,
+                      VideoCore::ClearValue value);
+
+    /// Copies a rectangle of src_tex to another rectange of dst_rect
+    bool CopyTextures(OGLTexture& source, OGLTexture& dest, const VideoCore::TextureCopy& copy);
+
+    /// Blits a rectangle of src_tex to another rectange of dst_rect
+    bool BlitTextures(OGLTexture& source, OGLTexture& dest, const VideoCore::TextureBlit& blit);
+
+    /// Generates mipmaps for all the available levels of the texture
+    void GenerateMipmaps(OGLTexture& texture, u32 max_level);
+
+private:
+    Driver& driver;
+    OGLFramebuffer read_fbo, draw_fbo;
+    std::unordered_multimap<VideoCore::HostTextureTag, OGLTexture> texture2d_recycler;
+
+    // Staging buffers stored in increasing size
+    std::multiset<StagingBuffer> upload_buffers;
+    std::multiset<StagingBuffer> download_buffers;
+};
+
+class CachedSurface : public VideoCore::SurfaceBase<CachedSurface> {
+public:
+    CachedSurface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
+        : VideoCore::SurfaceBase<CachedSurface>{params}, runtime{runtime} {}
+    ~CachedSurface() override = default;
+
+    /// Uploads pixel data in staging to a rectangle region of the surface texture
+    void UploadTexture(Common::Rectangle<u32> rect, const StagingBuffer& staging);
+
+    /// Downloads pixel data to staging from a rectangle region of the surface texture
+    void DownloadTexture(Common::Rectangle<u32> rect, const StagingBuffer& staging);
+
+private:
+    TextureRuntime& runtime;
+
+public:
+    OGLTexture texture{};
+};
+
+struct Traits {
+    using Runtime = TextureRuntime;
+    using Surface = CachedSurface;
+};
+
+using RasterizerCache = VideoCore::RasterizerCache<Traits>;
+
+} // namespace OpenGL

@@ -9,11 +9,10 @@
 #include "common/alignment.h"
 #include "common/color.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
-#include "video_core/renderer_opengl/gl_vars.h"
 #include "video_core/texture/etc1.h"
 #include "video_core/utils.h"
 
-namespace OpenGL {
+namespace VideoCore {
 
 template <typename T>
 inline T MakeInt(const std::byte* bytes) {
@@ -46,14 +45,6 @@ inline void DecodePixel(const std::byte* source, std::byte* dest) {
         const u8 ia4 = static_cast<const u8>(source[0]);
         std::memset(dest, Color::Convert4To8(ia4 >> 4), 3);
         dest[3] = std::byte{Color::Convert4To8(ia4 & 0xF)};
-    } else if (format == PixelFormat::RGBA8 && GLES) {
-        const u32 abgr = MakeInt<u32>(source);
-        const u32 rgba = std::byteswap(abgr);
-        std::memcpy(dest, &rgba, sizeof(u32));
-    } else if (format == PixelFormat::RGB8 && GLES) {
-        dest[0] = source[2];
-        dest[1] = source[1];
-        dest[2] = source[0];
     } else {
         std::memcpy(dest, source, bytes_per_pixel);
     }
@@ -111,13 +102,6 @@ inline void EncodePixel(const std::byte* source, std::byte* dest) {
     if constexpr (format == PixelFormat::D24S8) {
         const u32 s8d24 = std::rotr(MakeInt<u32>(source), 8);
         std::memcpy(dest, &s8d24, sizeof(u32));
-    } else if (format == PixelFormat::RGBA8 && GLES) {
-        const u32 abgr = std::byteswap(MakeInt<u32>(source));
-        std::memcpy(dest, &abgr, sizeof(u32));
-    } else if (format == PixelFormat::RGB8 && GLES) {
-        dest[0] = source[2];
-        dest[1] = source[1];
-        dest[2] = source[0];
     } else {
         std::memcpy(dest, source, bytes_per_pixel);
     }

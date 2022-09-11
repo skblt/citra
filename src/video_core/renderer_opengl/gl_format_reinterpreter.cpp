@@ -60,8 +60,8 @@ void main() {
         vao.Create();
     }
 
-    PixelFormat GetSourceFormat() const override {
-        return PixelFormat::RGBA4;
+    VideoCore::PixelFormat GetSourceFormat() const override {
+        return VideoCore::PixelFormat::RGBA4;
     }
 
     void Reinterpret(const OGLTexture& src_tex, Common::Rectangle<u32> src_rect,
@@ -170,8 +170,8 @@ void main() {
         }
     }
 
-    PixelFormat GetSourceFormat() const override {
-        return PixelFormat::D24S8;
+    VideoCore::PixelFormat GetSourceFormat() const override {
+        return VideoCore::PixelFormat::D24S8;
     }
 
     void Reinterpret(const OGLTexture& src_tex, Common::Rectangle<u32> src_rect,
@@ -246,18 +246,18 @@ FormatReinterpreterOpenGL::FormatReinterpreterOpenGL() {
     const std::string_view vendor{reinterpret_cast<const char*>(glGetString(GL_VENDOR))};
     const std::string_view version{reinterpret_cast<const char*>(glGetString(GL_VERSION))};
 
-    auto Register = [this](PixelFormat dest, std::unique_ptr<FormatReinterpreterBase>&& obj) {
+    auto Register = [this](VideoCore::PixelFormat dest, std::unique_ptr<FormatReinterpreterBase>&& obj) {
         const u32 dst_index = static_cast<u32>(dest);
         return reinterpreters[dst_index].push_back(std::move(obj));
     };
 
-    Register(PixelFormat::RGBA8, std::make_unique<ShaderD24S8toRGBA8>());
+    Register(VideoCore::PixelFormat::RGBA8, std::make_unique<ShaderD24S8toRGBA8>());
     LOG_INFO(Render_OpenGL, "Using shader for D24S8 to RGBA8 reinterpretation");
 
-    Register(PixelFormat::RGB5A1, std::make_unique<RGBA4toRGB5A1>());
+    Register(VideoCore::PixelFormat::RGB5A1, std::make_unique<RGBA4toRGB5A1>());
 }
 
-auto FormatReinterpreterOpenGL::GetPossibleReinterpretations(PixelFormat dst_format)
+auto FormatReinterpreterOpenGL::GetPossibleReinterpretations(VideoCore::PixelFormat dst_format)
     -> const ReinterpreterList& {
     return reinterpreters[static_cast<u32>(dst_format)];
 }

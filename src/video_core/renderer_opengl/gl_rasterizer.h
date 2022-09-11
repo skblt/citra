@@ -6,10 +6,10 @@
 #include "common/vector_math.h"
 #include "core/hw/gpu.h"
 #include "video_core/pica_types.h"
-#include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/regs_lighting.h"
 #include "video_core/regs_texturing.h"
+#include "video_core/renderer_opengl/gl_texture_runtime.h"
 #include "video_core/renderer_opengl/gl_shader_manager.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_stream_buffer.h"
@@ -252,6 +252,7 @@ private:
     OpenGLState state;
     GLuint default_texture;
 
+    TextureRuntime runtime;
     RasterizerCache res_cache;
 
     std::vector<HardwareVertex> vertex_batch;
