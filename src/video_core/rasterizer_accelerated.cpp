@@ -71,4 +71,38 @@ void RasterizerAccelerated::UpdatePagesCachedCount(PAddr addr, u32 size, int del
     }
 }
 
+void RasterizerAccelerated::ClearAll(bool flush) {
+    // Force flush all surfaces from the cache
+    if (flush) {
+        FlushRegion(0x0, 0xFFFFFFFF);
+    }
+
+    u32 uncache_start_addr = 0;
+    u32 uncache_bytes = 0;
+
+    for (u32 page = 0; page != cached_pages.size(); page++) {
+        auto& count = cached_pages.at(page);
+
+        // Assume delta is either -1 or 1
+        if (count != 0) {
+            if (uncache_bytes == 0) {
+                uncache_start_addr = page << Memory::CITRA_PAGE_BITS;
+            }
+
+            uncache_bytes += Memory::CITRA_PAGE_SIZE;
+        } else if (uncache_bytes > 0) {
+            VideoCore::g_memory->RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes,
+                                                            false);
+            uncache_bytes = 0;
+        }
+    }
+
+    if (uncache_bytes > 0) {
+        VideoCore::g_memory->RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes,
+                                                        false);
+    }
+
+    cached_pages = {};
+}
+
 } // namespace VideoCore

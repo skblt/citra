@@ -1361,10 +1361,6 @@ void RasterizerOpenGL::FlushAndInvalidateRegion(PAddr addr, u32 size) {
     res_cache.InvalidateRegion(addr, size, nullptr);
 }
 
-void RasterizerOpenGL::ClearAll(bool flush) {
-    res_cache.ClearAll(flush);
-}
-
 bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config) {
     MICROPROFILE_SCOPE(OpenGL_Blits);
 

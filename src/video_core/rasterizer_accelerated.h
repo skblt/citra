@@ -13,6 +13,8 @@ public:
 
     void UpdatePagesCachedCount(PAddr addr, u32 size, int delta) override;
 
+    void ClearAll(bool flush) override;
+
 private:
     std::array<u16, 0x30000> cached_pages{};
 };
