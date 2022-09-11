@@ -203,7 +203,7 @@ static void MortonCopy(u32 stride, u32 height, u32 start_offset,
     // the tile affected to a temporary buffer and copy the part we are interested in
     if (start_offset < aligned_start_offset && !morton_to_linear) {
         std::array<std::byte, tile_size> tmp_buf;
-        auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_size);
+        auto linear_data = linear_buffer.last(linear_buffer.size_bytes() - linear_offset);
         MortonCopyTile<morton_to_linear, format>(stride, tmp_buf, linear_data);
 
         std::memcpy(tiled_buffer.data(), tmp_buf.data() + start_offset - aligned_down_start_offset,
@@ -215,7 +215,7 @@ static void MortonCopy(u32 stride, u32 height, u32 start_offset,
 
     const u32 buffer_end = tiled_offset + aligned_end_offset - aligned_start_offset;
     while (tiled_offset < buffer_end) {
-        auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_size);
+        auto linear_data = linear_buffer.last(linear_buffer.size_bytes() - linear_offset);
         auto tiled_data = tiled_buffer.subspan(tiled_offset, tile_size);
         MortonCopyTile<morton_to_linear, format>(stride, tiled_data, linear_data);
         tiled_offset += tile_size;

@@ -13,10 +13,10 @@ namespace OpenGL {
 struct FormatTuple;
 
 struct StagingBuffer {
-    u32 size = 0;
-    std::span<std::byte> mapped{};
     OGLBuffer buffer{};
     mutable OGLSync buffer_lock{};
+    std::span<std::byte> mapped{};
+    u32 size{};
 
     bool operator<(const StagingBuffer& other) const {
         return size < other.size;
@@ -24,9 +24,13 @@ struct StagingBuffer {
 
     /// Returns true if the buffer does not take part in pending transfer operations
     bool IsFree() const {
-        GLint status;
-        glGetSynciv(buffer_lock.handle, GL_SYNC_STATUS, 1, nullptr, &status);
-        return status == GL_SIGNALED;
+        if (buffer_lock) {
+            GLint status;
+            glGetSynciv(buffer_lock.handle, GL_SYNC_STATUS, 1, nullptr, &status);
+            return status == GL_SIGNALED;
+        }
+
+        return true;
     }
 
     /// Prevents the runtime from reusing the buffer until the transfer operation is complete

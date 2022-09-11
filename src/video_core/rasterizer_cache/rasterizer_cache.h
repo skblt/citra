@@ -102,15 +102,21 @@ private:
     /// Update surface's texture for given region when necessary
     void ValidateSurface(const Surface& surface, PAddr addr, u32 size);
 
-    // Returns false if there is a surface in the cache at the interval with the same bit-width,
+    /// Copies pixel data in interval from the guest VRAM to the host GPU surface
+    void UploadSurface(const Surface& surface, const SurfaceInterval& interval);
+
+    /// Copies pixel data in interval from the host GPU surface to the guest VRAM
+    void DownloadSurface(const Surface& surface, const SurfaceInterval& interval);
+
+    /// Returns false if there is a surface in the cache at the interval with the same bit-width,
     bool NoUnimplementedReinterpretations(const OpenGL::Surface& surface,
                                           OpenGL::SurfaceParams& params,
                                           const OpenGL::SurfaceInterval& interval);
 
-    // Return true if a surface with an invalid pixel format exists at the interval
+    /// Return true if a surface with an invalid pixel format exists at the interval
     bool IntervalHasInvalidPixelFormat(SurfaceParams& params, const SurfaceInterval& interval);
 
-    // Attempt to find a reinterpretable surface in the cache and use it to copy for validation
+    /// Attempt to find a reinterpretable surface in the cache and use it to copy for validation
     bool ValidateByReinterpretation(const Surface& surface, SurfaceParams& params,
                                     const SurfaceInterval& interval);
 
