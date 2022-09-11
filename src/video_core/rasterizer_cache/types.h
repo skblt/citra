@@ -65,6 +65,8 @@ struct TextureBlit {
     SurfaceType surface_type;
     u32 src_level;
     u32 dst_level;
+    u32 src_layer;
+    u32 dst_layer;
     Region2D src_region;
     Region2D dst_region;
 };

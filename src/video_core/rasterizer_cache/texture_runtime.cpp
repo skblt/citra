@@ -148,9 +148,14 @@ bool TextureRuntime::BlitTextures(OGLTexture& source, OGLTexture& dest, const Te
     state.draw.draw_framebuffer = draw_fbo.handle;
     state.Apply();
 
-    auto BindAttachment = [&blit](GLenum target, u32 src_tex, u32 dst_tex) -> void {
-        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, target, GL_TEXTURE_2D, src_tex, blit.src_level);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, target, GL_TEXTURE_2D, dst_tex, blit.dst_level);
+    auto BindAttachment = [&blit, &source, &dest](GLenum attachment, u32 src_tex, u32 dst_tex) -> void {
+        const GLenum src_target = source.target == GL_TEXTURE_CUBE_MAP ?
+                    GL_TEXTURE_CUBE_MAP_POSITIVE_X + blit.src_layer : source.target;
+        const GLenum dst_target = dest.target == GL_TEXTURE_CUBE_MAP ?
+                    GL_TEXTURE_CUBE_MAP_POSITIVE_X + blit.dst_layer : dest.target;
+
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, attachment, src_target, src_tex, blit.src_level);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, attachment, dst_target, dst_tex, blit.dst_level);
     };
 
     switch (blit.surface_type) {
