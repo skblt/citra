@@ -8,7 +8,7 @@
 #include "video_core/regs_framebuffer.h"
 #include "video_core/regs_texturing.h"
 
-namespace OpenGL {
+namespace VideoCore {
 
 constexpr u32 PIXEL_FORMAT_COUNT = 18;
 

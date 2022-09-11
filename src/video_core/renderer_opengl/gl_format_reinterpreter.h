@@ -22,7 +22,7 @@ public:
 
     virtual ~FormatReinterpreterBase() = default;
 
-    virtual PixelFormat GetSourceFormat() const = 0;
+    virtual VideoCore::PixelFormat GetSourceFormat() const = 0;
     virtual void Reinterpret(const OGLTexture& src_tex, Common::Rectangle<u32> src_rect,
                              const OGLTexture& dst_tex, Common::Rectangle<u32> dst_rect) = 0;
 
@@ -38,10 +38,10 @@ public:
     FormatReinterpreterOpenGL();
     ~FormatReinterpreterOpenGL() = default;
 
-    const ReinterpreterList& GetPossibleReinterpretations(PixelFormat dst_format);
+    const ReinterpreterList& GetPossibleReinterpretations(VideoCore::PixelFormat dst_format);
 
 private:
-    std::array<ReinterpreterList, PIXEL_FORMAT_COUNT> reinterpreters;
+    std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
 };
 
 } // namespace OpenGL

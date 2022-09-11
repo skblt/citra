@@ -9,15 +9,7 @@
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/rasterizer_cache/types.h"
 
-namespace OpenGL {
-
-struct FormatTuple {
-    int internal_format;
-    u32 format;
-    u32 type;
-};
-
-const FormatTuple& GetFormatTuple(PixelFormat pixel_format);
+namespace VideoCore {
 
 struct HostTextureTag {
     PixelFormat format{};
@@ -70,15 +62,15 @@ void UnswizzleTexture(const SurfaceParams& params, u32 start_offset,
 
 namespace std {
 template <>
-struct hash<OpenGL::HostTextureTag> {
-    std::size_t operator()(const OpenGL::HostTextureTag& tag) const noexcept {
+struct hash<VideoCore::HostTextureTag> {
+    std::size_t operator()(const VideoCore::HostTextureTag& tag) const noexcept {
         return tag.Hash();
     }
 };
 
 template <>
-struct hash<OpenGL::TextureCubeConfig> {
-    std::size_t operator()(const OpenGL::TextureCubeConfig& config) const noexcept {
+struct hash<VideoCore::TextureCubeConfig> {
+    std::size_t operator()(const VideoCore::TextureCubeConfig& config) const noexcept {
         return config.Hash();
     }
 };

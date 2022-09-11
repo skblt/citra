@@ -25,19 +25,16 @@ add_library(video_core STATIC
     regs_texturing.h
     renderer_base.cpp
     renderer_base.h
-    rasterizer_cache/cached_surface.cpp
-    rasterizer_cache/cached_surface.h
     rasterizer_cache/morton_swizzle.h
     rasterizer_cache/pixel_format.h
     rasterizer_cache/rasterizer_cache.cpp
     rasterizer_cache/rasterizer_cache.h
+    rasterizer_cache/surface_base.h
     rasterizer_cache/types.h
     rasterizer_cache/utils.cpp
     rasterizer_cache/utils.h
     rasterizer_cache/surface_params.cpp
     rasterizer_cache/surface_params.h
-    rasterizer_cache/texture_runtime.cpp
-    rasterizer_cache/texture_runtime.h
     renderer_opengl/frame_dumper_opengl.cpp
     renderer_opengl/frame_dumper_opengl.h
     renderer_opengl/gl_driver.cpp
@@ -60,6 +57,8 @@ add_library(video_core STATIC
     renderer_opengl/gl_state.h
     renderer_opengl/gl_stream_buffer.cpp
     renderer_opengl/gl_stream_buffer.h
+    renderer_opengl/gl_texture_runtime.cpp
+    renderer_opengl/gl_texture_runtime.h
     renderer_opengl/gl_vars.cpp
     renderer_opengl/gl_vars.h
     renderer_opengl/pica_to_gl.h

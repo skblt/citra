@@ -8,6 +8,7 @@
 #include "common/logging/log.h"
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_opengl/gl_state.h"
+#include "video_core/renderer_opengl/gl_texture_runtime.h"
 #include "video_core/renderer_opengl/texture_downloader_es.h"
 
 #include "shaders/depth_to_color.frag"
@@ -15,6 +16,17 @@
 #include "shaders/ds_to_color.frag"
 
 namespace OpenGL {
+
+static constexpr std::array DEPTH_TUPLES_HACK = {
+    FormatTuple{GL_DEPTH_COMPONENT16, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT}, // D16
+    FormatTuple{},
+    FormatTuple{GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT},   // D24
+    FormatTuple{GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8}, // D24S8
+};
+
+const FormatTuple& GetFormatTuple(VideoCore::PixelFormat format) {
+    return DEPTH_TUPLES_HACK[static_cast<u32>(format)];
+}
 
 /**
  * Self tests for the texture downloader
@@ -75,13 +87,13 @@ void TextureDownloaderES::Test() {
             }
     };
     LOG_INFO(Render_OpenGL, "GL_DEPTH24_STENCIL8 download test starting");
-    test(GetFormatTuple(PixelFormat::D24S8), std::vector<u32>{}, 4096,
+    test(GetFormatTuple(VideoCore::PixelFormat::D24S8), std::vector<u32>{}, 4096,
          [](std::size_t idx) { return static_cast<u32>((idx << 8) | (idx & 0xFF)); });
     LOG_INFO(Render_OpenGL, "GL_DEPTH_COMPONENT24 download test starting");
-    test(GetFormatTuple(PixelFormat::D24), std::vector<u32>{}, 4096,
+    test(GetFormatTuple(VideoCore::PixelFormat::D24), std::vector<u32>{}, 4096,
          [](std::size_t idx) { return static_cast<u32>(idx << 8); });
     LOG_INFO(Render_OpenGL, "GL_DEPTH_COMPONENT16 download test starting");
-    test(GetFormatTuple(PixelFormat::D16), std::vector<u16>{}, 256,
+    test(GetFormatTuple(VideoCore::PixelFormat::D16), std::vector<u16>{}, 256,
          [](std::size_t idx) { return static_cast<u16>(idx); });
 
     cur_state.Apply();
