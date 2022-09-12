@@ -3,11 +3,13 @@
 // Refer to the license.txt file included.
 
 #pragma once
-#include "common/common_types.h"
+#include "common/math_util.h"
 #include "common/vector_math.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 
 namespace VideoCore {
+
+using Rect2D = Common::Rectangle<u32>;
 
 struct Offset {
     constexpr auto operator<=>(const Offset&) const noexcept = default;
@@ -23,20 +25,6 @@ struct Extent {
     u32 height = 1;
 };
 
-struct Rect2D {
-    constexpr auto operator<=>(const Rect2D&) const noexcept = default;
-
-    Offset offset;
-    Extent extent;
-};
-
-struct Region2D {
-    constexpr auto operator<=>(const Region2D&) const noexcept = default;
-
-    Offset start;
-    Offset end;
-};
-
 union ClearValue {
     Common::Vec4f color;
     struct {
@@ -49,7 +37,7 @@ struct TextureClear {
     SurfaceType surface_type;
     PixelFormat texture_format;
     u32 texture_level;
-    Rect2D rect;
+    Rect2D texture_rect;
 };
 
 struct TextureCopy {
@@ -67,8 +55,8 @@ struct TextureBlit {
     u32 dst_level;
     u32 src_layer;
     u32 dst_layer;
-    Region2D src_region;
-    Region2D dst_region;
+    Rect2D src_rect;
+    Rect2D dst_rect;
 };
 
 struct BufferTextureCopy {
@@ -77,9 +65,8 @@ struct BufferTextureCopy {
     u32 buffer_row_length;
     u32 buffer_height;
     SurfaceType surface_type;
+    Rect2D texture_rect;
     u32 texture_level;
-    Offset texture_offset;
-    Extent texture_extent;
 };
 
 struct BufferCopy {
