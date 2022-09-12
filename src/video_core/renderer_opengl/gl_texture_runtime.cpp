@@ -187,11 +187,9 @@ void TextureRuntime::ReadTexture(OGLTexture& texture, const VideoCore::BufferTex
     }
 
     const FormatTuple& tuple = GetFormatTuple(format);
-    glReadPixels(copy.texture_offset.x, copy.texture_offset.y,
-                 copy.texture_offset.x + copy.texture_extent.width,
-                 copy.texture_offset.y + copy.texture_extent.height,
-                 tuple.format, tuple.type,
-                 reinterpret_cast<void*>(copy.buffer_offset));
+    glReadPixels(copy.texture_rect.left, copy.texture_rect.bottom,
+                 copy.texture_rect.GetWidth(), copy.texture_rect.GetHeight(),
+                 tuple.format, tuple.type, reinterpret_cast<void*>(copy.buffer_offset));
 }
 
 bool TextureRuntime::ClearTexture(OGLTexture& texture, const VideoCore::TextureClear& clear,
@@ -202,10 +200,10 @@ bool TextureRuntime::ClearTexture(OGLTexture& texture, const VideoCore::TextureC
     // Setup scissor rectangle according to the clear rectangle
     OpenGLState state{};
     state.scissor.enabled = true;
-    state.scissor.x = clear.rect.offset.x;
-    state.scissor.y = clear.rect.offset.y;
-    state.scissor.width = clear.rect.extent.width;
-    state.scissor.height = clear.rect.extent.height;
+    state.scissor.x = clear.texture_rect.left;
+    state.scissor.y = clear.texture_rect.bottom;
+    state.scissor.width = clear.texture_rect.GetWidth();
+    state.scissor.height = clear.texture_rect.GetHeight();
     state.draw.draw_framebuffer = draw_fbo.handle;
     state.Apply();
 
@@ -308,10 +306,8 @@ bool TextureRuntime::BlitTextures(OGLTexture& source, OGLTexture& dest, const Vi
     // inconsistent scale.
     const GLbitfield buffer_mask = MakeBufferMask(blit.surface_type);
     const GLenum filter = buffer_mask == GL_COLOR_BUFFER_BIT ? GL_LINEAR : GL_NEAREST;
-    glBlitFramebuffer(blit.src_region.start.x, blit.src_region.start.y,
-                      blit.src_region.end.x, blit.src_region.end.y,
-                      blit.dst_region.start.x, blit.dst_region.start.y,
-                      blit.dst_region.end.x, blit.dst_region.end.y,
+    glBlitFramebuffer(blit.src_rect.left, blit.src_rect.bottom, blit.src_rect.right, blit.src_rect.top,
+                      blit.dst_rect.left, blit.dst_rect.bottom, blit.dst_rect.right, blit.dst_rect.top,
                       buffer_mask, filter);
 
     return true;
@@ -354,11 +350,11 @@ void CachedSurface::UploadTexture(Common::Rectangle<u32> rect, const StagingBuff
         target_tex = unscaled_tex.handle;
     }
 
-    OpenGLState cur_state = OpenGLState::GetCurState();
+    OpenGLState prev_state = OpenGLState::GetCurState();
+    SCOPE_EXIT({ prev_state.Apply(); });
 
-    GLuint old_tex = cur_state.texture_units[0].texture_2d;
-    cur_state.texture_units[0].texture_2d = target_tex;
-    cur_state.Apply();
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, target_tex);
 
     // Ensure no bad interactions with GL_UNPACK_ALIGNMENT
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
@@ -366,17 +362,12 @@ void CachedSurface::UploadTexture(Common::Rectangle<u32> rect, const StagingBuff
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, staging.buffer.handle);
 
-    glActiveTexture(GL_TEXTURE0);
     glTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, static_cast<GLsizei>(rect.GetWidth()),
                     static_cast<GLsizei>(rect.GetHeight()), tuple.format, tuple.type,
                     reinterpret_cast<void*>(buffer_offset));
 
+    // Lock the staging buffer until glTexSubImage completes
     staging.Lock();
-
-    cur_state.texture_units[0].texture_2d = old_tex;
-    cur_state.Apply();
-
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
@@ -416,6 +407,7 @@ void CachedSurface::DownloadTexture(Common::Rectangle<u32> rect, const StagingBu
     MICROPROFILE_SCOPE(RasterizerCache_TextureDL);
 
     const FormatTuple& tuple = runtime.GetFormatTuple(pixel_format);
+    const u32 buffer_offset = (rect.bottom * stride + rect.left) * GetBytesPerPixel(pixel_format);
 
     OpenGLState state = OpenGLState::GetCurState();
     OpenGLState prev_state = state;
@@ -425,7 +417,6 @@ void CachedSurface::DownloadTexture(Common::Rectangle<u32> rect, const StagingBu
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
     glPixelStorei(GL_PACK_ROW_LENGTH, static_cast<GLint>(stride));
     glBindBuffer(GL_PIXEL_PACK_BUFFER, staging.buffer.handle);
-    const u32 buffer_offset = (rect.bottom * stride + rect.left) * GetBytesPerPixel(pixel_format);
 
     // If not 1x scale, blit scaled texture to a new 1x texture and use that to flush
     if (res_scale != 1) {
@@ -441,14 +432,8 @@ void CachedSurface::DownloadTexture(Common::Rectangle<u32> rect, const StagingBu
             .surface_type = type,
             .src_level = 0,
             .dst_level = 0,
-            .src_region = VideoCore::Region2D{
-                .start = {scaled_rect.left, scaled_rect.bottom},
-                .end = {scaled_rect.right, scaled_rect.top}
-            },
-            .dst_region = VideoCore::Region2D{
-                .start = {0, 0},
-                .end = {rect.GetWidth(), rect.GetHeight()}
-            }
+            .src_rect = scaled_rect,
+            .dst_rect = VideoCore::Rect2D{0, rect.GetHeight(), rect.GetWidth(), 0}
         };
 
         // Blit scaled texture to the unscaled one
@@ -475,9 +460,8 @@ void CachedSurface::DownloadTexture(Common::Rectangle<u32> rect, const StagingBu
             .buffer_row_length = stride,
             .buffer_height = height,
             .surface_type = type,
-            .texture_level = 0,
-            .texture_offset = {rect.bottom, rect.left},
-            .texture_extent = {rect.GetWidth(), rect.GetHeight()}
+            .texture_rect = rect,
+            .texture_level = 0
         };
 
         runtime.ReadTexture(texture, texture_download, pixel_format);
@@ -485,6 +469,10 @@ void CachedSurface::DownloadTexture(Common::Rectangle<u32> rect, const StagingBu
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+}
+
+void CachedSurface::Scale() {
+
 }
 
 } // namespace OpenGL

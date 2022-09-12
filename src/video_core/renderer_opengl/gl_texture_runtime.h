@@ -113,6 +113,10 @@ public:
     void DownloadTexture(Common::Rectangle<u32> rect, const StagingBuffer& staging);
 
 private:
+    /// Replaces the current texture with a scaled version according to res_scale
+    void Scale();
+
+private:
     TextureRuntime& runtime;
 
 public:

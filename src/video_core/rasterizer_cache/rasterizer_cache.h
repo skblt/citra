@@ -47,10 +47,10 @@ class RasterizerCache : NonCopyable {
 public:
     using TextureRuntime = typename T::Runtime;
     using CachedSurface = typename T::Surface;
-    using Watcher = SurfaceWatcher<CachedSurface>;
 
     /// Declare rasterizer interval types
     using Surface = std::shared_ptr<CachedSurface>;
+    using Watcher = SurfaceWatcher<CachedSurface>;
     using SurfaceSet = std::set<Surface>;
     using SurfaceMap =
         boost::icl::interval_map<PAddr, Surface, boost::icl::partial_absorber, std::less,
@@ -165,15 +165,15 @@ private:
 
 template <class T>
 RasterizerCache<T>::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer, TextureRuntime& runtime)
-    : rasterizer(rasterizer), runtime{runtime} {
+    : rasterizer{rasterizer}, runtime{runtime} {
     resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
 }
 
 template <class T>
 template <MatchFlags find_flags>
 auto RasterizerCache<T>::FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params,
-                                        ScaleMatch match_scale_type,
-                                        std::optional<SurfaceInterval> validate_interval) -> Surface {
+                                   ScaleMatch match_scale_type,
+                                   std::optional<SurfaceInterval> validate_interval) -> Surface {
     Surface match_surface = nullptr;
     bool match_valid = false;
     u32 match_scale = 0;
@@ -273,14 +273,8 @@ bool RasterizerCache<T>::BlitSurfaces(const Surface& src_surface, Common::Rectan
             .dst_level = 0,
             .src_layer = 0,
             .dst_layer = 0,
-            .src_region = Region2D{
-                .start = {src_rect.left, src_rect.bottom},
-                .end = {src_rect.right, src_rect.top}
-            },
-            .dst_region = Region2D{
-                .start = {dst_rect.left, dst_rect.bottom},
-                .end = {dst_rect.right, dst_rect.top}
-            }
+            .src_rect = src_rect,
+            .dst_rect = dst_rect
         };
 
         return runtime.BlitTextures(src_surface->texture, dst_surface->texture, texture_blit);
@@ -295,10 +289,9 @@ void RasterizerCache<T>::CopySurface(const Surface& src_surface, const Surface& 
                                      SurfaceInterval copy_interval) {
     MICROPROFILE_SCOPE(RasterizerCache_CopySurface);
 
-    SurfaceParams subrect_params = dst_surface->FromInterval(copy_interval);
+    const SurfaceParams subrect_params = dst_surface->FromInterval(copy_interval);
     ASSERT(subrect_params.GetInterval() == copy_interval && src_surface != dst_surface);
 
-    const auto dst_rect = dst_surface->GetScaledSubRect(subrect_params);
     if (src_surface->type == SurfaceType::Fill) {
         // FillSurface needs a 4 bytes buffer
         const u32 fill_offset =
@@ -317,10 +310,7 @@ void RasterizerCache<T>::CopySurface(const Surface& src_surface, const Surface& 
             .surface_type = dst_surface->type,
             .texture_format = dst_surface->pixel_format,
             .texture_level = 0,
-            .rect = Rect2D{
-                .offset = {dst_rect.left, dst_rect.bottom},
-                .extent = {dst_rect.GetWidth(), dst_rect.GetHeight()}
-            }
+            .texture_rect = dst_surface->GetScaledSubRect(subrect_params)
         };
 
         runtime.ClearTexture(dst_surface->texture, clear_rect, clear_value);
@@ -328,21 +318,14 @@ void RasterizerCache<T>::CopySurface(const Surface& src_surface, const Surface& 
     }
 
     if (src_surface->CanSubRect(subrect_params)) {
-        const auto src_rect = src_surface->GetScaledSubRect(subrect_params);
         const TextureBlit texture_blit = {
             .surface_type = src_surface->type,
             .src_level = 0,
             .dst_level = 0,
             .src_layer = 0,
             .dst_layer = 0,
-            .src_region = Region2D{
-                .start = {src_rect.left, src_rect.bottom},
-                .end = {src_rect.right, src_rect.top}
-            },
-            .dst_region = Region2D{
-                .start = {dst_rect.left, dst_rect.bottom},
-                .end = {dst_rect.right, dst_rect.top}
-            }
+            .src_rect = src_surface->GetScaledSubRect(subrect_params),
+            .dst_rect = dst_surface->GetScaledSubRect(subrect_params)
         };
 
         runtime.BlitTextures(src_surface->texture, dst_surface->texture, texture_blit);
@@ -567,22 +550,14 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
                 }
 
                 if (/*texture_filterer->IsNull()*/true) {
-                    const auto src_rect = level_surface->GetScaledRect();
-                    const auto dst_rect = surface_params.GetScaledRect();
                     const TextureBlit texture_blit = {
                         .surface_type = surface->type,
                         .src_level = 0,
                         .dst_level = level,
                         .src_layer = 0,
                         .dst_layer = 0,
-                        .src_region = Region2D{
-                            .start = {src_rect.left, src_rect.bottom},
-                            .end = {src_rect.right, src_rect.top}
-                        },
-                        .dst_region = Region2D{
-                            .start = {dst_rect.left, dst_rect.bottom},
-                            .end = {dst_rect.right, dst_rect.top}
-                        }
+                        .src_rect = level_surface->GetScaledRect(),
+                        .dst_rect = surface_params.GetScaledRect()
                     };
 
                     runtime.BlitTextures(level_surface->texture, surface->texture, texture_blit);
@@ -648,8 +623,7 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
         cube->texture = runtime.AllocateCubeMap(width, PixelFormatFromTextureFormat(config.format));
     }
 
-    u32 scaled_size = cube->res_scale * config.width;
-
+    const u32 scaled_size = cube->res_scale * config.width;
     for (std::size_t i = 0; i < faces.size(); i++) {
         const Face& face = faces[i];
         if (face.watcher && !face.watcher->IsValid()) {
@@ -658,21 +632,14 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
                 ValidateSurface(surface, surface->addr, surface->size);
             }
 
-            const auto src_rect = surface->GetScaledRect();
             const TextureBlit texture_blit = {
                 .surface_type = SurfaceType::Color,
                 .src_level = 0,
                 .dst_level = 0,
                 .src_layer = 0,
                 .dst_layer = static_cast<u32>(i),
-                .src_region = Region2D{
-                    .start = {src_rect.left, src_rect.bottom},
-                    .end = {src_rect.right, src_rect.top}
-                },
-                .dst_region = Region2D{
-                    .start = {0, 0},
-                    .end = {scaled_size, scaled_size}
-                }
+                .src_rect = surface->GetScaledRect(),
+                .dst_rect = Rect2D{0, scaled_size, scaled_size, 0}
             };
 
             runtime.BlitTextures(surface->texture, cube->texture, texture_blit);

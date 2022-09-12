@@ -180,8 +180,8 @@ SurfaceInterval SurfaceBase<S>::GetCopyableInterval(const SurfaceParams& params)
 
 template <class S>
 auto SurfaceBase<S>::CreateWatcher() -> std::shared_ptr<Watcher> {
-    S* derived = reinterpret_cast<S*>(this);
-    auto watcher = std::make_shared<Watcher>(std::move(derived->weak_from_this()));
+    auto weak_ptr = reinterpret_cast<S*>(this)->weak_from_this();
+    auto watcher = std::make_shared<Watcher>(std::move(weak_ptr));
     watchers[watcher_count++] = watcher;
     return watcher;
 }
