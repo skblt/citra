@@ -22,6 +22,7 @@ struct Rectangle {
         : left(left), top(top), right(right), bottom(bottom) {}
 
     constexpr auto operator<=>(const Rectangle&) const = default;
+
     constexpr void operator*=(const T value) {
         left *= value;
         top *= value;
@@ -29,6 +30,9 @@ struct Rectangle {
         bottom *= value;
     }
 
+    [[nodiscard]] constexpr Rectangle operator*(const T value) const {
+        return Rectangle{left * value, top * value, right * value, bottom * value};
+    }
     [[nodiscard]] constexpr T GetWidth() const {
         return std::abs(static_cast<std::make_signed_t<T>>(right - left));
     }

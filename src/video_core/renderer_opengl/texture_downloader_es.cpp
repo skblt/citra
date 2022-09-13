@@ -28,9 +28,6 @@ const FormatTuple& GetFormatTuple(VideoCore::PixelFormat format) {
     return DEPTH_TUPLES_HACK[static_cast<u32>(format)];
 }
 
-/**
- * Self tests for the texture downloader
- */
 void TextureDownloaderES::Test() {
     auto cur_state = OpenGLState::GetCurState();
     OpenGLState state;
@@ -158,12 +155,8 @@ void main(){
     cur_state.Apply();
 }
 
-/**
- * OpenGL ES does not support glReadBuffer for depth/stencil formats
- * This gets around it by converting to a Red surface before downloading
- */
 GLuint TextureDownloaderES::ConvertDepthToColor(GLuint level, GLenum& format, GLenum& type,
-                                                GLint height, GLint width) {
+                                                GLint height, GLint width) const {
     ASSERT(width <= MAX_SIZE && height <= MAX_SIZE);
     const OpenGLState cur_state = OpenGLState::GetCurState();
     OpenGLState state;
@@ -171,7 +164,7 @@ GLuint TextureDownloaderES::ConvertDepthToColor(GLuint level, GLenum& format, GL
     state.draw.vertex_array = vao.handle;
 
     OGLTexture texture_view;
-    const ConversionShader* converter;
+    const ConversionShader* converter = nullptr;
     switch (type) {
     case GL_UNSIGNED_SHORT:
         state.draw.draw_framebuffer = depth16_fbo.handle;
@@ -192,6 +185,7 @@ GLuint TextureDownloaderES::ConvertDepthToColor(GLuint level, GLenum& format, GL
     default:
         UNREACHABLE_MSG("Destination type not recognized");
     }
+
     state.draw.shader_program = converter->program.handle;
     state.viewport = {0, 0, width, height};
     state.Apply();
@@ -210,15 +204,8 @@ GLuint TextureDownloaderES::ConvertDepthToColor(GLuint level, GLenum& format, GL
     return state.draw.draw_framebuffer;
 }
 
-/**
- * OpenGL ES does not support glGetTexImage. Obtain the pixels by attaching the
- * texture to a framebuffer.
- * Originally from https://github.com/apitrace/apitrace/blob/master/retrace/glstate_images.cpp
- * Depth texture download assumes that the texture's format tuple matches what is found
- * OpenGL::depth_format_tuples
- */
 void TextureDownloaderES::GetTexImage(GLenum target, GLuint level, GLenum format, GLenum type,
-                                      GLint height, GLint width, void* pixels) {
+                                      GLint height, GLint width, void* pixels) const {
     OpenGLState state = OpenGLState::GetCurState();
     GLuint texture;
     const GLuint old_read_buffer = state.draw.read_framebuffer;

@@ -9,6 +9,8 @@
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/rasterizer_cache/types.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
+#include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
+#include "video_core/renderer_opengl/texture_downloader_es.h"
 
 namespace OpenGL {
 
@@ -50,13 +52,14 @@ struct StagingBuffer {
 };
 
 class Driver;
+class Surface;
 
 /**
  * Provides texture manipulation functions to the rasterizer cache
  * Separating this into a class makes it easier to abstract graphics API code
  */
 class TextureRuntime {
-    friend class CachedSurface;
+    friend class Surface;
 public:
     TextureRuntime(Driver& driver);
     ~TextureRuntime() = default;
@@ -73,51 +76,74 @@ public:
     /// Allocates an OpenGL cube map texture with the specified dimentions and format
     OGLTexture AllocateCubeMap(u32 width, VideoCore::PixelFormat format);
 
-    /// Copies the GPU pixel data to the provided pixels buffer
-    void ReadTexture(OGLTexture& texture, const VideoCore::BufferTextureCopy& copy,
-                     VideoCore::PixelFormat format);
-
     /// Fills the rectangle of the texture with the clear value provided
-    bool ClearTexture(OGLTexture& texture, const VideoCore::TextureClear& clear,
+    bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
                       VideoCore::ClearValue value);
 
     /// Copies a rectangle of src_tex to another rectange of dst_rect
-    bool CopyTextures(OGLTexture& source, OGLTexture& dest, const VideoCore::TextureCopy& copy);
+    bool CopyTextures(Surface& source, Surface& dest, const VideoCore::TextureCopy& copy);
 
     /// Blits a rectangle of src_tex to another rectange of dst_rect
-    bool BlitTextures(OGLTexture& source, OGLTexture& dest, const VideoCore::TextureBlit& blit);
+    bool BlitTextures(Surface& surface, Surface& dest, const VideoCore::TextureBlit& blit);
 
     /// Generates mipmaps for all the available levels of the texture
-    void GenerateMipmaps(OGLTexture& texture, u32 max_level);
+    void GenerateMipmaps(Surface& surface, u32 max_level);
+
+private:
+    /// Returns the framebuffer used for texture downloads
+    void BindFramebuffer(GLenum target, GLint level, GLenum textarget,
+                         VideoCore::SurfaceType type, OGLTexture& texture) const;
+
+    /// Returns the OpenGL driver class
+    const Driver& GetDriver() const {
+        return driver;
+    }
+
+    /// Returns the class that handles texture downloads for OpenGL ES
+    const TextureDownloaderES& GetDownloaderES() const {
+        return downloader_es;
+    }
+
+    /// Returns the class that handles texture filtering
+    const TextureFilterer& GetFilterer() const {
+        return filterer;
+    }
 
 private:
     Driver& driver;
-    OGLFramebuffer read_fbo, draw_fbo;
-    std::unordered_multimap<VideoCore::HostTextureTag, OGLTexture> texture2d_recycler;
+    TextureDownloaderES downloader_es;
+    TextureFilterer filterer;
 
     // Staging buffers stored in increasing size
     std::multiset<StagingBuffer> upload_buffers;
     std::multiset<StagingBuffer> download_buffers;
+    OGLFramebuffer read_fbo, draw_fbo;
+
+    // Recycled textures to reduce driver allocation overhead
+    std::unordered_multimap<VideoCore::HostTextureTag, OGLTexture> texture_recycler;
 };
 
-class CachedSurface : public VideoCore::SurfaceBase<CachedSurface> {
+class Surface : public VideoCore::SurfaceBase<Surface> {
 public:
-    CachedSurface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
-        : VideoCore::SurfaceBase<CachedSurface>{params}, runtime{runtime} {}
-    ~CachedSurface() override = default;
+    Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
+    ~Surface() override = default;
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture
-    void UploadTexture(Common::Rectangle<u32> rect, const StagingBuffer& staging);
+    void Upload(const VideoCore::BufferTextureCopy& upload, const StagingBuffer& staging);
 
     /// Downloads pixel data to staging from a rectangle region of the surface texture
-    void DownloadTexture(Common::Rectangle<u32> rect, const StagingBuffer& staging);
+    void Download(const VideoCore::BufferTextureCopy& download, const StagingBuffer& staging);
 
 private:
-    /// Replaces the current texture with a scaled version according to res_scale
-    void Scale();
+    /// Downloads scaled image by downscaling the requested rectangle
+    void ScaledDownload(const VideoCore::BufferTextureCopy& download);
+
+    /// Uploads pixel data to scaled texture
+    void ScaledUpload(const VideoCore::BufferTextureCopy& upload);
 
 private:
     TextureRuntime& runtime;
+    const Driver& driver;
 
 public:
     OGLTexture texture{};
@@ -125,7 +151,7 @@ public:
 
 struct Traits {
     using Runtime = TextureRuntime;
-    using Surface = CachedSurface;
+    using Surface = Surface;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;
