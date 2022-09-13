@@ -3,9 +3,9 @@
 // Refer to the license.txt file included.
 
 #pragma once
+#include "common/common_types.h"
 #include "common/math_util.h"
 #include "common/vector_math.h"
-#include "video_core/rasterizer_cache/pixel_format.h"
 
 namespace VideoCore {
 
@@ -34,14 +34,11 @@ union ClearValue {
 };
 
 struct TextureClear {
-    SurfaceType surface_type;
-    PixelFormat texture_format;
     u32 texture_level;
     Rect2D texture_rect;
 };
 
 struct TextureCopy {
-    SurfaceType surface_type;
     u32 src_level;
     u32 dst_level;
     Offset src_offset;
@@ -50,7 +47,6 @@ struct TextureCopy {
 };
 
 struct TextureBlit {
-    SurfaceType surface_type;
     u32 src_level;
     u32 dst_level;
     u32 src_layer;
@@ -62,9 +58,6 @@ struct TextureBlit {
 struct BufferTextureCopy {
     u32 buffer_offset;
     u32 buffer_size;
-    u32 buffer_row_length;
-    u32 buffer_height;
-    SurfaceType surface_type;
     Rect2D texture_rect;
     u32 texture_level;
 };
