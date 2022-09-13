@@ -571,64 +571,62 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
 
 template <class T>
 auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> const Surface& {
-    auto& cube = texture_cube_cache[config];
-    cube->is_texture_cube = true;
+    auto [it, new_surface] = texture_cube_cache.try_emplace(config);
+    if (new_surface) {
+        SurfaceParams cube_params = {
+            .addr = config.px,
+            .width = config.width,
+            .height = config.width,
+            .stride = config.width,
+            .texture_type = TextureType::CubeMap,
+            .pixel_format = PixelFormatFromTextureFormat(config.format),
+            .type = SurfaceType::Texture
+        };
 
-    struct Face {
-        Face(std::shared_ptr<Watcher>& watcher, PAddr address)
-            : watcher(watcher), address(address) {}
-        std::shared_ptr<Watcher>& watcher;
-        PAddr address;
-    };
+        it->second = CreateSurface(cube_params);
+    }
 
-    const std::array<Face, 6> faces{{
-        {cube->level_watchers[0], config.px},
-        {cube->level_watchers[1], config.nx},
-        {cube->level_watchers[2], config.py},
-        {cube->level_watchers[3], config.ny},
-        {cube->level_watchers[4], config.pz},
-        {cube->level_watchers[5], config.nz},
-    }};
+    Surface& cube = it->second;
 
-    for (const Face& face : faces) {
-        if (!face.watcher || !face.watcher->Get()) {
-            Pica::Texture::TextureInfo info;
-            info.physical_address = face.address;
-            info.height = info.width = config.width;
-            info.format = config.format;
+    // Update surface watchers
+    auto& watchers = cube->level_watchers;
+    const std::array addresses = {config.px, config.nx, config.py,
+                                  config.ny, config.pz, config.nz};
+
+    for (std::size_t i = 0; i < addresses.size(); i++) {
+        auto& watcher = watchers[i];
+        if (!watcher || !watcher->Get()) {
+            Pica::Texture::TextureInfo info = {
+                .physical_address = addresses[i],
+                .width = config.width,
+                .height = config.width,
+                .format = config.format,
+            };
+
             info.SetDefaultStride();
             auto surface = GetTextureSurface(info);
             if (surface) {
-                face.watcher = surface->CreateWatcher();
+                watcher = surface->CreateWatcher();
             } else {
-                // Can occur when texture address is invalid. We mark the watcher with nullptr
-                // in this case and the content of the face wouldn't get updated. These are
-                // usually leftover setup in the texture unit and games are not supposed to draw
-                // using them.
-                face.watcher = nullptr;
+                /**
+                 * Can occur when texture address is invalid. We mark the watcher with nullptr
+                 * in this case and the content of the face wouldn't get updated. These are
+                 * usually leftover setup in the texture unit and games are not supposed to draw
+                 * using them.
+                 */
+                watcher = nullptr;
             }
         }
     }
 
-    if (cube->texture.handle == 0) {
-        for (const Face& face : faces) {
-            if (face.watcher) {
-                auto surface = face.watcher->Get();
-                cube->res_scale = std::max(cube->res_scale, surface->res_scale);
-            }
-        }
-
-        const u32 width = cube->res_scale * config.width;
-        cube->texture = runtime.AllocateCubeMap(width, PixelFormatFromTextureFormat(config.format));
-    }
-
-    const u32 scaled_size = cube->res_scale * config.width;
-    for (std::size_t i = 0; i < faces.size(); i++) {
-        const Face& face = faces[i];
-        if (face.watcher && !face.watcher->IsValid()) {
-            auto surface = face.watcher->Get();
-            if (!surface->invalid_regions.empty()) {
-                ValidateSurface(surface, surface->addr, surface->size);
+    // Validate the face surfaces
+    const u32 scaled_size = cube->GetScaledWidth();
+    for (std::size_t i = 0; i < addresses.size(); i++) {
+        const auto& watcher = watchers[i];
+        if (watcher && !watcher->IsValid()) {
+            auto face = watcher->Get();
+            if (!face->invalid_regions.empty()) {
+                ValidateSurface(face, face->addr, face->size);
             }
 
             const TextureBlit texture_blit = {
@@ -636,12 +634,12 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
                 .dst_level = 0,
                 .src_layer = 0,
                 .dst_layer = static_cast<u32>(i),
-                .src_rect = surface->GetScaledRect(),
+                .src_rect = face->GetScaledRect(),
                 .dst_rect = Rect2D{0, scaled_size, scaled_size, 0}
             };
 
-            runtime.BlitTextures(*surface, *cube, texture_blit);
-            face.watcher->Validate();
+            runtime.BlitTextures(*face, *cube, texture_blit);
+            watcher->Validate();
         }
     }
 
@@ -1232,10 +1230,6 @@ template <class T>
 auto RasterizerCache<T>::CreateSurface(SurfaceParams& params) -> Surface {
     Surface surface = std::make_shared<typename T::Surface>(params, runtime);
     surface->invalid_regions.insert(surface->GetInterval());
-
-    // Allocate surface texture
-    surface->texture =
-            runtime.Allocate2D(surface->GetScaledWidth(), surface->GetScaledHeight(), params.pixel_format);
 
     return surface;
 }

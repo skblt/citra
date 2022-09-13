@@ -7,6 +7,7 @@
 #include "common/alignment.h"
 #include "common/assert.h"
 #include "video_core/rasterizer_cache/surface_params.h"
+#include "video_core/rasterizer_cache/utils.h"
 
 namespace VideoCore {
 
@@ -80,7 +81,6 @@ public:
 
 public:
     bool registered = false;
-    bool is_texture_cube = false;
     SurfaceRegions invalid_regions;
     std::array<std::shared_ptr<Watcher>, 7> level_watchers;
     u32 max_level = 0;

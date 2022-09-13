@@ -124,33 +124,45 @@ const FormatTuple& TextureRuntime::GetFormatTuple(VideoCore::PixelFormat pixel_f
     return DEFAULT_TUPLE;
 }
 
-OGLTexture TextureRuntime::Allocate2D(u32 width, u32 height, VideoCore::PixelFormat format) {
-    const auto& tuple = GetFormatTuple(format);
-    auto recycled_tex = texture_recycler.find({format, width, height});
-    if (recycled_tex != texture_recycler.end()) {
-        OGLTexture texture = std::move(recycled_tex->second);
-        texture_recycler.erase(recycled_tex);
+OGLTexture TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
+                                    VideoCore::TextureType type) {
+
+    const u32 layers = type == VideoCore::TextureType::CubeMap ? 6 : 1;
+    const GLenum target =
+            type == VideoCore::TextureType::CubeMap ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+    const VideoCore::HostTextureTag key = {
+        .format = format,
+        .width = width,
+        .height = height,
+        .layers = layers
+    };
+
+    // Attempt to recycle an unused texture
+    if (auto it = texture_recycler.find(key); it != texture_recycler.end()) {
+        OGLTexture texture = std::move(it->second);
+        texture_recycler.erase(it);
         return texture;
     }
 
-    // Allocate the 2D texture
-    OGLTexture texture{};
-    texture.Create();
-    texture.Allocate(GL_TEXTURE_2D, std::bit_width(std::max(width, height)),
-                     tuple.internal_format, width, height);
-
-    return texture;
-}
-
-OGLTexture TextureRuntime::AllocateCubeMap(u32 width, VideoCore::PixelFormat format) {
     const auto& tuple = GetFormatTuple(format);
+    const OpenGLState& state = OpenGLState::GetCurState();
+    GLuint old_tex = state.texture_units[0].texture_2d;
 
-    // Allocate the cube texture
+    // Allocate new texture
     OGLTexture texture{};
     texture.Create();
-    texture.Allocate(GL_TEXTURE_CUBE_MAP, std::bit_width(width),
-                     tuple.internal_format, width, width);
 
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(target, texture.handle);
+
+    glTexStorage2D(target, std::bit_width(std::max(width, height)),
+                   tuple.internal_format, width, height);
+
+    glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glBindTexture(target, old_tex);
     return texture;
 }
 
@@ -229,11 +241,11 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest, const VideoCor
     state.draw.draw_framebuffer = draw_fbo.handle;
     state.Apply();
 
-    const GLenum src_textarget = source.is_texture_cube ?
+    const GLenum src_textarget = source.texture_type == VideoCore::TextureType::CubeMap ?
                 GL_TEXTURE_CUBE_MAP_POSITIVE_X + blit.src_layer : GL_TEXTURE_2D;
     BindFramebuffer(GL_READ_FRAMEBUFFER, blit.src_level, src_textarget, source.type, source.texture);
 
-    const GLenum dst_textarget = dest.is_texture_cube ?
+    const GLenum dst_textarget = dest.texture_type == VideoCore::TextureType::CubeMap ?
                 GL_TEXTURE_CUBE_MAP_POSITIVE_X + blit.dst_layer : GL_TEXTURE_2D;
     BindFramebuffer(GL_DRAW_FRAMEBUFFER, blit.dst_level, dst_textarget, dest.type, dest.texture);
 
@@ -287,7 +299,7 @@ void TextureRuntime::BindFramebuffer(GLenum target, GLint level, GLenum textarge
 
 Surface::Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
     : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, driver{runtime.GetDriver()} {
-
+    texture = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format, texture_type);
 }
 
 MICROPROFILE_DEFINE(RasterizerCache_TextureUL, "RasterizerCache", "Texture Upload", MP_RGB(128, 192, 64));
@@ -361,7 +373,8 @@ void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download) {
     const u32 rect_height = download.texture_rect.GetHeight();
 
     // Allocate an unscaled texture that fits the download rectangle to use as a blit destination
-    OGLTexture unscaled_tex = runtime.Allocate2D(rect_width, rect_height, pixel_format);
+    OGLTexture unscaled_tex = runtime.Allocate(rect_width, rect_height, pixel_format,
+                                               VideoCore::TextureType::Texture2D);
     runtime.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0, GL_TEXTURE_2D, type, unscaled_tex);
     runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, download.texture_level, GL_TEXTURE_2D, type, texture);
 
@@ -389,7 +402,8 @@ void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload) {
     const u32 rect_width = upload.texture_rect.GetWidth();
     const u32 rect_height = upload.texture_rect.GetHeight();
 
-    OGLTexture unscaled_tex = runtime.Allocate2D(rect_width, rect_height, pixel_format);
+    OGLTexture unscaled_tex = runtime.Allocate(rect_width, rect_height, pixel_format,
+                                               VideoCore::TextureType::Texture2D);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, unscaled_tex.handle);
 

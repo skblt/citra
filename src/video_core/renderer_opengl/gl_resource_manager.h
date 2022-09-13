@@ -65,7 +65,6 @@ public:
                   GLsizei height);
 
     GLuint handle = 0;
-    GLenum target = GL_TEXTURE_2D;
 };
 
 class OGLSampler : private NonCopyable {
