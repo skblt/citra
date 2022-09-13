@@ -3,7 +3,6 @@
 // Refer to the license.txt file included.
 
 #pragma once
-#include <functional>
 #include <span>
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
@@ -15,6 +14,8 @@ struct HostTextureTag {
     PixelFormat format{};
     u32 width = 0;
     u32 height = 0;
+    u32 levels = 1;
+    u32 layers = 1;
 
     auto operator<=>(const HostTextureTag&) const noexcept = default;
 
@@ -58,7 +59,7 @@ void SwizzleTexture(const SurfaceParams& params, u32 start_offset,
 void UnswizzleTexture(const SurfaceParams& params, u32 start_offset,
                       std::span<std::byte> source_tiled, std::span<std::byte> dest_linear);
 
-} // namespace OpenGL
+} // namespace VideoCore
 
 namespace std {
 template <>

@@ -70,11 +70,9 @@ public:
     /// Returns the OpenGL format tuple associated with the provided pixel format
     const FormatTuple& GetFormatTuple(VideoCore::PixelFormat pixel_format);
 
-    /// Allocates a 2D OpenGL texture with the specified dimentions and format
-    OGLTexture Allocate2D(u32 width, u32 height, VideoCore::PixelFormat format);
-
-    /// Allocates an OpenGL cube map texture with the specified dimentions and format
-    OGLTexture AllocateCubeMap(u32 width, VideoCore::PixelFormat format);
+    /// Allocates an OpenGL texture with the specified dimentions and format
+    OGLTexture Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
+                        VideoCore::TextureType type);
 
     /// Fills the rectangle of the texture with the clear value provided
     bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
