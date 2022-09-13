@@ -52,10 +52,8 @@ void OGLTexture::Release() {
     handle = 0;
 }
 
-void OGLTexture::Allocate(GLenum _target, GLsizei levels, GLenum internalformat, GLsizei width,
+void OGLTexture::Allocate(GLenum target, GLsizei levels, GLenum internalformat, GLsizei width,
                           GLsizei height, GLsizei depth) {
-    target = _target;
-
     GLuint old_tex = OpenGLState::GetCurState().texture_units[0].texture_2d;
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(target, handle);

@@ -727,8 +727,8 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
     // Making a copy to sample from eliminates this issue and seems to be fairly cheap.
     OGLTexture temp_tex;
     if (need_duplicate_texture) {
-        temp_tex = runtime.Allocate2D(color_surface->GetScaledWidth(), color_surface->GetScaledHeight(),
-                                      color_surface->pixel_format);
+        temp_tex = runtime.Allocate(color_surface->GetScaledWidth(), color_surface->GetScaledHeight(),
+                                    color_surface->pixel_format, color_surface->texture_type);
 
         temp_tex.CopyFrom(color_surface->texture, GL_TEXTURE_2D, color_surface->max_level + 1,
                           color_surface->GetScaledWidth(), color_surface->GetScaledHeight());
