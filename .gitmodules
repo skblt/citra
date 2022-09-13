@@ -58,3 +58,6 @@
 [submodule "sdl2"]
 	path = externals/sdl2/SDL
 	url = https://github.com/libsdl-org/SDL
+[submodule "vulkan-headers"]
+	path = externals/vulkan-headers
+	url = https://github.com/KhronosGroup/Vulkan-Headers
