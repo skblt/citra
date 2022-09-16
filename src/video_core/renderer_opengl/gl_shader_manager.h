@@ -41,10 +41,12 @@ struct LightSrc {
     float dist_atten_scale;
 };
 
-/// Uniform structure for the Uniform Buffer Object, all vectors must be 16-byte aligned
-// NOTE: Always keep a vec4 at the end. The GL spec is not clear wether the alignment at
-//       the end of a uniform block is included in UNIFORM_BLOCK_DATA_SIZE or not.
-//       Not following that rule will cause problems on some AMD drivers.
+/**
+ * Uniform structure for the Uniform Buffer Object, all vectors must be 16-byte aligned
+ * NOTE: Always keep a vec4 at the end. The GL spec is not clear wether the alignment at
+ *       the end of a uniform block is included in UNIFORM_BLOCK_DATA_SIZE or not.
+ *       Not following that rule will cause problems on some AMD drivers.
+ */
 struct UniformData {
     int framebuffer_scale;
     int alphatest_ref;
@@ -81,8 +83,10 @@ static_assert(sizeof(UniformData) == 0x4F0,
 static_assert(sizeof(UniformData) < 16384,
               "UniformData structure must be less than 16kb as per the OpenGL spec");
 
-/// Uniform struct for the Uniform Buffer Object that contains PICA vertex/geometry shader uniforms.
-// NOTE: the same rule from UniformData also applies here.
+/**
+ * Uniform struct for the Uniform Buffer Object that contains PICA vertex/geometry shader uniforms.
+ * NOTE: the same rule from UniformData also applies here.
+ */
 struct PicaUniformsData {
     void SetFromRegs(const Pica::ShaderRegs& regs, const Pica::Shader::ShaderSetup& setup);
 

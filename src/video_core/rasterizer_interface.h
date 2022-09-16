@@ -9,10 +9,6 @@
 #include "common/common_types.h"
 #include "core/hw/gpu.h"
 
-namespace OpenGL {
-struct ScreenInfo;
-}
-
 namespace Pica::Shader {
 struct OutputVertex;
 } // namespace Pica::Shader
@@ -70,13 +66,6 @@ public:
 
     /// Attempt to use a faster method to fill a region
     virtual bool AccelerateFill(const GPU::Regs::MemoryFillConfig& config) {
-        return false;
-    }
-
-    /// Attempt to use a faster method to display the framebuffer to screen
-    virtual bool AccelerateDisplay(const GPU::Regs::FramebufferConfig& config,
-                                   PAddr framebuffer_addr, u32 pixel_stride,
-                                   OpenGL::ScreenInfo& screen_info) {
         return false;
     }
 

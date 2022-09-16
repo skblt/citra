@@ -74,6 +74,7 @@ void ConfigureGraphics::SetConfiguration() {
     ui->toggle_shader_jit->setChecked(Settings::values.use_shader_jit);
     ui->toggle_disk_shader_cache->setChecked(Settings::values.use_disk_shader_cache);
     ui->toggle_vsync_new->setChecked(Settings::values.use_vsync_new);
+    ui->graphics_api_combo->setCurrentIndex(static_cast<int>(Settings::values.graphics_api));
 }
 
 void ConfigureGraphics::ApplyConfiguration() {
@@ -84,6 +85,7 @@ void ConfigureGraphics::ApplyConfiguration() {
     Settings::values.use_shader_jit = ui->toggle_shader_jit->isChecked();
     Settings::values.use_disk_shader_cache = ui->toggle_disk_shader_cache->isChecked();
     Settings::values.use_vsync_new = ui->toggle_vsync_new->isChecked();
+    Settings::values.graphics_api = static_cast<Settings::GraphicsAPI>(ui->graphics_api_combo->currentIndex());
 }
 
 void ConfigureGraphics::RetranslateUI() {

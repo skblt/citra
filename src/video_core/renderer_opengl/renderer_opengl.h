@@ -55,18 +55,16 @@ struct PresentationTexture {
     OGLTexture texture;
 };
 
+class RasterizerOpenGL;
+
 class RendererOpenGL : public RendererBase {
 public:
     explicit RendererOpenGL(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window);
     ~RendererOpenGL() override;
 
-    /// Initialize the renderer
     VideoCore::ResultStatus Init() override;
-
-    /// Shutdown the renderer
+    VideoCore::RasterizerInterface* Rasterizer() override;
     void ShutDown() override;
-
-    /// Finalizes rendering the guest frame
     void SwapBuffers() override;
 
     /// Draws the latest frame from texture mailbox to the currently bound draw framebuffer in this
@@ -75,9 +73,8 @@ public:
 
     /// Prepares for video dumping (e.g. create necessary buffers, etc)
     void PrepareVideoDumping() override;
-
-    /// Cleans up after video dumping is ended
     void CleanupVideoDumping() override;
+    void Sync() override;
 
 private:
     void InitOpenGLObjects();
@@ -108,6 +105,7 @@ private:
 private:
     Driver driver;
     OpenGLState state;
+    std::unique_ptr<RasterizerOpenGL> rasterizer;
 
     // OpenGL object IDs
     OGLVertexArray vertex_array;

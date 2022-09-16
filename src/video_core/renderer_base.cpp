@@ -21,7 +21,3 @@ void RendererBase::UpdateCurrentFramebufferLayout(bool is_portrait_mode) {
         update_layout(*secondary_window);
     }
 }
-
-void RendererBase::Sync() {
-    rasterizer->SyncEntireState();
-}

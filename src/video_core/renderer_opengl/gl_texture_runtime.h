@@ -70,6 +70,10 @@ public:
     /// Returns the OpenGL format tuple associated with the provided pixel format
     const FormatTuple& GetFormatTuple(VideoCore::PixelFormat pixel_format);
 
+    /// Performs required format convertions on the staging data
+    void FormatConvert(VideoCore::PixelFormat format, bool upload,
+                       std::span<std::byte> source, std::span<std::byte> dest);
+
     /// Allocates an OpenGL texture with the specified dimentions and format
     OGLTexture Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
                         VideoCore::TextureType type);
@@ -124,7 +128,7 @@ private:
 class Surface : public VideoCore::SurfaceBase<Surface> {
 public:
     Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
-    ~Surface() override = default;
+    ~Surface() override;
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture
     void Upload(const VideoCore::BufferTextureCopy& upload, const StagingBuffer& staging);
@@ -148,8 +152,8 @@ public:
 };
 
 struct Traits {
-    using Runtime = TextureRuntime;
-    using Surface = Surface;
+    using RuntimeType = TextureRuntime;
+    using SurfaceType = Surface;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;

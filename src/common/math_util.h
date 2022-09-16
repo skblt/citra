@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdlib>
+#include <compare>
 #include <type_traits>
 
 namespace Common {

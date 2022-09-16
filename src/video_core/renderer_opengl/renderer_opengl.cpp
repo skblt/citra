@@ -15,7 +15,6 @@
 #include "core/settings.h"
 #include "core/tracer/recorder.h"
 #include "video_core/debug_utils/debug_utils.h"
-#include "video_core/rasterizer_interface.h"
 #include "video_core/renderer_opengl/gl_rasterizer.h"
 #include "video_core/renderer_opengl/gl_shader_util.h"
 #include "video_core/renderer_opengl/gl_state.h"
@@ -383,6 +382,10 @@ VideoCore::ResultStatus RendererOpenGL::Init() {
     return VideoCore::ResultStatus::Success;
 }
 
+VideoCore::RasterizerInterface* RendererOpenGL::Rasterizer() {
+    return rasterizer.get();
+}
+
 /// Shutdown the renderer
 void RendererOpenGL::ShutDown() {}
 
@@ -580,7 +583,7 @@ void RendererOpenGL::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
     // only allows rows to have a memory alignement of 4.
     ASSERT(pixel_stride % 4 == 0);
 
-    if (!Rasterizer()->AccelerateDisplay(framebuffer, framebuffer_addr,
+    if (!rasterizer->AccelerateDisplay(framebuffer, framebuffer_addr,
                                          static_cast<u32>(pixel_stride), screen_info)) {
         // Reset the screen info's display texture to its own permanent texture
         screen_info.display_texture = screen_info.texture.resource.handle;
@@ -1201,6 +1204,10 @@ void RendererOpenGL::CleanupVideoDumping() {
         mailbox->quit = true;
     }
     mailbox->free_cv.notify_one();
+}
+
+void RendererOpenGL::Sync() {
+    rasterizer->SyncEntireState();
 }
 
 } // namespace OpenGL

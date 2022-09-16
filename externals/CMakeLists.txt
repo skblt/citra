@@ -60,6 +60,16 @@ endif()
 # Glad
 add_subdirectory(glad)
 
+# glslang
+set(SKIP_GLSLANG_INSTALL ON)
+set(ENABLE_GLSLANG_BINARIES OFF)
+set(ENABLE_SPVREMAPPER OFF)
+set(ENABLE_CTEST OFF)
+add_subdirectory(glslang)
+
+# glm
+add_subdirectory(glm)
+
 # inih
 add_subdirectory(inih)
 

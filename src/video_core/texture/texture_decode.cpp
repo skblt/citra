@@ -227,14 +227,14 @@ void ConvertBGRToRGB(std::span<const std::byte> source, std::span<std::byte> des
     for (std::size_t i = 0; i < source.size(); i += 3) {
         u32 bgr{};
         std::memcpy(&bgr, source.data() + i, 3);
-        const u32 rgb = std::byteswap(bgr << 8);
+        const u32 rgb = Common::swap32(bgr << 8);
         std::memcpy(dest.data(), &rgb, 3);
     }
 }
 
 void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
     u32 j = 0;
-    for (u32 i = 0; i < source.size(); i += 3) {
+    for (std::size_t i = 0; i < source.size(); i += 3) {
         dest[j] = source[i + 2];
         dest[j + 1] = source[i + 1];
         dest[j + 2] = source[i];
@@ -246,7 +246,7 @@ void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> de
 void ConvertABGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
     for (u32 i = 0; i < source.size(); i += 4) {
         const u32 abgr = *reinterpret_cast<const u32*>(source.data() + i);
-        const u32 rgba = std::byteswap(abgr);
+        const u32 rgba = Common::swap32(abgr);
         std::memcpy(dest.data() + i, &rgba, 4);
     }
 }

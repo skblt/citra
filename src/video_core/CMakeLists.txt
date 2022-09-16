@@ -84,11 +84,41 @@ add_library(video_core STATIC
     #temporary, move these back in alphabetical order before merging
     renderer_opengl/gl_format_reinterpreter.cpp
     renderer_opengl/gl_format_reinterpreter.h
+    renderer_vulkan/pica_to_vk.h
+    renderer_vulkan/renderer_vulkan.cpp
+    renderer_vulkan/renderer_vulkan.h
+    renderer_vulkan/vk_common.cpp
+    renderer_vulkan/vk_common.h
+    renderer_vulkan/vk_rasterizer.cpp
+    renderer_vulkan/vk_rasterizer.h
+    renderer_vulkan/vk_instance.cpp
+    renderer_vulkan/vk_instance.h
+    renderer_vulkan/vk_pipeline_cache.cpp
+    renderer_vulkan/vk_pipeline_cache.h
+    renderer_vulkan/vk_platform.cpp
+    renderer_vulkan/vk_platform.h
+    renderer_vulkan/vk_renderpass_cache.cpp
+    renderer_vulkan/vk_renderpass_cache.h
+    renderer_vulkan/vk_shader_gen.cpp
+    renderer_vulkan/vk_shader_gen.h
+    renderer_vulkan/vk_shader.cpp
+    renderer_vulkan/vk_shader.h
+    renderer_vulkan/vk_stream_buffer.cpp
+    renderer_vulkan/vk_stream_buffer.h
+    renderer_vulkan/vk_swapchain.cpp
+    renderer_vulkan/vk_swapchain.h
+    renderer_vulkan/vk_task_scheduler.cpp
+    renderer_vulkan/vk_task_scheduler.h
+    renderer_vulkan/vk_texture_runtime.cpp
+    renderer_vulkan/vk_texture_runtime.h
     shader/debug_data.h
     shader/shader.cpp
     shader/shader.h
+    shader/shader_cache.h
     shader/shader_interpreter.cpp
     shader/shader_interpreter.h
+    shader/shader_uniforms.cpp
+    shader/shader_uniforms.h
     swrasterizer/clipper.cpp
     swrasterizer/clipper.h
     swrasterizer/framebuffer.cpp
@@ -159,8 +189,11 @@ endif()
 
 create_target_directory_groups(video_core)
 
+# Include Vulkan headers
+target_include_directories(video_core PRIVATE ../../externals/vulkan-headers/include)
+target_include_directories(video_core PRIVATE ../../externals/vma)
 target_link_libraries(video_core PUBLIC common core)
-target_link_libraries(video_core PRIVATE glad nihstro-headers Boost::serialization)
+target_link_libraries(video_core PRIVATE glad glm::glm SPIRV glslang nihstro-headers Boost::serialization)
 set_target_properties(video_core PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})
 
 if (ARCHITECTURE_x86_64)
