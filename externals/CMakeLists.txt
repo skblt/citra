@@ -60,6 +60,9 @@ endif()
 # Glad
 add_subdirectory(glad)
 
+# glslang
+add_subdirectory(glslang)
+
 # inih
 add_subdirectory(inih)
 

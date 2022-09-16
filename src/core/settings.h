@@ -169,7 +169,7 @@ struct Values {
     u64 init_time;
 
     // Renderer
-    GraphicsAPI graphics_api = GraphicsAPI::OpenGL;
+    GraphicsAPI graphics_api = GraphicsAPI::Vulkan;
     bool use_hw_renderer;
     bool use_hw_shader;
     bool separable_shader;

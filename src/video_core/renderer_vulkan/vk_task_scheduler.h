@@ -1,0 +1,82 @@
+// Copyright 2022 Citra Emulator Project
+// Licensed under GPLv2 or any later version
+// Refer to the license.txt file included.
+
+#pragma once
+
+#include <memory>
+#include <array>
+#include <functional>
+#include "common/common_types.h"
+#include "video_core/renderer_vulkan/vk_common.h"
+
+namespace Vulkan {
+
+constexpr u32 SCHEDULER_COMMAND_COUNT = 4;
+
+class Buffer;
+class Instance;
+
+class TaskScheduler {
+public:
+    TaskScheduler(const Instance& instance);
+    ~TaskScheduler();
+
+    /// Blocks the host until the current command completes execution
+    void Synchronize(u32 slot);
+
+    /// Waits for the fence counter to be reached by the GPU
+    void WaitFence(u32 counter);
+
+    /// Submits the current command to the graphics queue
+    void Submit(bool wait_completion = false, bool begin_next = true,
+                vk::Semaphore wait = VK_NULL_HANDLE,
+                vk::Semaphore signal = VK_NULL_HANDLE);
+
+    /// Returns the command buffer used for early upload operations.
+    vk::CommandBuffer GetUploadCommandBuffer();
+
+    /// Returns the command buffer used for rendering
+    vk::CommandBuffer GetRenderCommandBuffer() const {
+        return commands[current_command].render_command_buffer;
+    }
+
+    /// Returns the current descriptor pool
+    vk::DescriptorPool GetDescriptorPool() const {
+        return commands[current_command].descriptor_pool;
+    }
+
+    /// Returns the index of the current command slot
+    u32 GetCurrentSlotIndex() const {
+        return current_command;
+    }
+
+    /// Returns the last completed fence counter
+    u64 GetFenceCounter() const {
+        return completed_fence_counter;
+    }
+
+private:
+    /// Activates the next command slot and optionally waits for its completion
+    void SwitchSlot();
+
+private:
+    const Instance& instance;
+    u64 next_fence_counter = 1;
+    u64 completed_fence_counter = 0;
+
+    struct ExecutionSlot {
+        bool use_upload_buffer = false;
+        u64 fence_counter = 0;
+        vk::Fence fence{};
+        vk::DescriptorPool descriptor_pool;
+        vk::CommandBuffer render_command_buffer{};
+        vk::CommandBuffer upload_command_buffer{};
+    };
+
+    vk::CommandPool command_pool{};
+    std::array<ExecutionSlot, SCHEDULER_COMMAND_COUNT> commands;
+    u32 current_command = 0;
+};
+
+}  // namespace Vulkan

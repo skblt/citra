@@ -302,9 +302,9 @@ Surface::Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
     texture = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format, texture_type);
 }
 
-MICROPROFILE_DEFINE(RasterizerCache_TextureUL, "RasterizerCache", "Texture Upload", MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(OpenGL_Upload, "OpenGLSurface", "Texture Upload", MP_RGB(128, 192, 64));
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingBuffer& staging) {
-    MICROPROFILE_SCOPE(RasterizerCache_TextureUL);
+    MICROPROFILE_SCOPE(OpenGL_Upload);
 
     // Ensure no bad interactions with GL_UNPACK_ALIGNMENT
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
@@ -339,9 +339,9 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingBu
     InvalidateAllWatcher();
 }
 
-MICROPROFILE_DEFINE(RasterizerCache_TextureDL, "RasterizerCache", "Texture Download", MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(OpenGL_Download, "OpenGLSurface", "Texture Download", MP_RGB(128, 192, 64));
 void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingBuffer& staging) {
-    MICROPROFILE_SCOPE(RasterizerCache_TextureDL);
+    MICROPROFILE_SCOPE(OpenGL_Download);
 
     // Ensure no bad interactions with GL_PACK_ALIGNMENT
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);

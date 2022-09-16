@@ -6,8 +6,7 @@
 
 #include <array>
 #include "common/bit_field.h"
-#include "common/common_funcs.h"
-#include "common/common_types.h"
+#include "common/vector_math.h"
 #include "video_core/pica_types.h"
 
 namespace Pica {
@@ -18,7 +17,7 @@ struct RasterizerRegs {
         KeepAll = 0,
         KeepClockWise = 1,
         KeepCounterClockWise = 2,
-        // TODO: What does the third value imply?
+        KeepAll2 = 3
     };
 
     union {
