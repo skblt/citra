@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstring>
+#include <concepts>
 #include "common/cityhash.h"
 #include "common/common_types.h"
 
@@ -40,6 +41,13 @@ static inline u64 ComputeStructHash64(const T& data) noexcept {
 inline u64 HashCombine(std::size_t& seed, const u64 hash) {
     return seed ^= hash + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
+
+template <std::integral T>
+struct IdentityHash {
+    T operator()(const T& value) const {
+        return value;
+    }
+};
 
 /// A helper template that ensures the padding in a struct is initialized by memsetting to 0.
 template <typename T>

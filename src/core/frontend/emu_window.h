@@ -12,6 +12,15 @@
 
 namespace Frontend {
 
+/// Information for the Graphics Backends signifying what type of screen pointer is in
+/// WindowInformation
+enum class WindowSystemType {
+    Headless,
+    Windows,
+    X11,
+    Wayland,
+};
+
 struct Frame;
 /**
  * For smooth Vsync rendering, we want to always present the latest frame that the core generates,
@@ -117,6 +126,23 @@ public:
         std::pair<unsigned, unsigned> min_client_area_size;
     };
 
+    /// Data describing host window system information
+    struct WindowSystemInfo {
+        // Window system type. Determines which GL context or Vulkan WSI is used.
+        WindowSystemType type = WindowSystemType::Headless;
+
+        // Connection to a display server. This is used on X11 and Wayland platforms.
+        void* display_connection = nullptr;
+
+        // Render surface. This is a pointer to the native window handle, which depends
+        // on the platform. e.g. HWND for Windows, Window for X11. If the surface is
+        // set to nullptr, the video backend will run in headless mode.
+        void* render_surface = nullptr;
+
+        // Scale of the render surface. For hidpi systems, this will be >1.
+        float render_surface_scale = 1.0f;
+    };
+
     /// Polls window events
     virtual void PollEvents() = 0;
 
@@ -181,6 +207,13 @@ public:
     }
 
     /**
+     * Returns system information about the drawing area.
+     */
+    const WindowSystemInfo& GetWindowInfo() const {
+        return window_info;
+    }
+
+    /**
      * Gets the framebuffer layout (width, height, and screen regions)
      * @note This method is thread-safe
      */
@@ -225,6 +258,8 @@ protected:
     void NotifyFramebufferLayoutChanged(const Layout::FramebufferLayout& layout) {
         framebuffer_layout = layout;
     }
+
+    WindowSystemInfo window_info;
 
 private:
     /**

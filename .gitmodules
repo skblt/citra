@@ -61,3 +61,6 @@
 [submodule "vulkan-headers"]
 	path = externals/vulkan-headers
 	url = https://github.com/KhronosGroup/Vulkan-Headers
+[submodule "glslang"]
+	path = externals/glslang
+	url = https://github.com/KhronosGroup/glslang
