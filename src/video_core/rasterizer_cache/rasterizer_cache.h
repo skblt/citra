@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include <optional>
+#include <vector>
 #include <boost/range/iterator_range.hpp>
 #include "common/alignment.h"
 #include "common/logging/log.h"
@@ -901,24 +902,15 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
 
     const auto upload_data = source_ptr.GetWriteBytes(load_end - load_start);
     const u32 start_offset = load_start - surface->addr;
-    const u32 upload_size = static_cast<u32>(upload_data.size());
 
     MICROPROFILE_SCOPE(RasterizerCache_SurfaceLoad);
 
-    if (!surface->is_tiled) {
-        ASSERT(surface->type == SurfaceType::Color);
-
-        const auto dest_buffer = staging.mapped.subspan(start_offset, upload_size);
-        /*if (surface->pixel_format == PixelFormat::RGBA8 && GLES) {
-            Pica::Texture::ConvertABGRToRGBA(upload_data, dest_buffer);
-        } else if (surface->pixel_format == PixelFormat::RGB8 && GLES) {
-            Pica::Texture::ConvertBGRToRGB(upload_data, dest_buffer);
-        } else {
-            std::memcpy(dest_buffer.data(), upload_data.data(), upload_size);
-        }*/
-        std::memcpy(dest_buffer.data(), upload_data.data(), upload_size);
+    if (surface->is_tiled) {
+        std::vector<std::byte> unswizzled_data(staging.size);
+        UnswizzleTexture(*surface, start_offset, upload_data, unswizzled_data);
+        runtime.FormatConvert(surface->pixel_format, true, unswizzled_data, staging.mapped);
     } else {
-        UnswizzleTexture(*surface, start_offset, upload_data, staging.mapped);
+        runtime.FormatConvert(surface->pixel_format, true, upload_data, staging.mapped);
     }
 
     const BufferTextureCopy upload = {
@@ -957,24 +949,15 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
 
     const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
     const u32 start_offset = flush_start - surface->addr;
-    const u32 download_size = static_cast<u32>(download_dest.size());
 
     MICROPROFILE_SCOPE(RasterizerCache_SurfaceFlush);
 
-    if (!surface->is_tiled) {
-        ASSERT(surface->type == SurfaceType::Color);
-
-        const auto download_data = staging.mapped.subspan(start_offset, download_size);
-        /*if (surface->pixel_format == PixelFormat::RGBA8 && GLES) {
-            Pica::Texture::ConvertABGRToRGBA(download_data, download_dest);
-        } else if (surface->pixel_format == PixelFormat::RGB8 && GLES) {
-            Pica::Texture::ConvertBGRToRGB(download_data, download_dest);
-        } else {
-            std::memcpy(download_dest.data(), download_data.data(), download_size);
-        }*/
-        std::memcpy(download_dest.data(), download_data.data(), download_size);
+    if (surface->is_tiled) {
+        std::vector<std::byte> swizzled_data(staging.size);
+        SwizzleTexture(*surface, start_offset, staging.mapped, swizzled_data);
+        runtime.FormatConvert(surface->pixel_format, false, swizzled_data, download_dest);
     } else {
-        SwizzleTexture(*surface, start_offset, staging.mapped, download_dest);
+        runtime.FormatConvert(surface->pixel_format, false, staging.mapped, download_dest);
     }
 }
 

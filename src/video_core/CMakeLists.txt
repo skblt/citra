@@ -83,8 +83,12 @@ add_library(video_core STATIC
     renderer_opengl/gl_format_reinterpreter.cpp
     renderer_opengl/gl_format_reinterpreter.h
     renderer_vulkan/pica_to_vk.h
+    renderer_vulkan/renderer_vulkan.cpp
+    renderer_vulkan/renderer_vulkan.h
     renderer_vulkan/vk_common.cpp
     renderer_vulkan/vk_common.h
+    renderer_vulkan/vk_rasterizer.cpp
+    renderer_vulkan/vk_rasterizer.h
     renderer_vulkan/vk_instance.cpp
     renderer_vulkan/vk_instance.h
     renderer_vulkan/vk_pipeline_cache.cpp
@@ -110,6 +114,8 @@ add_library(video_core STATIC
     shader/shader_cache.h
     shader/shader_interpreter.cpp
     shader/shader_interpreter.h
+    shader/shader_uniforms.cpp
+    shader/shader_uniforms.h
     swrasterizer/clipper.cpp
     swrasterizer/clipper.h
     swrasterizer/framebuffer.cpp
@@ -183,7 +189,7 @@ create_target_directory_groups(video_core)
 target_include_directories(video_core PRIVATE ../../externals/vulkan-headers/include)
 target_include_directories(video_core PRIVATE ../../externals/vma)
 target_link_libraries(video_core PUBLIC common core)
-target_link_libraries(video_core PRIVATE glad glslang nihstro-headers Boost::serialization)
+target_link_libraries(video_core PRIVATE glad glslang SPIRV nihstro-headers Boost::serialization)
 set_target_properties(video_core PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})
 
 if (ARCHITECTURE_x86_64)

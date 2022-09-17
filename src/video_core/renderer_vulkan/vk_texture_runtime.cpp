@@ -5,6 +5,7 @@
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
@@ -54,16 +55,44 @@ vk::ImageAspectFlags ToVkAspect(VideoCore::SurfaceType type) {
     return vk::ImageAspectFlagBits::eColor;
 }
 
+vk::FormatFeatureFlagBits ToVkFormatFeatures(VideoCore::SurfaceType type) {
+    switch (type) {
+    case VideoCore::SurfaceType::Color:
+    case VideoCore::SurfaceType::Texture:
+    case VideoCore::SurfaceType::Fill:
+        return vk::FormatFeatureFlagBits::eColorAttachment;
+    case VideoCore::SurfaceType::Depth:
+    case VideoCore::SurfaceType::DepthStencil:
+        return vk::FormatFeatureFlagBits::eDepthStencilAttachment;
+    default:
+        UNREACHABLE_MSG("Invalid surface type!");
+    }
+
+    return vk::FormatFeatureFlagBits::eColorAttachment;
+}
+
 constexpr u32 STAGING_BUFFER_SIZE = 16 * 1024 * 1024;
 
-TextureRuntime::TextureRuntime(const Instance& instance, TaskScheduler& scheduler)
-    : instance{instance}, scheduler{scheduler} {
+TextureRuntime::TextureRuntime(const Instance& instance, TaskScheduler& scheduler,
+                               RenderpassCache& renderpass_cache)
+    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache} {
 
     for (auto& buffer : staging_buffers) {
         buffer = std::make_unique<StagingBuffer>(instance, STAGING_BUFFER_SIZE,
                                                  vk::BufferUsageFlagBits::eTransferSrc |
                                                  vk::BufferUsageFlagBits::eTransferDst);
     }
+}
+
+TextureRuntime::~TextureRuntime() {
+    VmaAllocator allocator = instance.GetAllocator();
+    vk::Device device = instance.GetDevice();
+    for (auto& [key, alloc] : texture_recycler) {
+        vmaDestroyImage(allocator, alloc.image, alloc.allocation);
+        device.destroyImageView(alloc.image_view);
+    }
+
+    texture_recycler.clear();
 }
 
 StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
@@ -77,6 +106,7 @@ StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
     const auto& buffer = staging_buffers[current_slot];
     return StagingData{
         .buffer = buffer->buffer,
+        .size = size,
         .mapped = buffer->mapped.subspan(offset, size),
         .buffer_offset = offset
     };
@@ -108,6 +138,7 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     vk::Format vk_format = instance.GetFormatAlternative(ToVkFormat(format));
     vk::ImageAspectFlags aspect = GetImageAspect(vk_format);
 
+    const u32 levels = std::bit_width(std::max(width, height));
     const vk::ImageCreateInfo image_info = {
         .flags = type == VideoCore::TextureType::CubeMap ?
                  vk::ImageCreateFlagBits::eCubeCompatible :
@@ -115,7 +146,7 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         .imageType = vk::ImageType::e2D,
         .format = vk_format,
         .extent = {width, height, 1},
-        .mipLevels = std::bit_width(std::max(width, height)),
+        .mipLevels = levels,
         .arrayLayers = layers,
         .samples = vk::SampleCountFlagBits::e1,
         .usage = GetImageUsage(aspect),
@@ -160,13 +191,26 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         .image = image,
         .image_view = image_view,
         .allocation = allocation,
+        .levels = levels
     };
+}
+
+void TextureRuntime::FormatConvert(VideoCore::PixelFormat format,  bool upload,
+                                   std::span<std::byte> source, std::span<std::byte> dest) {
+    const VideoCore::SurfaceType type = VideoCore::GetFormatType(format);
+    const vk::FormatFeatureFlagBits feature = ToVkFormatFeatures(type);
+    if (!instance.IsFormatSupported(ToVkFormat(format), feature)) {
+        LOG_CRITICAL(Render_Vulkan, "Unimplemented format converion!");
+        UNREACHABLE();
+    }
 }
 
 bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
                                   VideoCore::ClearValue value) {
+    renderpass_cache.ExitRenderpass();
+
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    surface.TransitionLevels(command_buffer, vk::ImageLayout::eTransferDstOptimal, clear.texture_level, 1);
+    Transition(command_buffer, surface.alloc, vk::ImageLayout::eTransferDstOptimal, clear.texture_level, 1);
 
     // For full clears we can use vkCmdClearColorImage/vkCmdClearDepthStencilImage
     if (clear.texture_rect == surface.GetScaledRect()) {
@@ -184,7 +228,7 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
                 .layerCount = 1
             };
 
-            command_buffer.clearColorImage(surface.image, vk::ImageLayout::eTransferDstOptimal,
+            command_buffer.clearColorImage(surface.alloc.image, vk::ImageLayout::eTransferDstOptimal,
                                            clear_color, range);
         } else if (aspect & vk::ImageAspectFlagBits::eDepth || aspect & vk::ImageAspectFlagBits::eStencil) {
             const vk::ClearDepthStencilValue clear_depth = {
@@ -200,7 +244,7 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
                 .layerCount = 1
             };
 
-            command_buffer.clearDepthStencilImage(surface.image, vk::ImageLayout::eTransferDstOptimal,
+            command_buffer.clearDepthStencilImage(surface.alloc.image, vk::ImageLayout::eTransferDstOptimal,
                                                   clear_depth, range);
         }
     } else {
@@ -211,6 +255,8 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
 }
 
 bool TextureRuntime::CopyTextures(Surface& source, Surface& dest, const VideoCore::TextureCopy& copy) {
+    renderpass_cache.ExitRenderpass();
+
     const vk::ImageCopy image_copy = {
         .srcSubresource = {
             .aspectMask = ToVkAspect(source.type),
@@ -230,19 +276,21 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest, const VideoCor
     };
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    source.TransitionLevels(command_buffer, vk::ImageLayout::eTransferSrcOptimal, copy.src_level, 1);
-    dest.TransitionLevels(command_buffer, vk::ImageLayout::eTransferDstOptimal, copy.dst_level, 1);
+    Transition(command_buffer, source.alloc, vk::ImageLayout::eTransferSrcOptimal, copy.src_level, 1);
+    Transition(command_buffer, dest.alloc, vk::ImageLayout::eTransferDstOptimal, copy.dst_level, 1);
 
-    command_buffer.copyImage(source.image, vk::ImageLayout::eTransferSrcOptimal,
-                             dest.image, vk::ImageLayout::eTransferDstOptimal, image_copy);
+    command_buffer.copyImage(source.alloc.image, vk::ImageLayout::eTransferSrcOptimal,
+                             dest.alloc.image, vk::ImageLayout::eTransferDstOptimal, image_copy);
 
     return true;
 }
 
 bool TextureRuntime::BlitTextures(Surface& source, Surface& dest, const VideoCore::TextureBlit& blit) {
+    renderpass_cache.ExitRenderpass();
+
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    source.TransitionLevels(command_buffer, vk::ImageLayout::eTransferSrcOptimal, blit.src_level, 1);
-    dest.TransitionLevels(command_buffer, vk::ImageLayout::eTransferDstOptimal, blit.dst_level, 1);
+    Transition(command_buffer, source.alloc, vk::ImageLayout::eTransferSrcOptimal, blit.src_level, 1);
+    Transition(command_buffer, dest.alloc, vk::ImageLayout::eTransferDstOptimal, blit.dst_level, 1);
 
     const std::array source_offsets = {
         vk::Offset3D{static_cast<s32>(blit.src_rect.left), static_cast<s32>(blit.src_rect.bottom), 0},
@@ -271,14 +319,16 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest, const VideoCor
       .dstOffsets = dest_offsets
     };
 
-    command_buffer.blitImage(source.image, vk::ImageLayout::eTransferSrcOptimal,
-                             dest.image, vk::ImageLayout::eTransferDstOptimal,
+    command_buffer.blitImage(source.alloc.image, vk::ImageLayout::eTransferSrcOptimal,
+                             dest.alloc.image, vk::ImageLayout::eTransferDstOptimal,
                              blit_area, vk::Filter::eLinear);
 
     return true;
 }
 
 void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {
+    renderpass_cache.ExitRenderpass();
+
     // TODO: Investigate AMD single pass downsampler
     s32 current_width = surface.GetScaledWidth();
     s32 current_height = surface.GetScaledHeight();
@@ -287,8 +337,8 @@ void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {
     vk::ImageAspectFlags aspect = ToVkAspect(surface.type);
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     for (u32 i = 1; i < levels; i++) {
-        surface.TransitionLevels(command_buffer, vk::ImageLayout::eTransferSrcOptimal, i - 1, 1);
-        surface.TransitionLevels(command_buffer, vk::ImageLayout::eTransferDstOptimal, i, 1);
+        Transition(command_buffer, surface.alloc, vk::ImageLayout::eTransferSrcOptimal, i - 1, 1);
+        Transition(command_buffer, surface.alloc, vk::ImageLayout::eTransferDstOptimal, i, 1);
 
         const std::array source_offsets = {
             vk::Offset3D{0, 0, 0},
@@ -318,166 +368,15 @@ void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {
           .dstOffsets = dest_offsets
         };
 
-        command_buffer.blitImage(surface.image, vk::ImageLayout::eTransferSrcOptimal,
-                                 surface.image, vk::ImageLayout::eTransferDstOptimal,
+        command_buffer.blitImage(surface.alloc.image, vk::ImageLayout::eTransferSrcOptimal,
+                                 surface.alloc.image, vk::ImageLayout::eTransferDstOptimal,
                                  blit_area, vk::Filter::eLinear);
     }
 }
 
-Surface::Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
-    : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, instance{runtime.GetInstance()},
-      scheduler{runtime.GetScheduler()} {
-    const ImageAlloc alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(),
-                                              params.pixel_format, texture_type);
-
-    allocation = alloc.allocation;
-    image_view = alloc.image_view;
-    image = alloc.image;
-}
-
-MICROPROFILE_DEFINE(Vulkan_Upload, "VulkanSurface", "Texture Upload", MP_RGB(128, 192, 64));
-void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
-    MICROPROFILE_SCOPE(Vulkan_Upload);
-
-    const bool is_scaled = res_scale != 1;
-    if (is_scaled) {
-        ScaledUpload(upload);
-    } else {
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        const VideoCore::Rect2D rect = upload.texture_rect;
-        const vk::BufferImageCopy copy_region = {
-            .bufferOffset = staging.buffer_offset,
-            .bufferRowLength = rect.GetWidth(),
-            .bufferImageHeight = rect.GetHeight(),
-            .imageSubresource = {
-                .aspectMask = aspect,
-                .mipLevel = upload.texture_level,
-                .baseArrayLayer = 0,
-                .layerCount = 1
-            },
-            .imageOffset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom), 0},
-            .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1}
-        };
-
-        TransitionLevels(command_buffer, vk::ImageLayout::eTransferDstOptimal, upload.texture_level, 1);
-        command_buffer.copyBufferToImage(staging.buffer, image,
-                                         vk::ImageLayout::eTransferDstOptimal,
-                                         copy_region);
-    }
-
-    InvalidateAllWatcher();
-}
-
-MICROPROFILE_DEFINE(Vulkan_Download, "VulkanSurface", "Texture Download", MP_RGB(128, 192, 64));
-void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
-    MICROPROFILE_SCOPE(Vulkan_Download);
-
-    const bool is_scaled = res_scale != 1;
-    if (is_scaled) {
-        ScaledDownload(download);
-    } else {
-        u32 region_count = 0;
-        std::array<vk::BufferImageCopy, 2> copy_regions;
-
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        const VideoCore::Rect2D rect = download.texture_rect;
-        vk::BufferImageCopy copy_region = {
-            .bufferOffset = staging.buffer_offset,
-            .bufferRowLength = rect.GetWidth(),
-            .bufferImageHeight = rect.GetHeight(),
-            .imageSubresource = {
-                .aspectMask = aspect,
-                .mipLevel = download.texture_level,
-                .baseArrayLayer = 0,
-                .layerCount = 1
-            },
-            .imageOffset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom), 0},
-            .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1}
-        };
-
-        if (aspect & vk::ImageAspectFlagBits::eColor) {
-            copy_regions[region_count++] = copy_region;
-        } else if (aspect & vk::ImageAspectFlagBits::eDepth) {
-            copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eDepth;
-            copy_regions[region_count++] = copy_region;
-
-            if (aspect & vk::ImageAspectFlagBits::eStencil) {
-                copy_region.bufferOffset += staging.mapped.size();
-                copy_region.imageSubresource.aspectMask |= vk::ImageAspectFlagBits::eStencil;
-                copy_regions[region_count++] = copy_region;
-            }
-        }
-
-        TransitionLevels(command_buffer, vk::ImageLayout::eTransferSrcOptimal, download.texture_level, 1);
-
-        // Copy pixel data to the staging buffer
-        command_buffer.copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal,
-                                         staging.buffer, region_count, copy_regions.data());
-
-        scheduler.Submit(true);
-    }
-}
-
-void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download) {
-    /*const u32 rect_width = download.texture_rect.GetWidth();
-    const u32 rect_height = download.texture_rect.GetHeight();
-
-    // Allocate an unscaled texture that fits the download rectangle to use as a blit destination
-    const ImageAlloc unscaled_tex = runtime.Allocate(rect_width, rect_height, pixel_format,
-                                                     VideoCore::TextureType::Texture2D);
-    runtime.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0, GL_TEXTURE_2D, type, unscaled_tex);
-    runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, download.texture_level, GL_TEXTURE_2D, type, texture);
-
-    // Blit the scaled rectangle to the unscaled texture
-    const VideoCore::Rect2D scaled_rect = download.texture_rect * res_scale;
-    glBlitFramebuffer(scaled_rect.left, scaled_rect.bottom, scaled_rect.right, scaled_rect.top,
-                      0, 0, rect_width, rect_height, MakeBufferMask(type), GL_LINEAR);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, unscaled_tex.handle);
-
-    const auto& tuple = runtime.GetFormatTuple(pixel_format);
-    if (driver.IsOpenGLES()) {
-        const auto& downloader_es = runtime.GetDownloaderES();
-        downloader_es.GetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type,
-                                  rect_height, rect_width,
-                                  reinterpret_cast<void*>(download.buffer_offset));
-    } else {
-        glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type,
-                      reinterpret_cast<void*>(download.buffer_offset));
-    }*/
-}
-
-void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload) {
-    /*const u32 rect_width = upload.texture_rect.GetWidth();
-    const u32 rect_height = upload.texture_rect.GetHeight();
-
-    OGLTexture unscaled_tex = runtime.Allocate(rect_width, rect_height, pixel_format,
-                                               VideoCore::TextureType::Texture2D);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, unscaled_tex.handle);
-
-    glTexSubImage2D(GL_TEXTURE_2D, upload.texture_level, 0, 0, rect_width, rect_height,
-                    tuple.format, tuple.type, reinterpret_cast<void*>(upload.buffer_offset));
-
-    const auto scaled_rect = upload.texture_rect * res_scale;
-    const auto unscaled_rect = VideoCore::Rect2D{0, rect_height, rect_width, 0};
-    const auto& filterer = runtime.GetFilterer();
-    if (!filterer.Filter(unscaled_tex, unscaled_rect, texture, scaled_rect, type)) {
-        runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, 0, GL_TEXTURE_2D, type, unscaled_tex);
-        runtime.BindFramebuffer(GL_DRAW_FRAMEBUFFER, upload.texture_level, GL_TEXTURE_2D, type, texture);
-
-        // If filtering fails, resort to normal blitting
-        glBlitFramebuffer(0, 0, rect_width, rect_height,
-                          upload.texture_rect.left, upload.texture_rect.bottom,
-                          upload.texture_rect.right, upload.texture_rect.top,
-                          MakeBufferMask(type), GL_LINEAR);
-    }*/
-}
-
-void Surface::TransitionLevels(vk::CommandBuffer command_buffer, vk::ImageLayout new_layout,
-                               u32 level, u32 level_count) {
-    if (new_layout == layout) {
+void TextureRuntime::Transition(vk::CommandBuffer command_buffer, ImageAlloc& alloc,
+                                vk::ImageLayout new_layout, u32 level, u32 level_count) {
+    if (new_layout == alloc.layout || !alloc.image) {
         return;
     }
 
@@ -540,23 +439,194 @@ void Surface::TransitionLevels(vk::CommandBuffer command_buffer, vk::ImageLayout
         return info;
     };
 
-    LayoutInfo source = GetLayoutInfo(layout);
+    LayoutInfo source = GetLayoutInfo(alloc.layout);
     LayoutInfo dest = GetLayoutInfo(new_layout);
 
     const vk::ImageMemoryBarrier barrier = {
         .srcAccessMask = source.access,
         .dstAccessMask = dest.access,
-        .oldLayout = layout,
+        .oldLayout = alloc.layout,
         .newLayout = new_layout,
-        .image = image,
-        .subresourceRange = {aspect, level, level_count, 0, 1}
+        .image = alloc.image,
+        .subresourceRange = {
+            .aspectMask = alloc.aspect,
+            .baseMipLevel = level,
+            .levelCount = level_count,
+            .baseArrayLayer = 0,
+            .layerCount = 1
+        }
     };
 
     command_buffer.pipelineBarrier(source.stage, dest.stage,
                                    vk::DependencyFlagBits::eByRegion,
                                    {}, {}, barrier);
 
-    layout = new_layout;
+    alloc.layout = new_layout;
+}
+
+Surface::Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
+    : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, instance{runtime.GetInstance()},
+      scheduler{runtime.GetScheduler()} {
+    alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format, texture_type);
+}
+
+Surface::~Surface() {
+    const VideoCore::HostTextureTag tag = {
+        .format = pixel_format,
+        .width = GetScaledWidth(),
+        .height = GetScaledHeight(),
+        .layers = texture_type == VideoCore::TextureType::CubeMap ? 6u : 1u
+    };
+
+    runtime.texture_recycler.emplace(tag, std::move(alloc));
+}
+
+MICROPROFILE_DEFINE(Vulkan_Upload, "VulkanSurface", "Texture Upload", MP_RGB(128, 192, 64));
+void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
+    MICROPROFILE_SCOPE(Vulkan_Upload);
+
+    const bool is_scaled = res_scale != 1;
+    if (is_scaled) {
+        ScaledUpload(upload);
+    } else {
+        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+        const VideoCore::Rect2D rect = upload.texture_rect;
+        const vk::BufferImageCopy copy_region = {
+            .bufferOffset = staging.buffer_offset,
+            .bufferRowLength = rect.GetWidth(),
+            .bufferImageHeight = rect.GetHeight(),
+            .imageSubresource = {
+                .aspectMask = alloc.aspect,
+                .mipLevel = upload.texture_level,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            },
+            .imageOffset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom), 0},
+            .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1}
+        };
+
+        runtime.Transition(command_buffer, alloc, vk::ImageLayout::eTransferDstOptimal, upload.texture_level, 1);
+        command_buffer.copyBufferToImage(staging.buffer, alloc.image,
+                                         vk::ImageLayout::eTransferDstOptimal,
+                                         copy_region);
+    }
+
+    InvalidateAllWatcher();
+
+    // Lock this data until the next scheduler switch
+    const u32 current_slot = scheduler.GetCurrentSlotIndex();
+    runtime.staging_offsets[current_slot] += staging.size;
+}
+
+MICROPROFILE_DEFINE(Vulkan_Download, "VulkanSurface", "Texture Download", MP_RGB(128, 192, 64));
+void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
+    MICROPROFILE_SCOPE(Vulkan_Download);
+
+    const bool is_scaled = res_scale != 1;
+    if (is_scaled) {
+        ScaledDownload(download);
+    } else {
+        u32 region_count = 0;
+        std::array<vk::BufferImageCopy, 2> copy_regions;
+
+        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+        const VideoCore::Rect2D rect = download.texture_rect;
+        vk::BufferImageCopy copy_region = {
+            .bufferOffset = staging.buffer_offset,
+            .bufferRowLength = rect.GetWidth(),
+            .bufferImageHeight = rect.GetHeight(),
+            .imageSubresource = {
+                .aspectMask = alloc.aspect,
+                .mipLevel = download.texture_level,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            },
+            .imageOffset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom), 0},
+            .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1}
+        };
+
+        if (alloc.aspect & vk::ImageAspectFlagBits::eColor) {
+            copy_regions[region_count++] = copy_region;
+        } else if (alloc.aspect & vk::ImageAspectFlagBits::eDepth) {
+            copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eDepth;
+            copy_regions[region_count++] = copy_region;
+
+            if (alloc.aspect & vk::ImageAspectFlagBits::eStencil) {
+                copy_region.bufferOffset += staging.mapped.size();
+                copy_region.imageSubresource.aspectMask |= vk::ImageAspectFlagBits::eStencil;
+                copy_regions[region_count++] = copy_region;
+            }
+        }
+
+        runtime.Transition(command_buffer, alloc, vk::ImageLayout::eTransferSrcOptimal, download.texture_level, 1);
+
+        // Copy pixel data to the staging buffer
+        command_buffer.copyImageToBuffer(alloc.image, vk::ImageLayout::eTransferSrcOptimal,
+                                         staging.buffer, region_count, copy_regions.data());
+
+        scheduler.Submit(true);
+    }
+
+    // Lock this data until the next scheduler switch
+    const u32 current_slot = scheduler.GetCurrentSlotIndex();
+    runtime.staging_offsets[current_slot] += staging.size;
+}
+
+void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download) {
+    /*const u32 rect_width = download.texture_rect.GetWidth();
+    const u32 rect_height = download.texture_rect.GetHeight();
+
+    // Allocate an unscaled texture that fits the download rectangle to use as a blit destination
+    const ImageAlloc unscaled_tex = runtime.Allocate(rect_width, rect_height, pixel_format,
+                                                     VideoCore::TextureType::Texture2D);
+    runtime.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0, GL_TEXTURE_2D, type, unscaled_tex);
+    runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, download.texture_level, GL_TEXTURE_2D, type, texture);
+
+    // Blit the scaled rectangle to the unscaled texture
+    const VideoCore::Rect2D scaled_rect = download.texture_rect * res_scale;
+    glBlitFramebuffer(scaled_rect.left, scaled_rect.bottom, scaled_rect.right, scaled_rect.top,
+                      0, 0, rect_width, rect_height, MakeBufferMask(type), GL_LINEAR);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, unscaled_tex.handle);
+
+    const auto& tuple = runtime.GetFormatTuple(pixel_format);
+    if (driver.IsOpenGLES()) {
+        const auto& downloader_es = runtime.GetDownloaderES();
+        downloader_es.GetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type,
+                                  rect_height, rect_width,
+                                  reinterpret_cast<void*>(download.buffer_offset));
+    } else {
+        glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type,
+                      reinterpret_cast<void*>(download.buffer_offset));
+    }*/
+}
+
+void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload) {
+    /*const u32 rect_width = upload.texture_rect.GetWidth();
+    const u32 rect_height = upload.texture_rect.GetHeight();
+
+    OGLTexture unscaled_tex = runtime.Allocate(rect_width, rect_height, pixel_format,
+                                               VideoCore::TextureType::Texture2D);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, unscaled_tex.handle);
+
+    glTexSubImage2D(GL_TEXTURE_2D, upload.texture_level, 0, 0, rect_width, rect_height,
+                    tuple.format, tuple.type, reinterpret_cast<void*>(upload.buffer_offset));
+
+    const auto scaled_rect = upload.texture_rect * res_scale;
+    const auto unscaled_rect = VideoCore::Rect2D{0, rect_height, rect_width, 0};
+    const auto& filterer = runtime.GetFilterer();
+    if (!filterer.Filter(unscaled_tex, unscaled_rect, texture, scaled_rect, type)) {
+        runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, 0, GL_TEXTURE_2D, type, unscaled_tex);
+        runtime.BindFramebuffer(GL_DRAW_FRAMEBUFFER, upload.texture_level, GL_TEXTURE_2D, type, texture);
+
+        // If filtering fails, resort to normal blitting
+        glBlitFramebuffer(0, 0, rect_width, rect_height,
+                          upload.texture_rect.left, upload.texture_rect.bottom,
+                          upload.texture_rect.right, upload.texture_rect.top,
+                          MakeBufferMask(type), GL_LINEAR);
+    }*/
 }
 
 } // namespace Vulkan

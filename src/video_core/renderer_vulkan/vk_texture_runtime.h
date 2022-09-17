@@ -15,6 +15,7 @@ namespace Vulkan {
 
 struct StagingData {
     vk::Buffer buffer;
+    u32 size = 0;
     std::span<std::byte> mapped{};
     u32 buffer_offset = 0;
 };
@@ -23,9 +24,13 @@ struct ImageAlloc {
     vk::Image image;
     vk::ImageView image_view;
     VmaAllocation allocation;
+    vk::ImageLayout layout = vk::ImageLayout::eUndefined;
+    vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eNone;
+    u32 levels = 1;
 };
 
 class Instance;
+class RenderpassCache;
 class Surface;
 
 /**
@@ -35,11 +40,24 @@ class Surface;
 class TextureRuntime {
     friend class Surface;
 public:
-    TextureRuntime(const Instance& instance, TaskScheduler& scheduler);
-    ~TextureRuntime() = default;
+    TextureRuntime(const Instance& instance, TaskScheduler& scheduler,
+                   RenderpassCache& renderpass_cache);
+    ~TextureRuntime();
 
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
     StagingData FindStaging(u32 size, bool upload);
+
+    /// Allocates a vulkan image possibly resusing an existing one
+    ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
+                        VideoCore::TextureType type);
+
+    /// Performs required format convertions on the staging data
+    void FormatConvert(VideoCore::PixelFormat format,  bool upload,
+                       std::span<std::byte> source, std::span<std::byte> dest);
+
+    /// Transitions the mip level range of the surface to new_layout
+    void Transition(vk::CommandBuffer command_buffer, ImageAlloc& alloc,
+                    vk::ImageLayout new_layout, u32 level, u32 level_count);
 
     /// Performs operations that need to be done on every scheduler slot switch
     void OnSlotSwitch(u32 new_slot);
@@ -58,10 +76,6 @@ public:
     void GenerateMipmaps(Surface& surface, u32 max_level);
 
 private:
-    /// Allocates a vulkan image possibly resusing an existing one
-    ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
-                        VideoCore::TextureType type);
-
     /// Returns the current Vulkan instance
     const Instance& GetInstance() const {
         return instance;
@@ -75,6 +89,7 @@ private:
 private:
     const Instance& instance;
     TaskScheduler& scheduler;
+    RenderpassCache& renderpass_cache;
     std::array<std::unique_ptr<StagingBuffer>, SCHEDULER_COMMAND_COUNT> staging_buffers;
     std::array<u32, SCHEDULER_COMMAND_COUNT> staging_offsets{};
     std::unordered_map<VideoCore::HostTextureTag, ImageAlloc> texture_recycler;
@@ -82,9 +97,10 @@ private:
 
 class Surface : public VideoCore::SurfaceBase<Surface> {
     friend class TextureRuntime;
+    friend class RasterizerVulkan;
 public:
     Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
-    ~Surface() override = default;
+    ~Surface() override;
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture
     void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
@@ -102,21 +118,13 @@ private:
     /// Overrides the image layout of the mip level range
     void SetLayout(vk::ImageLayout new_layout, u32 level = 0, u32 level_count = 1);
 
-    /// Transitions the mip level range of the surface to new_layout
-    void TransitionLevels(vk::CommandBuffer command_buffer, vk::ImageLayout new_layout,
-                          u32 level, u32 level_count);
-
 private:
     TextureRuntime& runtime;
     const Instance& instance;
     TaskScheduler& scheduler;
 
-    vk::Image image{};
-    vk::ImageView image_view{};
-    VmaAllocation allocation = nullptr;
+    ImageAlloc alloc{};
     vk::Format internal_format = vk::Format::eUndefined;
-    vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eNone;
-    vk::ImageLayout layout = vk::ImageLayout::eUndefined;
 };
 
 struct Traits {
