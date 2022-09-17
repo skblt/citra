@@ -10,18 +10,21 @@
 namespace Vulkan {
 
 class Instance;
-class Swapchain;
+class TaskScheduler;
 
 constexpr u32 MAX_COLOR_FORMATS = 5;
 constexpr u32 MAX_DEPTH_FORMATS = 3;
 
 class RenderpassCache {
 public:
-    RenderpassCache(const Instance& instance);
+    RenderpassCache(const Instance& instance, TaskScheduler& scheduler);
     ~RenderpassCache();
 
-    /// Creates the renderpass used when rendering to the swapchain
-    void CreatePresentRenderpass(vk::Format format);
+    /// Begins a new renderpass only when no other renderpass is currently active
+    void EnterRenderpass(const vk::RenderPassBeginInfo begin_info);
+
+    /// Exits from any currently active renderpass instance
+    void ExitRenderpass();
 
     /// Returns the renderpass associated with the color-depth format pair
     vk::RenderPass GetRenderpass(VideoCore::PixelFormat color, VideoCore::PixelFormat depth,
@@ -32,6 +35,9 @@ public:
         return present_renderpass;
     }
 
+    /// Creates the renderpass used when rendering to the swapchain
+    void CreatePresentRenderpass(vk::Format format);
+
 private:
     /// Creates a renderpass configured appropriately and stores it in cached_renderpasses
     vk::RenderPass CreateRenderPass(vk::Format color, vk::Format depth, vk::AttachmentLoadOp load_op,
@@ -39,8 +45,11 @@ private:
 
 private:
     const Instance& instance;
+    TaskScheduler& scheduler;
+
+    bool renderpass_active = false;
     vk::RenderPass present_renderpass{};
     vk::RenderPass cached_renderpasses[MAX_COLOR_FORMATS+1][MAX_DEPTH_FORMATS+1][2];
 };
 
-} // namespace VideoCore::Vulkan
+} // namespace Vulkan

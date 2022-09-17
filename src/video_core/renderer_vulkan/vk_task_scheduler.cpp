@@ -24,6 +24,7 @@ TaskScheduler::TaskScheduler(const Instance& instance) : instance{instance} {
         vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 1024},
         vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 1024},
         vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 2048},
+        vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 512},
         vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 2048},
         vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 1024}
     };

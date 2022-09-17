@@ -1209,7 +1209,8 @@ float ProcTexNoiseCoef(vec2 x) {
 
 std::string GenerateFragmentShader(const PicaFSConfig& config) {
     const auto& state = config.state;
-    std::string out = "#extension GL_ARB_separate_shader_objects : enable\n";
+    std::string out = "#version 450 core\n"
+                      "#extension GL_ARB_separate_shader_objects : enable\n\n";
     out += GetVertexInterfaceDeclaration(false);
 
     out += R"(
@@ -1538,7 +1539,8 @@ do {
 }
 
 std::string GenerateTrivialVertexShader() {
-    std::string out = "#extension GL_ARB_separate_shader_objects : enable\n";
+    std::string out = "#version 450 core\n"
+                      "#extension GL_ARB_separate_shader_objects : enable\n\n";
     out +=
         fmt::format("layout(location = {}) in vec4 vert_position;\n"
                     "layout(location = {}) in vec4 vert_color;\n"
@@ -1723,7 +1725,8 @@ void EmitPrim(Vertex vtx0, Vertex vtx1, Vertex vtx2) {
 };
 
 std::string GenerateFixedGeometryShader(const PicaFixedGSConfig& config) {
-    std::string out = "#extension GL_ARB_separate_shader_objects : enable\n\n";
+    std::string out = "#version 450 core\n"
+                      "#extension GL_ARB_separate_shader_objects : enable\n\n";
 
     out += R"(
 layout(triangles) in;

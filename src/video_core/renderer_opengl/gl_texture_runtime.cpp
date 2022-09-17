@@ -124,6 +124,17 @@ const FormatTuple& TextureRuntime::GetFormatTuple(VideoCore::PixelFormat pixel_f
     return DEFAULT_TUPLE;
 }
 
+void TextureRuntime::FormatConvert(VideoCore::PixelFormat format,  bool upload,
+                                   std::span<std::byte> source, std::span<std::byte> dest) {
+    if (format == VideoCore::PixelFormat::RGBA8 && driver.IsOpenGLES()) {
+        Pica::Texture::ConvertABGRToRGBA(source, dest);
+    } else if (format == VideoCore::PixelFormat::RGB8 && driver.IsOpenGLES()) {
+        Pica::Texture::ConvertBGRToRGB(source, dest);
+    } else {
+        std::memcpy(dest.data(), source.data(), source.size());
+    }
+}
+
 OGLTexture TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
                                     VideoCore::TextureType type) {
 
@@ -302,6 +313,17 @@ Surface::Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
     texture = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format, texture_type);
 }
 
+Surface::~Surface() {
+    const VideoCore::HostTextureTag tag = {
+        .format = pixel_format,
+        .width = GetScaledWidth(),
+        .height = GetScaledHeight(),
+        .layers = texture_type == VideoCore::TextureType::CubeMap ? 6u : 1u
+    };
+
+    runtime.texture_recycler.emplace(tag, std::move(texture));
+}
+
 MICROPROFILE_DEFINE(OpenGL_Upload, "OpenGLSurface", "Texture Upload", MP_RGB(128, 192, 64));
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingBuffer& staging) {
     MICROPROFILE_SCOPE(OpenGL_Upload);
@@ -327,8 +349,7 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingBu
                         upload.texture_rect.left, upload.texture_rect.bottom,
                         upload.texture_rect.GetWidth(),
                         upload.texture_rect.GetHeight(),
-                        tuple.format, tuple.type,
-                        reinterpret_cast<void*>(upload.buffer_offset));
+                        tuple.format, tuple.type, 0);
     }
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
@@ -361,7 +382,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
         const auto& tuple = runtime.GetFormatTuple(pixel_format);
         glReadPixels(download.texture_rect.left, download.texture_rect.bottom,
                      download.texture_rect.GetWidth(), download.texture_rect.GetHeight(),
-                     tuple.format, tuple.type, reinterpret_cast<void*>(download.buffer_offset));
+                     tuple.format, tuple.type, 0);
     }
 
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -390,11 +411,9 @@ void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download) {
     if (driver.IsOpenGLES()) {
         const auto& downloader_es = runtime.GetDownloaderES();
         downloader_es.GetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type,
-                                  rect_height, rect_width,
-                                  reinterpret_cast<void*>(download.buffer_offset));
+                                  rect_height, rect_width, 0);
     } else {
-        glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type,
-                      reinterpret_cast<void*>(download.buffer_offset));
+        glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, 0);
     }
 }
 
@@ -409,7 +428,7 @@ void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload) {
 
     const auto& tuple = runtime.GetFormatTuple(pixel_format);
     glTexSubImage2D(GL_TEXTURE_2D, upload.texture_level, 0, 0, rect_width, rect_height,
-                    tuple.format, tuple.type, reinterpret_cast<void*>(upload.buffer_offset));
+                    tuple.format, tuple.type, 0);
 
     const auto scaled_rect = upload.texture_rect * res_scale;
     const auto unscaled_rect = VideoCore::Rect2D{0, rect_height, rect_width, 0};

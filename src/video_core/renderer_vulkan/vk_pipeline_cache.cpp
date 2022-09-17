@@ -139,6 +139,8 @@ PipelineCache::PipelineCache(const Instance& instance, TaskScheduler& scheduler,
     descriptor_dirty.fill(true);
 
     LoadDiskCache();
+    trivial_vertex_shader = Compile(GenerateTrivialVertexShader(), vk::ShaderStageFlagBits::eVertex,
+                                    instance.GetDevice(), ShaderOptimization::Debug);
 }
 
 PipelineCache::~PipelineCache() {
@@ -150,6 +152,18 @@ PipelineCache::~PipelineCache() {
     for (std::size_t i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
         device.destroyDescriptorSetLayout(descriptor_set_layouts[i]);
         device.destroyDescriptorUpdateTemplate(update_templates[i]);
+    }
+
+    for (auto& [key, module] : programmable_vertex_shaders.shader_cache) {
+        device.destroyShaderModule(module);
+    }
+
+    for (auto& [key, module] : fixed_geometry_shaders.shaders) {
+        device.destroyShaderModule(module);
+    }
+
+    for (auto& [key, module] : fragment_shaders.shaders) {
+        device.destroyShaderModule(module);
     }
 
     for (const auto& [hash, pipeline] : graphics_pipelines) {
@@ -224,7 +238,7 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
     shader_hashes[ProgramType::FS] = config.Hash();
 }
 
-void PipelineCache::BindTexture(u32 set, u32 descriptor, vk::ImageView image_view) {
+void PipelineCache::BindTexture(u32 binding, vk::ImageView image_view) {
     const DescriptorData data = {
         .image_info = vk::DescriptorImageInfo{
             .imageView = image_view,
@@ -232,10 +246,21 @@ void PipelineCache::BindTexture(u32 set, u32 descriptor, vk::ImageView image_vie
         }
     };
 
-    SetBinding(set, descriptor, data);
+    SetBinding(1, binding, data);
 }
 
-void PipelineCache::BindBuffer(u32 set, u32 descriptor, vk::Buffer buffer, u32 offset, u32 size) {
+void PipelineCache::BindStorageImage(u32 binding, vk::ImageView image_view) {
+    const DescriptorData data = {
+        .image_info = vk::DescriptorImageInfo{
+            .imageView = image_view,
+            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+        }
+    };
+
+    SetBinding(3, binding, data);
+}
+
+void PipelineCache::BindBuffer(u32 binding, vk::Buffer buffer, u32 offset, u32 size) {
     const DescriptorData data = {
         .buffer_info = vk::DescriptorBufferInfo{
             .buffer = buffer,
@@ -244,25 +269,25 @@ void PipelineCache::BindBuffer(u32 set, u32 descriptor, vk::Buffer buffer, u32 o
         }
     };
 
-    SetBinding(set, descriptor, data);
+    SetBinding(0, binding, data);
 }
 
-void PipelineCache::BindTexelBuffer(u32 set, u32 descriptor, vk::BufferView buffer_view) {
+void PipelineCache::BindTexelBuffer(u32 binding, vk::BufferView buffer_view) {
     const DescriptorData data = {
         .buffer_view = buffer_view
     };
 
-    SetBinding(set, descriptor, data);
+    SetBinding(0, binding, data);
 }
 
-void PipelineCache::BindSampler(u32 set, u32 descriptor, vk::Sampler sampler) {
+void PipelineCache::BindSampler(u32 binding, vk::Sampler sampler) {
     const DescriptorData data = {
         .image_info = vk::DescriptorImageInfo{
             .sampler = sampler
         }
     };
 
-    SetBinding(set, descriptor, data);
+    SetBinding(2, binding, data);
 }
 
 void PipelineCache::SetViewport(float x, float y, float width, float height) {
@@ -454,13 +479,25 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f}
     };
 
-    const vk::Viewport placeholder_viewport = vk::Viewport{0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};
-    const vk::Rect2D placeholder_scissor = vk::Rect2D{{0, 0}, {1, 1}};
+    const vk::Viewport viewport = {
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = 1.0f,
+        .height = 1.0f,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f
+    };
+
+    const vk::Rect2D scissor = {
+        .offset = {0, 0},
+        .extent = {1, 1}
+    };
+
     const vk::PipelineViewportStateCreateInfo viewport_info = {
         .viewportCount = 1,
-        .pViewports = &placeholder_viewport,
+        .pViewports = &viewport,
         .scissorCount = 1,
-        .pScissors = &placeholder_scissor,
+        .pScissors = &scissor,
     };
 
     const bool extended_dynamic_states = instance.IsExtendedDynamicStateSupported();
@@ -483,7 +520,8 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
     };
 
     const vk::PipelineDynamicStateCreateInfo dynamic_info = {
-        .dynamicStateCount = extended_dynamic_states ? 14u : 6u,
+        .dynamicStateCount =
+            extended_dynamic_states ? static_cast<u32>(dynamic_states.size()) : 6u,
         .pDynamicStates = dynamic_states.data()
     };
 
