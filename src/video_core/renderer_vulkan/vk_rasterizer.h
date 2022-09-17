@@ -3,33 +3,84 @@
 // Refer to the license.txt file included.
 
 #pragma once
+
 #include "common/vector_math.h"
 #include "core/hw/gpu.h"
-#include "video_core/pica_types.h"
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/regs_lighting.h"
 #include "video_core/regs_texturing.h"
-#include "video_core/renderer_opengl/gl_texture_runtime.h"
-#include "video_core/renderer_opengl/gl_shader_manager.h"
-#include "video_core/renderer_opengl/gl_state.h"
-#include "video_core/renderer_opengl/gl_stream_buffer.h"
+#include "video_core/renderer_vulkan/vk_stream_buffer.h"
+#include "video_core/renderer_vulkan/vk_pipeline_cache.h"
+#include "video_core/renderer_vulkan/vk_texture_runtime.h"
 #include "video_core/shader/shader.h"
+#include "video_core/shader/shader_uniforms.h"
 
 namespace Frontend {
 class EmuWindow;
 }
 
-namespace OpenGL {
+namespace Vulkan {
 
 struct ScreenInfo;
 
-class Driver;
-class ShaderProgramManager;
+class Instance;
+class TaskScheduler;
+class RenderpassCache;
 
-class RasterizerOpenGL : public VideoCore::RasterizerAccelerated {
+struct SamplerInfo {
+    using TextureConfig = Pica::TexturingRegs::TextureConfig;
+    TextureConfig::TextureFilter mag_filter;
+    TextureConfig::TextureFilter min_filter;
+    TextureConfig::TextureFilter mip_filter;
+    TextureConfig::WrapMode wrap_s;
+    TextureConfig::WrapMode wrap_t;
+    u32 border_color = 0;
+    u32 lod_min = 0;
+    u32 lod_max = 0;
+    s32 lod_bias = 0;
+
+    // TODO(wwylele): remove this once mipmap for cube is implemented
+    bool supress_mipmap_for_cube = false;
+
+    auto operator<=>(const SamplerInfo&) const noexcept = default;
+};
+
+struct FramebufferInfo {
+    vk::ImageView color;
+    vk::ImageView depth;
+    vk::RenderPass renderpass;
+    u32 width = 1;
+    u32 height = 1;
+
+    auto operator<=>(const FramebufferInfo&) const noexcept = default;
+};
+
+}
+
+namespace std {
+template <>
+struct hash<Vulkan::SamplerInfo> {
+    std::size_t operator()(const Vulkan::SamplerInfo& info) const noexcept {
+        return Common::ComputeHash64(&info, sizeof(Vulkan::SamplerInfo));
+    }
+};
+
+template <>
+struct hash<Vulkan::FramebufferInfo> {
+    std::size_t operator()(const Vulkan::FramebufferInfo& info) const noexcept {
+        return Common::ComputeHash64(&info, sizeof(Vulkan::FramebufferInfo));
+    }
+};
+} // namespace std
+
+namespace Vulkan {
+
+class RasterizerVulkan : public VideoCore::RasterizerAccelerated {
+    friend class RendererVulkan;
 public:
-    explicit RasterizerOpenGL(Frontend::EmuWindow& emu_window, Driver& driver);
-    ~RasterizerOpenGL() override;
+    explicit RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instance& instance, TaskScheduler& scheduler,
+                              TextureRuntime& runtime, RenderpassCache& renderpass_cache);
+    ~RasterizerVulkan() override;
 
     void LoadDiskResources(const std::atomic_bool& stop_loading,
                            const VideoCore::DiskResourceLoadCallback& callback) override;
@@ -52,75 +103,10 @@ public:
     /// Syncs entire status to match PICA registers
     void SyncEntireState() override;
 
+    /// Flushes all rasterizer owned buffers
+    void FlushBuffers();
+
 private:
-    struct SamplerInfo {
-        using TextureConfig = Pica::TexturingRegs::TextureConfig;
-
-        OGLSampler sampler;
-
-        /// Creates the sampler object, initializing its state so that it's in sync with the
-        /// SamplerInfo struct.
-        void Create();
-        /// Syncs the sampler object with the config, updating any necessary state.
-        void SyncWithConfig(const TextureConfig& config);
-
-    private:
-        TextureConfig::TextureFilter mag_filter;
-        TextureConfig::TextureFilter min_filter;
-        TextureConfig::TextureFilter mip_filter;
-        TextureConfig::WrapMode wrap_s;
-        TextureConfig::WrapMode wrap_t;
-        u32 border_color;
-        u32 lod_min;
-        u32 lod_max;
-        s32 lod_bias;
-
-        // TODO(wwylele): remove this once mipmap for cube is implemented
-        bool supress_mipmap_for_cube = false;
-    };
-
-    /// Structure that the hardware rendered vertices are composed of
-    struct HardwareVertex {
-        HardwareVertex() = default;
-        HardwareVertex(const Pica::Shader::OutputVertex& v, bool flip_quaternion) {
-            position[0] = v.pos.x.ToFloat32();
-            position[1] = v.pos.y.ToFloat32();
-            position[2] = v.pos.z.ToFloat32();
-            position[3] = v.pos.w.ToFloat32();
-            color[0] = v.color.x.ToFloat32();
-            color[1] = v.color.y.ToFloat32();
-            color[2] = v.color.z.ToFloat32();
-            color[3] = v.color.w.ToFloat32();
-            tex_coord0[0] = v.tc0.x.ToFloat32();
-            tex_coord0[1] = v.tc0.y.ToFloat32();
-            tex_coord1[0] = v.tc1.x.ToFloat32();
-            tex_coord1[1] = v.tc1.y.ToFloat32();
-            tex_coord2[0] = v.tc2.x.ToFloat32();
-            tex_coord2[1] = v.tc2.y.ToFloat32();
-            tex_coord0_w = v.tc0_w.ToFloat32();
-            normquat[0] = v.quat.x.ToFloat32();
-            normquat[1] = v.quat.y.ToFloat32();
-            normquat[2] = v.quat.z.ToFloat32();
-            normquat[3] = v.quat.w.ToFloat32();
-            view[0] = v.view.x.ToFloat32();
-            view[1] = v.view.y.ToFloat32();
-            view[2] = v.view.z.ToFloat32();
-
-            if (flip_quaternion) {
-                normquat = -normquat;
-            }
-        }
-
-        Common::Vec4f position;
-        Common::Vec4f color;
-        Common::Vec2f tex_coord0;
-        Common::Vec2f tex_coord1;
-        Common::Vec2f tex_coord2;
-        float tex_coord0_w;
-        Common::Vec4f normquat;
-        Common::Vec3f view;
-    };
-
     /// Syncs the clip enabled status to match the PICA register
     void SyncClipEnabled();
 
@@ -241,8 +227,7 @@ private:
     VertexArrayInfo AnalyzeVertexArray(bool is_indexed);
 
     /// Setup vertex array for AccelerateDrawBatch
-    void SetupVertexArray(u8* array_ptr, GLintptr buffer_offset, GLuint vs_input_index_min,
-                          GLuint vs_input_index_max);
+    void SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min, u32 vs_input_index_max);
 
     /// Setup vertex shader for AccelerateDrawBatch
     bool SetupVertexShader();
@@ -250,60 +235,71 @@ private:
     /// Setup geometry shader for AccelerateDrawBatch
     bool SetupGeometryShader();
 
+    /// Creates a new sampler object
+    vk::Sampler CreateSampler(const SamplerInfo& info);
+
+    /// Creates a new Vulkan framebuffer object
+    vk::Framebuffer CreateFramebuffer(const FramebufferInfo& info);
+
 private:
-    Driver& driver;
-    OpenGLState state;
-    GLuint default_texture;
-
-    TextureRuntime runtime;
+    const Instance& instance;
+    TaskScheduler& scheduler;
+    TextureRuntime& runtime;
+    RenderpassCache& renderpass_cache;
     RasterizerCache res_cache;
-
-    std::vector<HardwareVertex> vertex_batch;
-
-    bool is_amd;
+    PipelineCache pipeline_cache;
     bool shader_dirty = true;
 
+    /// Structure that the hardware rendered vertices are composed of
+    struct HardwareVertex {
+        HardwareVertex() = default;
+        HardwareVertex(const Pica::Shader::OutputVertex& v, bool flip_quaternion);
+
+        constexpr static VertexLayout GetVertexLayout();
+
+        Common::Vec4f position;
+        Common::Vec4f color;
+        Common::Vec2f tex_coord0;
+        Common::Vec2f tex_coord1;
+        Common::Vec2f tex_coord2;
+        float tex_coord0_w;
+        Common::Vec4f normquat;
+        Common::Vec3f view;
+    };
+
+    std::vector<HardwareVertex> vertex_batch;
+    ImageAlloc default_texture;
+    vk::Sampler default_sampler;
+
     struct {
-        UniformData data;
-        std::array<bool, Pica::LightingRegs::NumLightingSampler> lighting_lut_dirty;
-        bool lighting_lut_dirty_any;
-        bool fog_lut_dirty;
-        bool proctex_noise_lut_dirty;
-        bool proctex_color_map_dirty;
-        bool proctex_alpha_map_dirty;
-        bool proctex_lut_dirty;
-        bool proctex_diff_lut_dirty;
-        bool dirty;
+        Pica::Shader::UniformData data{};
+        std::array<bool, Pica::LightingRegs::NumLightingSampler> lighting_lut_dirty{};
+        bool lighting_lut_dirty_any = true;
+        bool fog_lut_dirty = true;
+        bool proctex_noise_lut_dirty = true;
+        bool proctex_color_map_dirty = true;
+        bool proctex_alpha_map_dirty = true;
+        bool proctex_lut_dirty = true;
+        bool proctex_diff_lut_dirty = true;
+        bool dirty = true;
     } uniform_block_data = {};
 
-    std::unique_ptr<ShaderProgramManager> shader_program_manager;
-
-    // They shall be big enough for about one frame.
-    static constexpr std::size_t VERTEX_BUFFER_SIZE = 16 * 1024 * 1024;
-    static constexpr std::size_t INDEX_BUFFER_SIZE = 1 * 1024 * 1024;
-    static constexpr std::size_t UNIFORM_BUFFER_SIZE = 2 * 1024 * 1024;
-    static constexpr std::size_t TEXTURE_BUFFER_SIZE = 1 * 1024 * 1024;
-
-    OGLVertexArray sw_vao; // VAO for software shader draw
-    OGLVertexArray hw_vao; // VAO for hardware shader / accelerate draw
-    std::array<bool, 16> hw_vao_enabled_attributes{};
+    std::array<bool, 16> hw_enabled_attributes{};
 
     std::array<SamplerInfo, 3> texture_samplers;
-    OGLStreamBuffer vertex_buffer;
-    OGLStreamBuffer uniform_buffer;
-    OGLStreamBuffer index_buffer;
-    OGLStreamBuffer texture_buffer;
-    OGLStreamBuffer texture_lf_buffer;
-    OGLFramebuffer framebuffer;
-    GLint uniform_buffer_alignment;
+    SamplerInfo texture_cube_sampler;
+    std::unordered_map<SamplerInfo, vk::Sampler> samplers;
+    std::unordered_map<FramebufferInfo, vk::Framebuffer> framebuffers;
+
+    StreamBuffer vertex_buffer;
+    StreamBuffer uniform_buffer;
+    StreamBuffer index_buffer;
+    StreamBuffer texture_buffer;
+    StreamBuffer texture_lf_buffer;
+    PipelineInfo pipeline_info;
+    std::size_t uniform_buffer_alignment;
     std::size_t uniform_size_aligned_vs;
     std::size_t uniform_size_aligned_fs;
-
-    SamplerInfo texture_cube_sampler;
-
-    OGLTexture texture_buffer_lut_lf;
-    OGLTexture texture_buffer_lut_rg;
-    OGLTexture texture_buffer_lut_rgba;
 
     std::array<std::array<Common::Vec2f, 256>, Pica::LightingRegs::NumLightingSampler>
         lighting_lut_data{};
@@ -315,4 +311,4 @@ private:
     std::array<Common::Vec4f, 256> proctex_diff_lut_data{};
 };
 
-} // namespace OpenGL
+} // namespace Vulkan

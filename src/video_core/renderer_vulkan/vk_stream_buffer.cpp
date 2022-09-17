@@ -68,13 +68,14 @@ StagingBuffer::~StagingBuffer() {
     vmaDestroyBuffer(instance.GetAllocator(), static_cast<VkBuffer>(buffer), allocation);
 }
 
-StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler, const BufferInfo& info)
-    : instance{instance}, scheduler{scheduler}, info{info},
-      staging{instance, info.size, vk::BufferUsageFlagBits::eTransferSrc} {
+StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler,
+                           u32 size, vk::BufferUsageFlagBits usage, std::span<const vk::Format> view_formats)
+    : instance{instance}, scheduler{scheduler}, staging{instance, size, vk::BufferUsageFlagBits::eTransferSrc},
+      usage{usage}, total_size{size} {
 
     const vk::BufferCreateInfo buffer_info = {
-        .size = info.size,
-        .usage = info.usage | vk::BufferUsageFlagBits::eTransferDst
+        .size = total_size,
+        .usage = usage | vk::BufferUsageFlagBits::eTransferDst
     };
 
     const VmaAllocationCreateInfo alloc_create_info = {
@@ -91,37 +92,36 @@ StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler, c
 
     buffer = vk::Buffer{unsafe_buffer};
 
-    vk::Device device = instance.GetDevice();
-    for (u32 i = 0; i < info.views.size(); i++) {
-        if (info.views[i] == vk::Format::eUndefined) {
-            view_count = i;
-            break;
-        }
+    ASSERT(view_formats.size() < MAX_BUFFER_VIEWS);
 
+    vk::Device device = instance.GetDevice();
+    for (std::size_t i = 0; i < view_formats.size(); i++) {
         const vk::BufferViewCreateInfo view_info = {
             .buffer = buffer,
-            .format = info.views[i],
-            .range = info.size
+            .format = view_formats[i],
+            .offset = 0,
+            .range = total_size
         };
 
         views[i] = device.createBufferView(view_info);
     }
 
-    available_size = info.size;
+    available_size = total_size;
+    view_count = view_formats.size();
 }
 
 StreamBuffer::~StreamBuffer() {
     if (buffer) {
         vk::Device device = instance.GetDevice();
         vmaDestroyBuffer(instance.GetAllocator(), static_cast<VkBuffer>(buffer), allocation);
-        for (u32 i = 0; i < view_count; i++) {
+        for (std::size_t i = 0; i < view_count; i++) {
             device.destroyBufferView(views[i]);
         }
     }
 }
 
 std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
-    ASSERT(size <= info.size && alignment <= info.size);
+    ASSERT(size <= total_size && alignment <= total_size);
 
     if (alignment > 0) {
         buffer_offset = Common::AlignUp(buffer_offset, alignment);
@@ -134,7 +134,7 @@ std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
         Flush();
 
         // If we are at the end of the buffer, start over
-        if (buffer_offset + size > info.size) {
+        if (buffer_offset + size > total_size) {
             Invalidate();
             invalidate = true;
         }
@@ -145,7 +145,7 @@ std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
             LOG_WARNING(Render_Vulkan, "Buffer GPU stall");
             Invalidate();
             regions.clear();
-            available_size = info.size;
+            available_size = total_size;
         }
     }
 
@@ -156,7 +156,7 @@ std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
 void StreamBuffer::Commit(u32 size) {
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
 
-    auto [access_mask, stage_mask] = ToVkAccessStageFlags(info.usage);
+    auto [access_mask, stage_mask] = ToVkAccessStageFlags(usage);
     const vk::BufferMemoryBarrier buffer_barrier = {
         .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
         .dstAccessMask = access_mask,

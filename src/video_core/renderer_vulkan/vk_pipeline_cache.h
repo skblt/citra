@@ -106,6 +106,16 @@ struct PipelineInfo {
     VideoCore::PixelFormat depth_attachment = VideoCore::PixelFormat::D24S8;
     RasterizationState rasterization{};
     DepthStencilState depth_stencil{};
+
+    bool IsDepthWriteEnabled() const {
+        const bool has_stencil = depth_attachment == VideoCore::PixelFormat::D24S8;
+        const bool depth_write =
+                depth_stencil.depth_test_enable && depth_stencil.depth_write_enable;
+        const bool stencil_write =
+                has_stencil && depth_stencil.stencil_test_enable && depth_stencil.stencil_write_mask != 0;
+
+        return depth_write || stencil_write;
+    }
 };
 
 union DescriptorData {
@@ -164,17 +174,20 @@ public:
     /// Binds a fragment shader generated from PICA state
     void UseFragmentShader(const Pica::Regs& regs);
 
-    /// Binds a texture to the specified descriptor
-    void BindTexture(u32 set, u32 binding, vk::ImageView view);
+    /// Binds a texture to the specified binding
+    void BindTexture(u32 binding, vk::ImageView image_view);
 
-    /// Binds a buffer to the specified descriptor
-    void BindBuffer(u32 set, u32 binding, vk::Buffer buffer, u32 offset, u32 size);
+    /// Binds a storage image to the specified binding
+    void BindStorageImage(u32 binding, vk::ImageView image_view);
 
-    /// Binds a buffer to the specified descriptor
-    void BindTexelBuffer(u32 set, u32 binding, vk::BufferView buffer_view);
+    /// Binds a buffer to the specified binding
+    void BindBuffer(u32 binding, vk::Buffer buffer, u32 offset, u32 size);
 
-    /// Binds a sampler to the specified descriptor
-    void BindSampler(u32 set, u32 binding, vk::Sampler sampler);
+    /// Binds a buffer to the specified binding
+    void BindTexelBuffer(u32 binding, vk::BufferView buffer_view);
+
+    /// Binds a sampler to the specified binding
+    void BindSampler(u32 binding, vk::Sampler sampler);
 
     /// Sets the viewport rectangle to the provided values
     void SetViewport(float x, float y, float width, float height);
@@ -184,6 +197,10 @@ public:
 
     /// Marks all descriptor sets as dirty
     void MarkDescriptorSetsDirty();
+
+    vk::ImageView GetTexture(u32 set, u32 binding) const {
+        return update_data[set][binding].image_info.imageView;
+    }
 
 private:
     /// Binds a resource to the provided binding
