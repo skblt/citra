@@ -11,9 +11,8 @@
 
 namespace Vulkan {
 
-Swapchain::Swapchain(const Instance& instance, CommandScheduler& scheduler,
-                     RenderpassCache& renderpass_cache, vk::SurfaceKHR surface)
-    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache}, surface{surface} {
+Swapchain::Swapchain(const Instance& instance, RenderpassCache& renderpass_cache)
+    : instance{instance}, renderpass_cache{renderpass_cache}, surface{instance.GetSurface()} {
 
     // Set the surface format early for RenderpassCache to create the present renderpass
     Configure(0, 0);

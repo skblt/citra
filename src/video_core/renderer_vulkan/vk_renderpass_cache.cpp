@@ -6,6 +6,7 @@
 #include "common/assert.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_task_scheduler.h"
 #include "video_core/renderer_vulkan/vk_swapchain.h"
 
 namespace Vulkan {
@@ -30,7 +31,8 @@ vk::Format ToVkFormatDepth(u32 index) {
     }
 }
 
-RenderpassCache::RenderpassCache(const Instance& instance) : instance{instance} {
+RenderpassCache::RenderpassCache(const Instance& instance, TaskScheduler& scheduler)
+    : instance{instance}, scheduler{scheduler} {
     // Pre-create all needed renderpasses by the renderer
     for (u32 color = 0; color <= MAX_COLOR_FORMATS; color++) {
         for (u32 depth = 0; depth <= MAX_DEPTH_FORMATS; depth++) {
@@ -73,6 +75,26 @@ RenderpassCache::~RenderpassCache() {
     }
 
     device.destroyRenderPass(present_renderpass);
+}
+
+void RenderpassCache::EnterRenderpass(const vk::RenderPassBeginInfo begin_info) {
+    if (renderpass_active) {
+        return;
+    }
+
+    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+    command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
+    renderpass_active = true;
+}
+
+void RenderpassCache::ExitRenderpass() {
+    if (!renderpass_active) {
+        return;
+    }
+
+    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+    command_buffer.endRenderPass();
+    renderpass_active = false;
 }
 
 void RenderpassCache::CreatePresentRenderpass(vk::Format format) {

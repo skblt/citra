@@ -11,13 +11,12 @@
 namespace Vulkan {
 
 class Instance;
-class CommandScheduler;
+class TaskScheduler;
 class RenderpassCache;
 
 class Swapchain {
 public:
-    Swapchain(const Instance& instance, CommandScheduler& scheduler,
-              RenderpassCache& renderpass_cache,vk::SurfaceKHR surface);
+    Swapchain(const Instance& instance, RenderpassCache& renderpass_cache);
     ~Swapchain();
 
     /// Creates (or recreates) the swapchain with a given size.
@@ -37,6 +36,11 @@ public:
     /// Returns the swapchain surface
     vk::SurfaceKHR GetSurface() const {
         return surface;
+    }
+
+    /// Returns the current framebuffe
+    vk::Framebuffer GetFramebuffer() const {
+        return swapchain_images[current_image].framebuffer;
     }
 
     /// Returns the swapchain format
@@ -69,7 +73,6 @@ private:
 
 private:
     const Instance& instance;
-    CommandScheduler& scheduler;
     RenderpassCache& renderpass_cache;
     vk::SwapchainKHR swapchain{};
     vk::SurfaceKHR surface{};

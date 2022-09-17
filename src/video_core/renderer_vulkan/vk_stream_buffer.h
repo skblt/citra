@@ -15,12 +15,6 @@ class TaskScheduler;
 
 constexpr u32 MAX_BUFFER_VIEWS = 3;
 
-struct BufferInfo {
-    u32 size = 0;
-    vk::BufferUsageFlagBits usage{};
-    std::array<vk::Format, MAX_BUFFER_VIEWS> views{};
-};
-
 struct LockedRegion {
     u32 size = 0;
     u64 fence_counter = 0;
@@ -38,7 +32,8 @@ struct StagingBuffer {
 
 class StreamBuffer {
 public:
-    StreamBuffer(const Instance& instance, TaskScheduler& scheduler, const BufferInfo& info);
+    StreamBuffer(const Instance& instance, TaskScheduler& scheduler,
+                 u32 size, vk::BufferUsageFlagBits usage, std::span<const vk::Format> views);
     ~StreamBuffer();
 
     std::tuple<u8*, u32, bool> Map(u32 size, u32 alignment = 0);
@@ -52,6 +47,10 @@ public:
     /// Returns the Vulkan buffer handle
     vk::Buffer GetHandle() const {
         return buffer;
+    }
+
+    u32 GetBufferOffset() const {
+        return buffer_offset;
     }
 
     /// Returns an immutable reference to the requested buffer view
@@ -70,13 +69,14 @@ private:
 private:
     const Instance& instance;
     TaskScheduler& scheduler;
-    BufferInfo info{};
     StagingBuffer staging;
 
     vk::Buffer buffer{};
     VmaAllocation allocation{};
+    vk::BufferUsageFlagBits usage;
+    u32 total_size = 0;
     std::array<vk::BufferView, MAX_BUFFER_VIEWS> views{};
-    u32 view_count = 0;
+    std::size_t view_count = 0;
 
     u32 buffer_offset = 0;
     u32 flush_start = 0;

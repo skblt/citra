@@ -40,7 +40,7 @@ public:
         shaders.emplace(key, std::move(shader));
     }
 
-private:
+public:
     std::unordered_map<KeyType, ShaderType> shaders;
 };
 
@@ -89,7 +89,7 @@ public:
         shader_map.insert_or_assign(key, &cached_shader);
     }
 
-private:
+public:
     std::unordered_map<KeyType, ShaderType*> shader_map;
     std::unordered_map<std::string, ShaderType> shader_cache;
 };

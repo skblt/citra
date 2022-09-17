@@ -14,7 +14,6 @@ struct HostTextureTag {
     PixelFormat format{};
     u32 width = 0;
     u32 height = 0;
-    u32 levels = 1;
     u32 layers = 1;
 
     auto operator<=>(const HostTextureTag&) const noexcept = default;

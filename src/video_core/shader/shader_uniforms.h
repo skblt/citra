@@ -4,29 +4,16 @@
 
 #pragma once
 
-#include <memory>
 #include "common/vector_math.h"
-#include "video_core/rasterizer_interface.h"
 #include "video_core/regs_lighting.h"
 
-namespace Core {
-class System;
-}
-
-namespace Frontend {
-class EmuWindow;
-}
-
 namespace Pica {
-struct Regs;
 struct ShaderRegs;
-} // namespace Pica
+}
 
 namespace Pica::Shader {
-struct ShaderSetup;
-}
 
-namespace OpenGL {
+class ShaderSetup;
 
 enum class UniformBindings : u32 { Common, VS, GS };
 
@@ -66,7 +53,7 @@ struct UniformData {
     int proctex_diff_lut_offset;
     float proctex_bias;
     int shadow_texture_bias;
-    alignas(16) Common::Vec4i lighting_lut_offset[Pica::LightingRegs::NumLightingSampler / 4];
+    alignas(16) Common::Vec4i lighting_lut_offset[LightingRegs::NumLightingSampler / 4];
     alignas(16) Common::Vec3f fog_color;
     alignas(8) Common::Vec2f proctex_noise_f;
     alignas(8) Common::Vec2f proctex_noise_a;
@@ -88,7 +75,7 @@ static_assert(sizeof(UniformData) < 16384,
  * NOTE: the same rule from UniformData also applies here.
  */
 struct PicaUniformsData {
-    void SetFromRegs(const Pica::ShaderRegs& regs, const Pica::Shader::ShaderSetup& setup);
+    void SetFromRegs(const ShaderRegs& regs, const ShaderSetup& setup);
 
     struct BoolAligned {
         alignas(16) int b;
@@ -107,33 +94,5 @@ static_assert(sizeof(VSUniformData) == 1856,
 static_assert(sizeof(VSUniformData) < 16384,
               "VSUniformData structure must be less than 16kb as per the OpenGL spec");
 
-class OpenGLState;
 
-/// A class that manage different shader stages and configures them with given config data.
-class ShaderProgramManager {
-public:
-    ShaderProgramManager(Frontend::EmuWindow& emu_window_, bool separable, bool is_amd);
-    ~ShaderProgramManager();
-
-    void LoadDiskCache(const std::atomic_bool& stop_loading,
-                       const VideoCore::DiskResourceLoadCallback& callback);
-
-    bool UseProgrammableVertexShader(const Pica::Regs& config, Pica::Shader::ShaderSetup& setup);
-
-    void UseTrivialVertexShader();
-
-    void UseFixedGeometryShader(const Pica::Regs& regs);
-
-    void UseTrivialGeometryShader();
-
-    void UseFragmentShader(const Pica::Regs& config);
-
-    void ApplyTo(OpenGLState& state);
-
-private:
-    class Impl;
-    std::unique_ptr<Impl> impl;
-
-    Frontend::EmuWindow& emu_window;
-};
-} // namespace OpenGL
+} // namespace Pica::Shader

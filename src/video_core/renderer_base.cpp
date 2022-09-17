@@ -12,7 +12,3 @@ void RendererBase::UpdateCurrentFramebufferLayout(bool is_portrait_mode) {
     const Layout::FramebufferLayout& layout = render_window.GetFramebufferLayout();
     render_window.UpdateCurrentFramebufferLayout(layout.width, layout.height, is_portrait_mode);
 }
-
-void RendererBase::Sync() {
-    rasterizer->SyncEntireState();
-}
