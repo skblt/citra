@@ -17,6 +17,7 @@ project(citra LANGUAGES C CXX ASM)
 option(ENABLE_LTO "Enable link time optimization" OFF)
 
 option(ENABLE_SDL2 "Enable the SDL2 frontend" ON)
+option(USE_SYSTEM_SDL2 "Use the system SDL2 lib (instead of the bundled one)" OFF)
 
 # Set bundled qt as dependent options.
 option(ENABLE_QT "Enable the Qt frontend" ON)
@@ -360,6 +361,11 @@ if (USE_SYSTEM_BOOST)
 else()
     add_library(Boost::boost ALIAS boost)
     add_library(Boost::serialization ALIAS boost_serialization)
+endif()
+
+# SDL2
+if (ENABLE_SDL2 AND USE_SYSTEM_SDL2)
+    find_package(SDL2 REQUIRED)
 endif()
 
 add_subdirectory(src)

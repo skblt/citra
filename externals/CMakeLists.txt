@@ -80,7 +80,7 @@ target_include_directories(SoundTouch INTERFACE ./soundtouch/include)
 add_subdirectory(teakra EXCLUDE_FROM_ALL)
 
 # SDL2
-if (ENABLE_SDL2)
+if (ENABLE_SDL2 AND NOT USE_SYSTEM_SDL2)
     add_subdirectory(sdl2)
 endif()
 
