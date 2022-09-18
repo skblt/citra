@@ -109,9 +109,9 @@ void RenderpassCache::CreatePresentRenderpass(vk::Format format) {
 vk::RenderPass RenderpassCache::GetRenderpass(VideoCore::PixelFormat color, VideoCore::PixelFormat depth,
                                               bool is_clear) const {
     const u32 color_index =
-            color == VideoCore::PixelFormat::Invalid ? 0 : static_cast<u32>(color);
+            color == VideoCore::PixelFormat::Invalid ? 0 : (static_cast<u32>(color) + 1);
     const u32 depth_index =
-            depth == VideoCore::PixelFormat::Invalid ? 0 : (static_cast<u32>(depth) - 13);
+            depth == VideoCore::PixelFormat::Invalid ? 0 : (static_cast<u32>(depth) - 14);
 
     ASSERT(color_index <= MAX_COLOR_FORMATS && depth_index <= MAX_DEPTH_FORMATS);
     return cached_renderpasses[color_index][depth_index][is_clear];

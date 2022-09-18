@@ -36,7 +36,7 @@ struct LightSrc {
     float dist_atten_scale;
 };
 
-layout (std140) uniform shader_data {
+layout (set = 0, binding = 1, std140) uniform shader_data {
     int framebuffer_scale;
     int alphatest_ref;
     float depth_scale;

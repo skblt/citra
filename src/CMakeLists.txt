@@ -103,6 +103,7 @@ else()
 
     if (MINGW)
         add_definitions(-DMINGW_HAS_SECURE_API)
+        add_compile_options("-Wa,-mbig-obj")
         if (COMPILE_WITH_DWARF)
             add_compile_options("-gdwarf")
         endif()

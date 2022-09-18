@@ -98,7 +98,7 @@ public:
 
     /// Returns the minimum required alignment for uniforms
     vk::DeviceSize UniformMinAlignment() const {
-        return device_limits.minUniformBufferOffsetAlignment;
+        return device_properties.limits.minUniformBufferOffsetAlignment;
     }
 
 private:
@@ -116,7 +116,6 @@ private:
     vk::PhysicalDevice physical_device;
     vk::Instance instance;
     vk::SurfaceKHR surface;
-    vk::PhysicalDeviceLimits device_limits;
     vk::PhysicalDeviceProperties device_properties;
     VmaAllocator allocator;
 
