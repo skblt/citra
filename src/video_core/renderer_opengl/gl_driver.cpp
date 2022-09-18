@@ -112,14 +112,15 @@ void Driver::ReportDriverInfo() {
 }
 
 void Driver::DeduceVendor() {
-    if (gpu_vendor.contains("NVIDIA")) {
+    if (gpu_vendor.find("NVIDIA") != gpu_vendor.npos) {
         vendor = Vendor::Nvidia;
-    } else if (gpu_vendor.contains("ATI") ||
-               gpu_vendor.contains("Advanced Micro Devices")) {
+    } else if ((gpu_vendor.find("ATI") != gpu_vendor.npos) ||
+               (gpu_vendor.find("AMD") != gpu_vendor.npos) ||
+               (gpu_vendor.find("Advanced Micro Devices") != gpu_vendor.npos)) {
         vendor = Vendor::AMD;
-    } else if (gpu_vendor.contains("Intel")) {
+    } else if (gpu_vendor.find("Intel") != gpu_vendor.npos) {
         vendor = Vendor::Intel;
-    } else if (gpu_vendor.contains("GDI Generic")) {
+    } else if (gpu_vendor.find("GDI Generic") != gpu_vendor.npos) {
         vendor = Vendor::Generic;
     }
 }

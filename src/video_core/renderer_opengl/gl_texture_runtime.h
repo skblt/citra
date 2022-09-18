@@ -152,8 +152,8 @@ public:
 };
 
 struct Traits {
-    using Runtime = TextureRuntime;
-    using Surface = Surface;
+    using RuntimeType = TextureRuntime;
+    using SurfaceType = Surface;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;

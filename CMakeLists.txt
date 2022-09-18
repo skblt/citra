@@ -9,6 +9,7 @@ cmake_policy(SET CMP0069 NEW)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/cmake-modules")
 include(DownloadExternals)
+include(GNUInstallDirs)
 include(CMakeDependentOption)
 
 project(citra LANGUAGES C CXX ASM)
@@ -157,7 +158,7 @@ message(STATUS "Target architecture: ${ARCHITECTURE}")
 # Configure C++ standard
 # ===========================
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # set up output paths for executable binaries

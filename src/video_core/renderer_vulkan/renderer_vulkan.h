@@ -5,6 +5,7 @@
 #pragma once
 
 #include <array>
+#include <glm/glm.hpp>
 #include "common/common_types.h"
 #include "common/math_util.h"
 #include "core/hw/gpu.h"
@@ -30,7 +31,7 @@ struct TextureInfo {
 
 /// Structure used for storing information about the display target for each 3DS screen
 struct ScreenInfo {
-    ImageAlloc display_texture;
+    ImageAlloc* display_texture = nullptr;
     Common::Rectangle<float> display_texcoords;
     TextureInfo texture;
     vk::Sampler sampler;
@@ -38,7 +39,7 @@ struct ScreenInfo {
 
 // Uniform data used for presenting the 3DS screens
 struct PresentUniformData {
-    std::array<float, 3 * 2> modelview;
+    glm::mat4 modelview;
     Common::Vec4f i_resolution;
     Common::Vec4f o_resolution;
     int screen_id_l = 0;

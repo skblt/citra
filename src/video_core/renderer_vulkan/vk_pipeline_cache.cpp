@@ -139,6 +139,7 @@ PipelineCache::PipelineCache(const Instance& instance, TaskScheduler& scheduler,
     descriptor_dirty.fill(true);
 
     LoadDiskCache();
+    BuildLayout();
     trivial_vertex_shader = Compile(GenerateTrivialVertexShader(), vk::ShaderStageFlagBits::eVertex,
                                     instance.GetDevice(), ShaderOptimization::Debug);
 }
@@ -239,25 +240,21 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
 }
 
 void PipelineCache::BindTexture(u32 binding, vk::ImageView image_view) {
-    const DescriptorData data = {
-        .image_info = vk::DescriptorImageInfo{
-            .imageView = image_view,
-            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-        }
+    const vk::DescriptorImageInfo image_info = {
+        .imageView = image_view,
+        .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
     };
 
-    SetBinding(1, binding, data);
+    SetBinding(1, binding, DescriptorData{image_info});
 }
 
 void PipelineCache::BindStorageImage(u32 binding, vk::ImageView image_view) {
-    const DescriptorData data = {
-        .image_info = vk::DescriptorImageInfo{
-            .imageView = image_view,
-            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-        }
+    const vk::DescriptorImageInfo image_info = {
+        .imageView = image_view,
+        .imageLayout = vk::ImageLayout::eGeneral
     };
 
-    SetBinding(3, binding, data);
+    SetBinding(3, binding, DescriptorData{image_info});
 }
 
 void PipelineCache::BindBuffer(u32 binding, vk::Buffer buffer, u32 offset, u32 size) {
@@ -370,6 +367,7 @@ void PipelineCache::BuildLayout() {
         const vk::DescriptorUpdateTemplateCreateInfo template_info = {
             .descriptorUpdateEntryCount = set.binding_count,
             .pDescriptorUpdateEntries = update_entries.data(),
+            .templateType = vk::DescriptorUpdateTemplateType::eDescriptorSet,
             .descriptorSetLayout = descriptor_set_layouts[i]
         };
 
@@ -398,7 +396,7 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
             continue;
         }
 
-        shader_stages[i] = vk::PipelineShaderStageCreateInfo{
+        shader_stages[shader_count++] = vk::PipelineShaderStageCreateInfo{
             .stage = ToVkShaderStage(i),
             .module = shader,
             .pName = "main"
@@ -569,6 +567,8 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
     return VK_NULL_HANDLE;
 }
 
+static_assert(sizeof(vk::DescriptorBufferInfo) == sizeof(VkDescriptorBufferInfo));
+
 void PipelineCache::BindDescriptorSets() {
     vk::Device device = instance.GetDevice();
     for (u32 i = 0; i < RASTERIZER_SET_COUNT; i++) {
@@ -580,7 +580,7 @@ void PipelineCache::BindDescriptorSets() {
             };
 
             vk::DescriptorSet set = device.allocateDescriptorSets(alloc_info)[0];
-            device.updateDescriptorSetWithTemplate(set, update_templates[i], update_data[i].data());
+            device.updateDescriptorSetWithTemplate(set, update_templates[i], update_data[i][0]);
 
             descriptor_sets[i] = set;
             descriptor_dirty[i] = false;
@@ -600,6 +600,7 @@ void PipelineCache::LoadDiskCache() {
     FileUtil::IOFile cache_file{cache_path, "r"};
     if (!cache_file.IsOpen()) {
         LOG_INFO(Render_Vulkan, "No pipeline cache found");
+        return;
     }
 
     const u32 cache_file_size = cache_file.GetSize();

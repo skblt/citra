@@ -7,8 +7,8 @@
 #include "common/logging/log.h"
 #include "video_core/renderer_vulkan/vk_shader.h"
 #include <glslang/Public/ShaderLang.h>
-#include <glslang/SPIRV/GlslangToSpv.h>
 #include <glslang/Include/ResourceLimits.h>
+#include <SPIRV/GlslangToSpv.h>
 
 namespace Vulkan {
 

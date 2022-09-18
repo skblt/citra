@@ -51,11 +51,12 @@ Instance::Instance(Frontend::EmuWindow& window) {
     surface = CreateSurface(instance, window);
 
     // TODO: GPU select dialog
-    physical_device = instance.enumeratePhysicalDevices()[0];
-    device_limits = physical_device.getProperties().limits;
+    auto physical_devices = instance.enumeratePhysicalDevices();
+    physical_device = physical_devices[0];
+    device_properties = physical_device.getProperties();
 
     // Create logical device
-    CreateDevice(true);
+    CreateDevice(false);
 }
 
 Instance::~Instance() {
@@ -154,11 +155,6 @@ bool Instance::CreateDevice(bool validation_enabled) {
         return false;
     }
 
-    // List available device extensions
-    for (const auto& extension : extension_list) {
-        LOG_INFO(Render_Vulkan, "Vulkan extension: {}", extension.extensionName);
-    }
-
     // Helper lambda for adding extensions
     std::array<const char*, 6> enabled_extensions;
     u32 enabled_extension_count = 0;
@@ -223,7 +219,6 @@ bool Instance::CreateDevice(bool validation_enabled) {
 
     static constexpr float queue_priorities[] = {1.0f};
 
-    const std::array layers = {"VK_LAYER_KHRONOS_validation"};
     const std::array queue_infos = {
         vk::DeviceQueueCreateInfo{
             .queueFamilyIndex = graphics_queue_family_index,
@@ -247,12 +242,6 @@ bool Instance::CreateDevice(bool validation_enabled) {
 
     if (graphics_queue_family_index != present_queue_family_index) {
         device_info.queueCreateInfoCount = 2;
-    }
-
-    // Enable debug layer on debug builds
-    if (validation_enabled) {
-        device_info.enabledLayerCount = static_cast<u32>(layers.size());
-        device_info.ppEnabledLayerNames = layers.data();
     }
 
     // Create logical device
