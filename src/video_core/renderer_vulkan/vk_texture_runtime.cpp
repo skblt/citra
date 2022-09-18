@@ -191,7 +191,8 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         .image = image,
         .image_view = image_view,
         .allocation = allocation,
-        .levels = levels
+        .aspect = aspect,
+        .levels = levels,
     };
 }
 
@@ -200,7 +201,11 @@ void TextureRuntime::FormatConvert(VideoCore::PixelFormat format,  bool upload,
     const VideoCore::SurfaceType type = VideoCore::GetFormatType(format);
     const vk::FormatFeatureFlagBits feature = ToVkFormatFeatures(type);
     if (!instance.IsFormatSupported(ToVkFormat(format), feature)) {
-        LOG_CRITICAL(Render_Vulkan, "Unimplemented format converion!");
+        if (format == VideoCore::PixelFormat::RGB8 && upload) {
+            return Pica::Texture::ConvertBGRToRGBA(source, dest);
+        }
+
+        LOG_CRITICAL(Render_Vulkan, "Unimplemented converion for format {}!", format);
         UNREACHABLE();
     }
 }
@@ -431,6 +436,11 @@ void TextureRuntime::Transition(vk::CommandBuffer command_buffer, ImageAlloc& al
             info.access = vk::AccessFlagBits::eTransferWrite;
             info.stage = vk::PipelineStageFlagBits::eTransfer;
             break;
+        case vk::ImageLayout::eGeneral:
+            info.access = vk::AccessFlagBits::eInputAttachmentRead;
+            info.stage = vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                    vk::PipelineStageFlagBits::eFragmentShader;
+            break;
         default:
             LOG_CRITICAL(Render_Vulkan, "Unhandled vulkan image layout {}\n", layout);
             UNREACHABLE();
@@ -467,7 +477,9 @@ void TextureRuntime::Transition(vk::CommandBuffer command_buffer, ImageAlloc& al
 Surface::Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
     : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, instance{runtime.GetInstance()},
       scheduler{runtime.GetScheduler()} {
-    alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format, texture_type);
+    if (params.pixel_format != VideoCore::PixelFormat::Invalid) {
+        alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format, texture_type);
+    }
 }
 
 Surface::~Surface() {

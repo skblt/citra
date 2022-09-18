@@ -44,6 +44,9 @@ public:
                    RenderpassCache& renderpass_cache);
     ~TextureRuntime();
 
+    TextureRuntime(const TextureRuntime&) = delete;
+    TextureRuntime& operator=(const TextureRuntime&) = delete;
+
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
     StagingData FindStaging(u32 size, bool upload);
 
@@ -128,8 +131,8 @@ private:
 };
 
 struct Traits {
-    using Runtime = TextureRuntime;
-    using Surface = Surface;
+    using RuntimeType = TextureRuntime;
+    using SurfaceType = Surface;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;

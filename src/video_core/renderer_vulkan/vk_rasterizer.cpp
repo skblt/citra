@@ -124,7 +124,7 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
     default_texture = runtime.Allocate(1, 1, VideoCore::PixelFormat::RGBA8,
                                        VideoCore::TextureType::Texture2D);
     runtime.Transition(scheduler.GetUploadCommandBuffer(), default_texture,
-                       vk::ImageLayout::eShaderReadOnlyOptimal, 0, 1);
+                       vk::ImageLayout::eGeneral, 0, 1);
 
     uniform_block_data.lighting_lut_dirty.fill(true);
 
@@ -149,6 +149,14 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
 
     // Since we don't have access to VK_EXT_descriptor_indexing we need to intiallize
     // all descriptor sets even the ones we don't use. Use default_texture for this
+    const u32 vs_uniform_size = sizeof(Pica::Shader::VSUniformData);
+    const u32 fs_uniform_size = sizeof(Pica::Shader::UniformData);
+    pipeline_cache.BindBuffer(0, uniform_buffer.GetHandle(), 0, vs_uniform_size);
+    pipeline_cache.BindBuffer(1, uniform_buffer.GetHandle(), vs_uniform_size, fs_uniform_size);
+    pipeline_cache.BindTexelBuffer(2, texture_lf_buffer.GetView());
+    pipeline_cache.BindTexelBuffer(3, texture_buffer.GetView(0));
+    pipeline_cache.BindTexelBuffer(4, texture_buffer.GetView(1));
+
     for (u32 i = 0; i < 4; i++) {
         pipeline_cache.BindTexture(i, default_texture.image_view);
         pipeline_cache.BindSampler(i, default_sampler);
@@ -584,48 +592,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                                          surfaces_rect.bottom, surfaces_rect.top))
     };
 
-    auto valid_surface = color_surface ? color_surface : depth_surface;
-    const FramebufferInfo framebuffer_info = {
-        .color = color_surface ? color_surface->alloc.image_view : VK_NULL_HANDLE,
-        .depth = depth_surface ? depth_surface->alloc.image_view : VK_NULL_HANDLE,
-        .renderpass = renderpass_cache.GetRenderpass(pipeline_info.color_attachment,
-                                                     pipeline_info.depth_attachment, false),
-        .width = valid_surface->GetScaledWidth(),
-        .height = valid_surface->GetScaledHeight()
-    };
-
-    auto [it, new_framebuffer] = framebuffers.try_emplace(framebuffer_info, vk::Framebuffer{});
-    if (new_framebuffer) {
-        it->second = CreateFramebuffer(framebuffer_info);
-    }
-
-    ImageAlloc color_alloc =
-            color_surface ? color_surface->alloc : ImageAlloc{};
-    ImageAlloc depth_alloc =
-            depth_surface ? depth_surface->alloc : ImageAlloc{};
-
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    runtime.Transition(command_buffer, color_alloc,
-                       vk::ImageLayout::eColorAttachmentOptimal, 0, color_alloc.levels);
-    runtime.Transition(command_buffer, depth_alloc,
-                       vk::ImageLayout::eDepthStencilReadOnlyOptimal, 0, depth_alloc.levels);
-
-    const vk::RenderPassBeginInfo renderpass_begin = {
-        .renderPass =
-            renderpass_cache.GetRenderpass(pipeline_info.color_attachment,
-                                           pipeline_info.depth_attachment, false),
-        .framebuffer = it->second,
-        .renderArea = vk::Rect2D{
-            .offset = {static_cast<s32>(draw_rect.left), static_cast<s32>(draw_rect.bottom)},
-            .extent = {draw_rect.GetWidth(), draw_rect.GetHeight()}
-        },
-
-        .clearValueCount = 0,
-        .pClearValues = nullptr
-    };
-
-    renderpass_cache.EnterRenderpass(renderpass_begin);
-
     // Sync the viewport
     pipeline_cache.SetViewport(surfaces_rect.left + viewport_rect_unscaled.left * res_scale,
                                surfaces_rect.bottom + viewport_rect_unscaled.bottom * res_scale,
@@ -659,13 +625,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         uniform_block_data.dirty = true;
     }
 
-    /*bool need_duplicate_texture = false;
-    auto CheckBarrier = [&need_duplicate_texture, &color_surface](vk::ImageView handle) {
-        if (color_surface && color_surface->alloc.image_view == handle) {
-            need_duplicate_texture = true;
-        }
-    };*/
-
     auto CheckBarrier = [this, &color_surface = color_surface](vk::ImageView image_view, u32 texture_index) {
         if (color_surface && color_surface->alloc.image_view == image_view) {
             //auto temp_tex = backend->CreateTexture(texture->GetInfo());
@@ -675,6 +634,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             pipeline_cache.BindTexture(texture_index, image_view);
         }
     };
+
+    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
 
     // Sync and bind the texture surfaces
     const auto pica_textures = regs.texturing.GetTextures();
@@ -847,6 +808,47 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     // Enable scissor test to prevent drawing outside of the framebuffer region
     pipeline_cache.SetScissor(draw_rect.left, draw_rect.bottom, draw_rect.GetWidth(), draw_rect.GetHeight());
 
+    auto valid_surface = color_surface ? color_surface : depth_surface;
+    const FramebufferInfo framebuffer_info = {
+        .color = color_surface ? color_surface->alloc.image_view : VK_NULL_HANDLE,
+        .depth = depth_surface ? depth_surface->alloc.image_view : VK_NULL_HANDLE,
+        .renderpass = renderpass_cache.GetRenderpass(pipeline_info.color_attachment,
+                                                     pipeline_info.depth_attachment, false),
+        .width = valid_surface->GetScaledWidth(),
+        .height = valid_surface->GetScaledHeight()
+    };
+
+    auto [it, new_framebuffer] = framebuffers.try_emplace(framebuffer_info, vk::Framebuffer{});
+    if (new_framebuffer) {
+        it->second = CreateFramebuffer(framebuffer_info);
+    }
+
+    if (color_surface) {
+        runtime.Transition(command_buffer, color_surface->alloc,
+                           vk::ImageLayout::eColorAttachmentOptimal,
+                           0, color_surface->alloc.levels);
+    }
+
+    if (depth_surface) {
+        runtime.Transition(command_buffer, depth_surface->alloc,
+                           vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                           0, depth_surface->alloc.levels);
+    }
+
+    const vk::RenderPassBeginInfo renderpass_begin = {
+        .renderPass =
+            renderpass_cache.GetRenderpass(pipeline_info.color_attachment,
+                                           pipeline_info.depth_attachment, false),
+        .framebuffer = it->second,
+        .renderArea = vk::Rect2D{
+            .offset = {static_cast<s32>(draw_rect.left), static_cast<s32>(draw_rect.bottom)},
+            .extent = {draw_rect.GetWidth(), draw_rect.GetHeight()}
+        },
+
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
     // Draw the vertex batch
     bool succeeded = true;
     if (accelerate) {
@@ -854,6 +856,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     } else {
         pipeline_cache.UseTrivialVertexShader();
         pipeline_cache.UseTrivialGeometryShader();
+        pipeline_cache.BindPipeline(pipeline_info);
 
         // Bind the vertex buffer at the current mapped offset. This effectively means
         // that when base_vertex is zero the GPU will start drawing from the current mapped
@@ -872,8 +875,9 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             std::memcpy(array_ptr, vertex_batch.data() + base_vertex, vertex_size);
             vertex_buffer.Commit(vertex_size);
 
-            pipeline_cache.BindPipeline(pipeline_info);
+            renderpass_cache.EnterRenderpass(renderpass_begin);
             command_buffer.draw(vertices, 1, base_vertex, 0);
+            renderpass_cache.ExitRenderpass();
         }
     }
 
@@ -1582,7 +1586,7 @@ bool RasterizerVulkan::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
         (float)src_rect.bottom / (float)scaled_height, (float)src_rect.left / (float)scaled_width,
         (float)src_rect.top / (float)scaled_height, (float)src_rect.right / (float)scaled_width);
 
-    screen_info.display_texture = src_surface->alloc;
+    screen_info.display_texture = &src_surface->alloc;
 
     return true;
 }

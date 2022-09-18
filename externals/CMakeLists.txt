@@ -63,6 +63,9 @@ add_subdirectory(glad)
 # glslang
 add_subdirectory(glslang)
 
+# glm
+add_subdirectory(glm)
+
 # inih
 add_subdirectory(inih)
 

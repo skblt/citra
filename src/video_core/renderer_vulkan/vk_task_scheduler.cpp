@@ -11,7 +11,6 @@
 namespace Vulkan {
 
 TaskScheduler::TaskScheduler(const Instance& instance) : instance{instance} {
-
     vk::Device device = instance.GetDevice();
     const vk::CommandPoolCreateInfo command_pool_info = {
         .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,

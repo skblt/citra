@@ -44,7 +44,8 @@ constexpr vk::ImageUsageFlags GetImageUsage(vk::ImageAspectFlags aspect) {
     if (aspect & vk::ImageAspectFlagBits::eDepth) {
         return usage | vk::ImageUsageFlagBits::eDepthStencilAttachment;
     } else {
-        return usage | vk::ImageUsageFlagBits::eColorAttachment;
+        return usage | vk::ImageUsageFlagBits::eStorage |
+                vk::ImageUsageFlagBits::eColorAttachment;
     }
 };
 
@@ -59,7 +60,8 @@ constexpr vk::FormatFeatureFlags GetFormatFeatures(vk::ImageAspectFlags aspect) 
     if (aspect & vk::ImageAspectFlagBits::eDepth) {
         return usage | vk::FormatFeatureFlagBits::eDepthStencilAttachment;
     } else {
-        return usage | vk::FormatFeatureFlagBits::eColorAttachment;
+        return usage | vk::FormatFeatureFlagBits::eStorageImage |
+                vk::FormatFeatureFlagBits::eColorAttachment;
     }
 };
 

@@ -22,6 +22,7 @@
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vector>
+#include "common/assert.h"
 #include "common/logging/log.h"
 #include "core/frontend/emu_window.h"
 #include "video_core/renderer_vulkan/vk_common.h"
@@ -41,13 +42,16 @@ inline vk::SurfaceKHR CreateSurface(const vk::Instance& instance, const Frontend
 
         if (instance.createWin32SurfaceKHR(&win32_ci, nullptr, &surface) != vk::Result::eSuccess) {
             LOG_CRITICAL(Render_Vulkan, "Failed to initialize Win32 surface");
+            UNREACHABLE();
         }
     }
 #elif VK_USE_PLATFORM_XLIB_KHR
     if (window_info.type == Frontend::WindowSystemType::X11) {
-        const vk::XlibSurfaceCreateInfoKHR xlib_ci{{},
-            static_cast<Display*>(window_info.display_connection),
-            reinterpret_cast<Window>(window_info.render_surface)};
+        const vk::XlibSurfaceCreateInfoKHR xlib_ci = {
+            .dpy = static_cast<Display*>(window_info.display_connection),
+            .window = reinterpret_cast<Window>(window_info.render_surface)
+        };
+
         if (instance.createXlibSurfaceKHR(&xlib_ci, nullptr, &surface) != vk::Result::eSuccess) {
             LOG_ERROR(Render_Vulkan, "Failed to initialize Xlib surface");
             UNREACHABLE();
