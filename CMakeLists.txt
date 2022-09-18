@@ -14,6 +14,10 @@ include(CMakeDependentOption)
 
 project(citra LANGUAGES C CXX ASM)
 
+if (APPLE)
+    enable_language(OBJC)
+endif()
+
 option(ENABLE_LTO "Enable link time optimization" OFF)
 
 option(ENABLE_SDL2 "Enable the SDL2 frontend" ON)
