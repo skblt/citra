@@ -64,3 +64,6 @@
 [submodule "glslang"]
 	path = externals/glslang
 	url = https://github.com/KhronosGroup/glslang
+[submodule "glm"]
+	path = externals/glm
+	url = https://github.com/g-truc/glm

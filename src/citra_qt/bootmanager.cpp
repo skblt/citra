@@ -25,6 +25,10 @@
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 
+#if !defined(WIN32)
+#include <qpa/qplatformnativeinterface.h>
+#endif
+
 EmuThread::EmuThread(Frontend::GraphicsContext& core_context) : core_context(core_context) {}
 
 EmuThread::~EmuThread() = default;
@@ -50,6 +54,7 @@ void EmuThread::run() {
         });
 
     emit LoadProgress(VideoCore::LoadCallbackStage::Complete, 0, 0);
+    emit HideLoadingScreen();
 
     core_context.MakeCurrent();
 

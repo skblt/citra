@@ -84,7 +84,9 @@ void Swapchain::Create(u32 width, u32 height, bool vsync_enabled) {
         device.destroyImageView(image.image_view);
         device.destroyFramebuffer(image.framebuffer);
     }
+
     swapchain_images.clear();
+    swapchain_images.resize(images.size());
 
     std::ranges::transform(images, swapchain_images.begin(), [&](vk::Image image) -> Image {
         const vk::ImageViewCreateInfo view_info = {

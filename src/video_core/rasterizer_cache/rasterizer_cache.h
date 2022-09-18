@@ -47,9 +47,9 @@ class RasterizerAccelerated;
 template <class T>
 class RasterizerCache : NonCopyable {
 public:
-    using TextureRuntime = typename T::Runtime;
-    using Surface = std::shared_ptr<typename T::Surface>;
-    using Watcher = SurfaceWatcher<typename T::Surface>;
+    using TextureRuntime = typename T::RuntimeType;
+    using Surface = std::shared_ptr<typename T::SurfaceType>;
+    using Watcher = SurfaceWatcher<typename T::SurfaceType>;
 
 private:
     /// Declare rasterizer interval types
@@ -755,7 +755,7 @@ auto RasterizerCache<T>::GetFillSurface(const GPU::Regs::MemoryFillConfig& confi
     params.type = SurfaceType::Fill;
     params.res_scale = std::numeric_limits<u16>::max();
 
-    Surface new_surface = std::make_shared<typename T::Surface>(params, runtime);
+    Surface new_surface = std::make_shared<typename T::SurfaceType>(params, runtime);
 
     std::memcpy(&new_surface->fill_data[0], &config.value_32bit, 4);
     if (config.fill_32bit) {
@@ -1211,7 +1211,7 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, const Surface& r
 
 template <class T>
 auto RasterizerCache<T>::CreateSurface(SurfaceParams& params) -> Surface {
-    Surface surface = std::make_shared<typename T::Surface>(params, runtime);
+    Surface surface = std::make_shared<typename T::SurfaceType>(params, runtime);
     surface->invalid_regions.insert(surface->GetInterval());
 
     return surface;

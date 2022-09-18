@@ -154,25 +154,27 @@ std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
 }
 
 void StreamBuffer::Commit(u32 size) {
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+    if (size > 0) {
+        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
 
-    auto [access_mask, stage_mask] = ToVkAccessStageFlags(usage);
-    const vk::BufferMemoryBarrier buffer_barrier = {
-        .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
-        .dstAccessMask = access_mask,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .buffer = buffer,
-        .offset = buffer_offset,
-        .size = size
-    };
+        auto [access_mask, stage_mask] = ToVkAccessStageFlags(usage);
+        const vk::BufferMemoryBarrier buffer_barrier = {
+            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = access_mask,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = buffer,
+            .offset = buffer_offset,
+            .size = size
+        };
 
-    command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, stage_mask,
-                                   vk::DependencyFlagBits::eByRegion, {}, buffer_barrier, {});
+        command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, stage_mask,
+                                       vk::DependencyFlagBits::eByRegion, {}, buffer_barrier, {});
 
 
-    buffer_offset += size;
-    available_size -= size;
+        buffer_offset += size;
+        available_size -= size;
+    }
 }
 
 void StreamBuffer::Flush() {

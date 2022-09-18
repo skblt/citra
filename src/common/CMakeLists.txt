@@ -77,6 +77,7 @@ add_library(common STATIC
     logging/backend.h
     logging/filter.cpp
     logging/filter.h
+    logging/formatter.h
     logging/log.h
     logging/text_formatter.cpp
     logging/text_formatter.h

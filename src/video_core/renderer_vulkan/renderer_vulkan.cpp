@@ -3,6 +3,8 @@
 // Refer to the license.txt file included.
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/gtc/matrix_transform.hpp>
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "core/core.h"
@@ -32,8 +34,8 @@ layout (location = 0) out vec2 frag_tex_coord;
 // The third column performs translation.
 // The third row could be used for projection, which we don't need in 2D. It hence is assumed to
 // implicitly be [0, 0, 1]
-layout (push_constant) uniform DrawInfo {
-    mat3x2 modelview_matrix;
+layout (push_constant, std140) uniform DrawInfo {
+    mat4 modelview_matrix;
     vec4 i_resolution;
     vec4 o_resolution;
     int screen_id_l;
@@ -42,39 +44,38 @@ layout (push_constant) uniform DrawInfo {
 };
 
 void main() {
-    // Multiply input position by the rotscale part of the matrix and then manually translate by
-    // the last column. This is equivalent to using a full 3x3 matrix and expanding the vector
-    // to `vec3(vert_position.xy, 1.0)`
-    gl_Position = vec4(mat2(modelview_matrix) * vert_position + modelview_matrix[2], 0.0, 1.0);
-    gl_Position.y = -gl_Position.y;
+    vec4 position = vec4(vert_position, 0.0, 1.0) * modelview_matrix;
+    gl_Position = vec4(position.x, -position.y, 0.0, 1.0);
     frag_tex_coord = vert_tex_coord;
 }
 )";
 
 constexpr std::string_view fragment_shader = R"(
-version 450 core
+#version 450 core
 #extension GL_ARB_separate_shader_objects : enable
 layout (location = 0) in vec2 frag_tex_coord;
 layout (location = 0) out vec4 color;
 
-layout (push_constant) uniform DrawInfo {
-    mat3x2 modelview_matrix;
+layout (push_constant, std140) uniform DrawInfo {
+    mat4 modelview_matrix;
     vec4 i_resolution;
     vec4 o_resolution;
     int screen_id_l;
     int screen_id_r;
     int layer;
+    int reverse_interlaced;
 };
 
-layout (set = 0, binding = 0) uniform sampler2D screen_textures[3];
+layout (set = 0, binding = 0) uniform texture2D screen_textures[3];
+layout (set = 0, binding = 1) uniform sampler screen_sampler;
 
 void main() {
-    color = texture(screen_textures[screen_id_l], frag_tex_coord);
+    color = texture(sampler2D(screen_textures[screen_id_l], screen_sampler), frag_tex_coord);
 }
 )";
 
 constexpr std::string_view fragment_shader_anaglyph = R"(
-version 450 core
+#version 450 core
 #extension GL_ARB_separate_shader_objects : enable
 layout (location = 0) in vec2 frag_tex_coord;
 layout (location = 0) out vec4 color;
@@ -91,32 +92,8 @@ const mat3 r = mat3(-0.011,-0.032,-0.007,
                0.377, 0.761, 0.009,
               -0.026,-0.093, 1.234);
 
-layout (push_constant) uniform DrawInfo {
-    mat3x2 modelview_matrix;
-    vec4 i_resolution;
-    vec4 o_resolution;
-    int screen_id_l;
-    int screen_id_r;
-    int layer;
-};
-
-layout (set = 0, binding = 0) uniform sampler2D screen_textures[3];
-
-void main() {
-    vec4 color_tex_l = texture(screen_textures[screen_id_l], frag_tex_coord);
-    vec4 color_tex_r = texture(screen_textures[screen_id_r], frag_tex_coord);
-    color = vec4(color_tex_l.rgb*l+color_tex_r.rgb*r, color_tex_l.a);
-}
-)";
-
-constexpr std::string_view fragment_shader_interlaced = R"(
-version 450 core
-#extension GL_ARB_separate_shader_objects : enable
-layout (location = 0) in vec2 frag_tex_coord;
-layout (location = 0) out vec4 color;
-
-layout (push_constant) uniform DrawInfo {
-    mat3x2 modelview_matrix;
+layout (push_constant, std140) uniform DrawInfo {
+    mat4 modelview_matrix;
     vec4 i_resolution;
     vec4 o_resolution;
     int screen_id_l;
@@ -125,14 +102,41 @@ layout (push_constant) uniform DrawInfo {
     int reverse_interlaced;
 };
 
-layout (set = 0, binding = 0) uniform sampler2D screen_textures[3];
+layout (set = 0, binding = 0) uniform texture2D screen_textures[3];
+layout (set = 0, binding = 1) uniform sampler screen_sampler;
+
+void main() {
+    vec4 color_tex_l = texture(sampler2D(screen_textures[screen_id_l], screen_sampler), frag_tex_coord);
+    vec4 color_tex_r = texture(sampler2D(screen_textures[screen_id_r], screen_sampler), frag_tex_coord);
+    color = vec4(color_tex_l.rgb*l+color_tex_r.rgb*r, color_tex_l.a);
+}
+)";
+
+constexpr std::string_view fragment_shader_interlaced = R"(
+#version 450 core
+#extension GL_ARB_separate_shader_objects : enable
+layout (location = 0) in vec2 frag_tex_coord;
+layout (location = 0) out vec4 color;
+
+layout (push_constant, std140) uniform DrawInfo {
+    mat4 modelview_matrix;
+    vec4 i_resolution;
+    vec4 o_resolution;
+    int screen_id_l;
+    int screen_id_r;
+    int layer;
+    int reverse_interlaced;
+};
+
+layout (set = 0, binding = 0) uniform texture2D screen_textures[3];
+layout (set = 0, binding = 1) uniform sampler screen_sampler;
 
 void main() {
     float screen_row = o_resolution.x * frag_tex_coord.x;
     if (int(screen_row) % 2 == reverse_interlaced)
-        color = texture(screen_textures[screen_id_l], frag_tex_coord);
+        color = texture(sampler2D(screen_textures[screen_id_l], screen_sampler), frag_tex_coord);
     else
-        color = texture(screen_textures[screen_id_r], frag_tex_coord);
+        color = texture(sampler2D(screen_textures[screen_id_r], screen_sampler), frag_tex_coord);
 }
 )";
 
@@ -194,15 +198,16 @@ RendererVulkan::RendererVulkan(Frontend::EmuWindow& window)
 
 RendererVulkan::~RendererVulkan() {
     vk::Device device = instance.GetDevice();
-
     device.destroyPipelineLayout(present_pipeline_layout);
+    device.destroyShaderModule(present_vertex_shader);
     device.destroyDescriptorSetLayout(present_descriptor_layout);
     device.destroyDescriptorUpdateTemplate(present_update_template);
-    device.destroyShaderModule(present_vertex_shader);
+
     for (u32 i = 0; i < PRESENT_PIPELINES; i++) {
         device.destroyPipeline(present_pipelines[i]);
         device.destroyShaderModule(present_shaders[i]);
     }
+
     for (std::size_t i = 0; i < present_samplers.size(); i++) {
         device.destroySampler(present_samplers[i]);
     }
@@ -268,27 +273,18 @@ void RendererVulkan::BeginRendering() {
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, present_pipelines[current_pipeline]);
 
+    std::array<vk::DescriptorImageInfo, 4> present_textures;
     for (std::size_t i = 0; i < screen_infos.size(); i++) {
-        runtime.Transition(command_buffer, screen_infos[i].display_texture,
-                           vk::ImageLayout::eShaderReadOnlyOptimal, 0, 1);
+        const auto& info = screen_infos[i];
+        present_textures[i] = vk::DescriptorImageInfo{
+            .imageView = info.display_texture ? info.display_texture->image_view
+                                              : info.texture.alloc.image_view,
+            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+        };
     }
 
-    const std::array present_textures = {
-        vk::DescriptorImageInfo{
-            .sampler = present_samplers[current_sampler],
-            .imageView = screen_infos[0].display_texture.image_view,
-            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-        },
-        vk::DescriptorImageInfo{
-            .sampler = present_samplers[current_sampler],
-            .imageView = screen_infos[1].display_texture.image_view,
-            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-        },
-        vk::DescriptorImageInfo{
-            .sampler = present_samplers[current_sampler],
-            .imageView = screen_infos[2].display_texture.image_view,
-            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-        },
+    present_textures[3] = vk::DescriptorImageInfo{
+        .sampler = present_samplers[current_sampler]
     };
 
     const vk::DescriptorSetAllocateInfo alloc_info = {
@@ -299,7 +295,7 @@ void RendererVulkan::BeginRendering() {
 
     vk::Device device = instance.GetDevice();
     vk::DescriptorSet set = device.allocateDescriptorSets(alloc_info)[0];
-    device.updateDescriptorSetWithTemplate(set, present_update_template, present_textures.data());
+    device.updateDescriptorSetWithTemplate(set, present_update_template, present_textures[0]);
 
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, present_pipeline_layout,
                                       0, 1, &set, 0, nullptr);
@@ -398,35 +394,55 @@ void RendererVulkan::CompileShaders() {
 }
 
 void RendererVulkan::BuildLayouts() {
-    const vk::DescriptorSetLayoutBinding present_layout_binding = {
-        .binding = 0,
-        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-        .descriptorCount = 3,
-        .stageFlags = vk::ShaderStageFlagBits::eFragment
+    const std::array present_layout_bindings = {
+        vk::DescriptorSetLayoutBinding{
+            .binding = 0,
+            .descriptorType = vk::DescriptorType::eSampledImage,
+            .descriptorCount = 3,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment
+        },
+        vk::DescriptorSetLayoutBinding{
+            .binding = 1,
+            .descriptorType = vk::DescriptorType::eSampler,
+            .descriptorCount = 1,
+            .stageFlags = vk::ShaderStageFlagBits::eFragment
+        }
     };
 
     const vk::DescriptorSetLayoutCreateInfo present_layout_info = {
-        .bindingCount = 1,
-        .pBindings = &present_layout_binding
-    };
-
-    const vk::DescriptorUpdateTemplateEntry update_template_entry = {
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 3,
-        .descriptorType  = vk::DescriptorType::eCombinedImageSampler,
-        .offset = 0,
-        .stride = sizeof(vk::DescriptorImageInfo)
-    };
-
-    const vk::DescriptorUpdateTemplateCreateInfo template_info = {
-        .descriptorUpdateEntryCount = 1,
-        .pDescriptorUpdateEntries = &update_template_entry,
-        .descriptorSetLayout = present_descriptor_layout
+        .bindingCount = static_cast<u32>(present_layout_bindings.size()),
+        .pBindings = present_layout_bindings.data()
     };
 
     vk::Device device = instance.GetDevice();
     present_descriptor_layout = device.createDescriptorSetLayout(present_layout_info);
+
+    const std::array update_template_entries = {
+        vk::DescriptorUpdateTemplateEntry{
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 3,
+            .descriptorType  = vk::DescriptorType::eSampledImage,
+            .offset = 0,
+            .stride = sizeof(vk::DescriptorImageInfo)
+        },
+        vk::DescriptorUpdateTemplateEntry{
+            .dstBinding = 1,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eSampler,
+            .offset = 3 * sizeof(vk::DescriptorImageInfo),
+            .stride = 0
+        }
+    };
+
+    const vk::DescriptorUpdateTemplateCreateInfo template_info = {
+        .descriptorUpdateEntryCount = static_cast<u32>(update_template_entries.size()),
+        .pDescriptorUpdateEntries = update_template_entries.data(),
+        .templateType = vk::DescriptorUpdateTemplateType::eDescriptorSet,
+        .descriptorSetLayout = present_descriptor_layout
+    };
+
     present_update_template = device.createDescriptorUpdateTemplate(template_info);
 
     const vk::PushConstantRange push_range = {
@@ -639,8 +655,22 @@ void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, fl
                                  vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
                                  0, sizeof(draw_info), &draw_info);
 
+    const vk::ClearValue clear_value = {
+        .color = clear_color
+    };
+
+    const vk::RenderPassBeginInfo begin_info = {
+        .renderPass = renderpass_cache.GetPresentRenderpass(),
+        .framebuffer = swapchain.GetFramebuffer(),
+        .clearValueCount = 1,
+        .pClearValues = &clear_value,
+    };
+
+    command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
+
     command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
     command_buffer.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
+    command_buffer.endRenderPass();
 }
 
 void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, float h) {
@@ -675,8 +705,22 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
                                  vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
                                  0, sizeof(draw_info), &draw_info);
 
+    const vk::ClearValue clear_value = {
+        .color = clear_color
+    };
+
+    const vk::RenderPassBeginInfo begin_info = {
+        .renderPass = renderpass_cache.GetPresentRenderpass(),
+        .framebuffer = swapchain.GetFramebuffer(),
+        .clearValueCount = 1,
+        .pClearValues = &clear_value,
+    };
+
+    command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
+
     command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
     command_buffer.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
+    command_buffer.endRenderPass();
 }
 
 void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_id_r,
@@ -778,8 +822,11 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
     const auto& bottom_screen = layout.bottom_screen;
 
     // Set projection matrix
-    draw_info.modelview =
-        MakeOrthographicMatrix(static_cast<float>(layout.width), static_cast<float>(layout.height), flipped);
+    //draw_info.modelview =
+    //    MakeOrthographicMatrix(static_cast<float>(layout.width), static_cast<float>(layout.height), flipped);
+    draw_info.modelview = glm::transpose(glm::ortho(0.f, static_cast<float>(layout.width),
+                                                        static_cast<float>(layout.height), 0.0f,
+                                                        0.f, 1.f));
 
     const bool stereo_single_screen =
         Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph ||
@@ -920,6 +967,8 @@ void RendererVulkan::SwapBuffers() {
         swapchain.Create(layout.width, layout.height, false);
     }
 
+    swapchain.AcquireNextImage();
+
     const vk::Viewport viewport = {
         .x = 0.0f,
         .y = 0.0f,
@@ -934,21 +983,14 @@ void RendererVulkan::SwapBuffers() {
         .extent = {layout.width, layout.height}
     };
 
-    const vk::ClearValue clear_value = {
-        .color = clear_color
-    };
-
-    const vk::RenderPassBeginInfo begin_info = {
-        .renderPass = renderpass_cache.GetPresentRenderpass(),
-        .framebuffer = swapchain.GetFramebuffer(),
-        .clearValueCount = 1,
-        .pClearValues = &clear_value,
-    };
-
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.setViewport(0, viewport);
     command_buffer.setScissor(0, scissor);
-    command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
+
+    for (auto& info : screen_infos) {
+        auto alloc = info.display_texture ? info.display_texture : &info.texture.alloc;
+        runtime.Transition(command_buffer, *alloc, vk::ImageLayout::eShaderReadOnlyOptimal, 0, 1);
+    }
 
     DrawScreens(layout, false);
 
@@ -956,8 +998,8 @@ void RendererVulkan::SwapBuffers() {
     vertex_buffer.Flush();
     rasterizer->FlushBuffers();
 
-    command_buffer.endRenderPass();
     scheduler.Submit(false, true, swapchain.GetAvailableSemaphore(), swapchain.GetPresentSemaphore());
+    swapchain.Present();
 
     // Inform texture runtime about the switch
     runtime.OnSlotSwitch(scheduler.GetCurrentSlotIndex());
