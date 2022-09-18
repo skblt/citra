@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include "common/common_types.h"
 #include "common/logging/formatter.h"
 namespace Log {

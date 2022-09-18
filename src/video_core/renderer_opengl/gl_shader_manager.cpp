@@ -354,11 +354,11 @@ public:
         std::size_t GetConfigHash() const {
             return Common::ComputeHash64(this, sizeof(std::size_t) * 3);
         }
-
     };
 
     static_assert(offsetof(ShaderTuple, vs_hash) == 0, "ShaderTuple layout changed!");
-    static_assert(offsetof(ShaderTuple, fs_hash) == sizeof(std::size_t) * 2, "ShaderTuple layout changed!");
+    static_assert(offsetof(ShaderTuple, fs_hash) == sizeof(std::size_t) * 2,
+                  "ShaderTuple layout changed!");
 
     bool is_amd;
     bool separable;

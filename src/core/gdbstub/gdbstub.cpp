@@ -684,7 +684,8 @@ static void ReadCommand() {
         LOG_ERROR(
             Debug_GDBStub,
             "gdb: invalid checksum: calculated {:02x} and read {:02x} for ${}# (length: {})\n",
-            checksum_calculated, checksum_received, reinterpret_cast<const char*>(command_buffer), command_length);
+            checksum_calculated, checksum_received, reinterpret_cast<const char*>(command_buffer),
+            command_length);
 
         command_length = 0;
 

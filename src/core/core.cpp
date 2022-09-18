@@ -598,7 +598,8 @@ void System::serialize(Archive& ar, const unsigned int file_version) {
         // Re-initialize everything like it was before
         auto system_mode = this->app_loader->LoadKernelSystemMode();
         auto n3ds_mode = this->app_loader->LoadKernelN3dsMode();
-        [[maybe_unused]] const System::ResultStatus result = Init(*m_emu_window, *system_mode.first, *n3ds_mode.first, num_cores);
+        [[maybe_unused]] const System::ResultStatus result =
+            Init(*m_emu_window, *system_mode.first, *n3ds_mode.first, num_cores);
     }
 
     // flush on save, don't flush on load
