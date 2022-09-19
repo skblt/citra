@@ -18,7 +18,9 @@
 namespace OpenGL {
 
 static u64 GetUniqueIdentifier(const Pica::Regs& regs, const ProgramCode& code) {
-    u64 hash = Common::ComputeHash64(regs.reg_array.data(), Pica::Regs::NUM_REGS * sizeof(u32));
+    std::size_t hash = 0;
+    u64 regs_uid = Common::ComputeHash64(regs.reg_array.data(), Pica::Regs::NUM_REGS * sizeof(u32));
+    hash = Common::HashCombine(hash, regs_uid);
 
     if (code.size() > 0) {
         u64 code_uid = Common::ComputeHash64(code.data(), code.size() * sizeof(u32));
