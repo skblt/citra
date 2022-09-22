@@ -81,6 +81,10 @@ bool Instance::IsFormatSupported(vk::Format format, vk::FormatFeatureFlags usage
 }
 
 vk::Format Instance::GetFormatAlternative(vk::Format format) const {
+    if (format == vk::Format::eUndefined) {
+        return format;
+    }
+
     vk::FormatFeatureFlags features = GetFormatFeatures(GetImageAspect(format));
     if (IsFormatSupported(format, features)) {
        return format;
@@ -104,8 +108,8 @@ vk::Format Instance::GetFormatAlternative(vk::Format format) const {
         // B4G4R4A4 is not guaranteed by the spec to support attachments
         return GetFormatAlternative(vk::Format::eB4G4R4A4UnormPack16);
     default:
-        LOG_WARNING(Render_Vulkan, "Unable to find compatible alternative to format = {} with usage {}",
-                                    vk::to_string(format), vk::to_string(features));
+        LOG_WARNING(Render_Vulkan, "Format {} doesn't support attachments, falling back to RGBA8",
+                                    vk::to_string(format));
         return vk::Format::eR8G8B8A8Unorm;
     }
 }

@@ -44,15 +44,15 @@ public:
                    RenderpassCache& renderpass_cache);
     ~TextureRuntime();
 
-    TextureRuntime(const TextureRuntime&) = delete;
-    TextureRuntime& operator=(const TextureRuntime&) = delete;
-
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
-    StagingData FindStaging(u32 size, bool upload);
+    [[nodiscard]] StagingData FindStaging(u32 size, bool upload);
 
     /// Allocates a vulkan image possibly resusing an existing one
-    ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
-                        VideoCore::TextureType type);
+    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
+                                      VideoCore::TextureType type);
+
+    /// Takes back ownership of the allocation for recycling
+    void Recycle(const VideoCore::HostTextureTag tag, ImageAlloc&& alloc);
 
     /// Performs required format convertions on the staging data
     void FormatConvert(VideoCore::PixelFormat format,  bool upload,
@@ -60,10 +60,8 @@ public:
 
     /// Transitions the mip level range of the surface to new_layout
     void Transition(vk::CommandBuffer command_buffer, ImageAlloc& alloc,
-                    vk::ImageLayout new_layout, u32 level, u32 level_count);
-
-    /// Performs operations that need to be done on every scheduler slot switch
-    void OnSlotSwitch(u32 new_slot);
+                    vk::ImageLayout new_layout, u32 level, u32 level_count,
+                    u32 layer = 0, u32 layer_count = 1);
 
     /// Fills the rectangle of the texture with the clear value provided
     bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
@@ -77,6 +75,9 @@ public:
 
     /// Generates mipmaps for all the available levels of the texture
     void GenerateMipmaps(Surface& surface, u32 max_level);
+
+    /// Performs operations that need to be done on every scheduler slot switch
+    void OnSlotSwitch(u32 new_slot);
 
 private:
     /// Returns the current Vulkan instance
@@ -95,7 +96,7 @@ private:
     RenderpassCache& renderpass_cache;
     std::array<std::unique_ptr<StagingBuffer>, SCHEDULER_COMMAND_COUNT> staging_buffers;
     std::array<u32, SCHEDULER_COMMAND_COUNT> staging_offsets{};
-    std::unordered_map<VideoCore::HostTextureTag, ImageAlloc> texture_recycler;
+    std::unordered_multimap<VideoCore::HostTextureTag, ImageAlloc> texture_recycler;
 };
 
 class Surface : public VideoCore::SurfaceBase<Surface> {
