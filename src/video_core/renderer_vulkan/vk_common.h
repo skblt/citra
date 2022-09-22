@@ -47,7 +47,7 @@ constexpr vk::ImageUsageFlags GetImageUsage(vk::ImageAspectFlags aspect) {
         return usage | vk::ImageUsageFlagBits::eStorage |
                 vk::ImageUsageFlagBits::eColorAttachment;
     }
-};
+}
 
 /// Returns a bit mask with the required features of a format with a particular aspect
 constexpr vk::FormatFeatureFlags GetFormatFeatures(vk::ImageAspectFlags aspect) {
@@ -63,6 +63,6 @@ constexpr vk::FormatFeatureFlags GetFormatFeatures(vk::ImageAspectFlags aspect) 
         return usage | vk::FormatFeatureFlagBits::eStorageImage |
                 vk::FormatFeatureFlagBits::eColorAttachment;
     }
-};
+}
 
 } // namespace Vulkan

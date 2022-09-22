@@ -61,10 +61,9 @@ TaskScheduler::TaskScheduler(const Instance& instance) : instance{instance} {
 }
 
 TaskScheduler::~TaskScheduler() {
-    // Submit any remaining work
-    Submit(true, false);
-
     vk::Device device = instance.GetDevice();
+    device.waitIdle();
+
     for (const auto& command : commands) {
         device.destroyFence(command.fence);
         device.destroyDescriptorPool(command.descriptor_pool);
@@ -96,7 +95,8 @@ void TaskScheduler::WaitFence(u32 counter) {
         }
     }
 
-    UNREACHABLE_MSG("Invalid fence counter!");
+    LOG_CRITICAL(Render_Vulkan,"Invalid fence counter {}!", counter);
+    UNREACHABLE();
 }
 
 void TaskScheduler::Submit(bool wait_completion, bool begin_next,

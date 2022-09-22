@@ -1568,6 +1568,7 @@ void main() {
     normquat = vert_normquat;
     view = vert_view;
     gl_Position = vert_position;
+    gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;
 #if !defined(CITRA_GLES) || defined(GL_EXT_clip_cull_distance)
     gl_ClipDistance[0] = -vert_position.z; // fixed PICA clipping plane z <= 0
     gl_ClipDistance[1] = dot(clip_coef, vert_position);

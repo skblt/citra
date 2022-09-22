@@ -198,6 +198,8 @@ RendererVulkan::RendererVulkan(Frontend::EmuWindow& window)
 
 RendererVulkan::~RendererVulkan() {
     vk::Device device = instance.GetDevice();
+    device.waitIdle();
+
     device.destroyPipelineLayout(present_pipeline_layout);
     device.destroyShaderModule(present_vertex_shader);
     device.destroyDescriptorSetLayout(present_descriptor_layout);
@@ -208,9 +210,22 @@ RendererVulkan::~RendererVulkan() {
         device.destroyShaderModule(present_shaders[i]);
     }
 
-    for (std::size_t i = 0; i < present_samplers.size(); i++) {
-        device.destroySampler(present_samplers[i]);
+    for (auto& sampler : present_samplers) {
+        device.destroySampler(sampler);
     }
+
+    for (auto& info : screen_infos) {
+        const VideoCore::HostTextureTag tag = {
+            .format = VideoCore::PixelFormatFromGPUPixelFormat(info.texture.format),
+            .width = info.texture.width,
+            .height = info.texture.height,
+            .layers = 1
+        };
+
+        runtime.Recycle(tag, std::move(info.texture.alloc));
+    }
+
+    rasterizer.reset();
 }
 
 VideoCore::ResultStatus RendererVulkan::Init() {
@@ -236,35 +251,56 @@ void RendererVulkan::Sync() {
 }
 
 void RendererVulkan::PrepareRendertarget() {
-    for (int i = 0; i < 3; i++) {
-        int fb_id = i == 2 ? 1 : 0;
+    for (u32 i = 0; i < 3; i++) {
+        const u32 fb_id = i == 2 ? 1 : 0;
         const auto& framebuffer = GPU::g_regs.framebuffer_config[fb_id];
 
         // Main LCD (0): 0x1ED02204, Sub LCD (1): 0x1ED02A04
         u32 lcd_color_addr =
             (fb_id == 0) ? LCD_REG_INDEX(color_fill_top) : LCD_REG_INDEX(color_fill_bottom);
         lcd_color_addr = HW::VADDR_LCD + 4 * lcd_color_addr;
-        LCD::Regs::ColorFill color_fill = {0};
+        LCD::Regs::ColorFill color_fill{0};
         LCD::Read(color_fill.raw, lcd_color_addr);
 
         if (color_fill.is_enabled) {
-            LoadColorToActiveGLTexture(color_fill.color_r, color_fill.color_g, color_fill.color_b,
-                                       screen_infos[i].texture);
+            const vk::ClearColorValue clear_color = {
+                .float32 = std::array{
+                    color_fill.color_r / 255.0f,
+                    color_fill.color_g / 255.0f,
+                    color_fill.color_b / 255.0f,
+                    1.0f
+                }
+            };
+
+            const vk::ImageSubresourceRange range = {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            };
+
+            vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+            TextureInfo& texture = screen_infos[i].texture;
+            runtime.Transition(command_buffer, texture.alloc, vk::ImageLayout::eTransferDstOptimal, 0, texture.alloc.levels);
+            command_buffer.clearColorImage(texture.alloc.image, vk::ImageLayout::eTransferDstOptimal,
+                                           clear_color, range);
         } else {
-            if (screen_infos[i].texture.width != framebuffer.width ||
-                screen_infos[i].texture.height != framebuffer.height ||
-                screen_infos[i].texture.format != framebuffer.color_format) {
+            TextureInfo& texture = screen_infos[i].texture;
+            if (texture.width != framebuffer.width || texture.height != framebuffer.height ||
+                    texture.format != framebuffer.color_format) {
+
                 // Reallocate texture if the framebuffer size has changed.
                 // This is expected to not happen very often and hence should not be a
                 // performance problem.
-                ConfigureFramebufferTexture(screen_infos[i].texture, framebuffer);
+                ConfigureFramebufferTexture(texture, framebuffer);
             }
 
             LoadFBToScreenInfo(framebuffer, screen_infos[i], i == 1);
 
             // Resize the texture in case the framebuffer size has changed
-            screen_infos[i].texture.width = framebuffer.width;
-            screen_infos[i].texture.height = framebuffer.height;
+            texture.width = framebuffer.width;
+            texture.height = framebuffer.height;
         }
     }
 }
@@ -340,25 +376,6 @@ void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
 
         screen_info.texture.Upload(0, 1, pixel_stride, region, framebuffer_data);*/
     }
-}
-
-void RendererVulkan::LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture) {
-    const auto color = std::array<float, 4>{color_r / 255.0f, color_g / 255.0f, color_b / 255.0f, 1};
-    const vk::ClearColorValue clear_color = {
-        .float32 = color
-    };
-
-    const vk::ImageSubresourceRange range = {
-        .aspectMask = vk::ImageAspectFlagBits::eColor,
-        .baseMipLevel = 0,
-        .levelCount = 1,
-        .baseArrayLayer = 0,
-        .layerCount = 1,
-    };
-
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.clearColorImage(texture.alloc.image, vk::ImageLayout::eShaderReadOnlyOptimal,
-                                   clear_color, range);
 }
 
 void RendererVulkan::CompileShaders() {
@@ -589,6 +606,30 @@ void RendererVulkan::BuildPipelines() {
     }
 }
 
+void RendererVulkan::ConfigureFramebufferTexture(TextureInfo& texture, const GPU::Regs::FramebufferConfig& framebuffer) {
+    TextureInfo old_texture = texture;
+    texture = TextureInfo {
+        .alloc = runtime.Allocate(framebuffer.width, framebuffer.height,
+                                  VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format),
+                                  VideoCore::TextureType::Texture2D),
+        .width = framebuffer.width,
+        .height = framebuffer.height,
+        .format = framebuffer.color_format,
+    };
+
+    // Recyle the old texture after allocation to avoid having duplicates of the same allocation in the recycler
+    if (old_texture.width != 0 && old_texture.height != 0) {
+        const VideoCore::HostTextureTag tag = {
+            .format = VideoCore::PixelFormatFromGPUPixelFormat(old_texture.format),
+            .width = old_texture.width,
+            .height = old_texture.height,
+            .layers = 1
+        };
+
+        runtime.Recycle(tag, std::move(old_texture.alloc));
+    }
+}
+
 void RendererVulkan::ReloadSampler() {
     current_sampler = !Settings::values.filter_mode;
 }
@@ -608,16 +649,6 @@ void RendererVulkan::ReloadPipeline() {
         current_pipeline = 0;
         break;
     }
-}
-
-void RendererVulkan::ConfigureFramebufferTexture(TextureInfo& texture,
-                                                 const GPU::Regs::FramebufferConfig& framebuffer) {
-    texture.format = framebuffer.color_format;
-    texture.width = framebuffer.width;
-    texture.height = framebuffer.height;
-    texture.alloc = runtime.Allocate(framebuffer.width, framebuffer.height,
-                                     VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format),
-                                     VideoCore::TextureType::Texture2D);
 }
 
 void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, float w, float h) {
@@ -659,9 +690,14 @@ void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, fl
         .color = clear_color
     };
 
+    const auto& layout = render_window.GetFramebufferLayout();
     const vk::RenderPassBeginInfo begin_info = {
         .renderPass = renderpass_cache.GetPresentRenderpass(),
         .framebuffer = swapchain.GetFramebuffer(),
+        .renderArea = vk::Rect2D{
+            .offset = {0, 0},
+            .extent = {layout.width, layout.height}
+        },
         .clearValueCount = 1,
         .pClearValues = &clear_value,
     };
@@ -894,6 +930,7 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
         }
     }
 
+    return;
     draw_info.layer = 0;
     if (layout.bottom_screen_enabled) {
         if (layout.is_rotated) {
@@ -989,7 +1026,7 @@ void RendererVulkan::SwapBuffers() {
 
     for (auto& info : screen_infos) {
         auto alloc = info.display_texture ? info.display_texture : &info.texture.alloc;
-        runtime.Transition(command_buffer, *alloc, vk::ImageLayout::eShaderReadOnlyOptimal, 0, 1);
+        runtime.Transition(command_buffer, *alloc, vk::ImageLayout::eShaderReadOnlyOptimal, 0, alloc->levels);
     }
 
     DrawScreens(layout, false);

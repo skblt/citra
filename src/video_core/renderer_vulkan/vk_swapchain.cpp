@@ -24,6 +24,11 @@ Swapchain::~Swapchain() {
     device.destroySemaphore(render_finished);
     device.destroySemaphore(image_available);
     device.destroySwapchainKHR(swapchain);
+
+    for (auto& image : swapchain_images) {
+        device.destroyImageView(image.image_view);
+        device.destroyFramebuffer(image.framebuffer);
+    }
 }
 
 void Swapchain::Create(u32 width, u32 height, bool vsync_enabled) {
