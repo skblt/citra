@@ -172,9 +172,11 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
 }
 
 RasterizerVulkan::~RasterizerVulkan() {
+    // Submit any remaining work
+    scheduler.Submit(true, false);
+
     VmaAllocator allocator = instance.GetAllocator();
     vk::Device device = instance.GetDevice();
-    device.waitIdle();
 
     for (auto& [key, sampler] : samplers) {
         device.destroySampler(sampler);
@@ -540,11 +542,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     MICROPROFILE_SCOPE(OpenGL_Drawing);
     const auto& regs = Pica::g_state.regs;
 
-    pipeline_info.color_attachment =
-            VideoCore::PixelFormatFromColorFormat(regs.framebuffer.framebuffer.color_format);
-    pipeline_info.depth_attachment =
-            VideoCore::PixelFormatFromDepthFormat(regs.framebuffer.framebuffer.depth_format);
-
     const bool shadow_rendering = regs.framebuffer.output_merger.fragment_operation_mode ==
                             Pica::FramebufferRegs::FragmentOperationMode::Shadow;
     const bool has_stencil =
@@ -572,6 +569,11 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     auto [color_surface, depth_surface, surfaces_rect] =
         res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb, viewport_rect_unscaled);
+
+    pipeline_info.color_attachment =
+            color_surface ? color_surface->pixel_format : VideoCore::PixelFormat::Invalid;
+    pipeline_info.depth_attachment =
+            depth_surface ? depth_surface->pixel_format : VideoCore::PixelFormat::Invalid;
 
     const u16 res_scale = color_surface != nullptr
                               ? color_surface->res_scale
@@ -635,6 +637,43 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         }
     };
 
+    const auto BindCubeFace = [&](Pica::TexturingRegs::CubeFace face,
+                                  Pica::Texture::TextureInfo& info) {
+        info.physical_address = regs.texturing.GetCubePhysicalAddress(face);
+        auto surface = res_cache.GetTextureSurface(info);
+
+        const u32 binding = static_cast<u32>(face);
+        if (surface != nullptr) {
+            pipeline_cache.BindStorageImage(binding, surface->alloc.image_view);
+        } else {
+            pipeline_cache.BindStorageImage(binding, default_texture.image_view);
+        }
+    };
+
+    const auto BindSampler = [&](u32 binding, SamplerInfo& info,
+            const Pica::TexturingRegs::FullTextureConfig& texture) {
+        info = SamplerInfo{
+            .mag_filter = texture.config.mag_filter,
+            .min_filter = texture.config.min_filter,
+            .mip_filter = texture.config.mip_filter,
+            .wrap_s = texture.config.wrap_s,
+            .wrap_t = texture.config.wrap_t,
+            .border_color = texture.config.border_color.raw,
+            .lod_min = texture.config.lod.min_level,
+            .lod_max = texture.config.lod.max_level,
+            .lod_bias = texture.config.lod.bias
+        };
+
+        // Search the cache and bind the appropriate sampler
+        if (auto it = samplers.find(info); it != samplers.end()) {
+            pipeline_cache.BindSampler(binding, it->second);
+        } else {
+            vk::Sampler texture_sampler = CreateSampler(info);
+            samplers.emplace(info, texture_sampler);
+            pipeline_cache.BindSampler(binding, texture_sampler);
+        }
+    };
+
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
 
     // Sync and bind the texture surfaces
@@ -643,136 +682,69 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         const auto& texture = pica_textures[texture_index];
 
         if (texture.enabled) {
-            /*if (texture_index == 0) {
+            if (texture_index == 0) {
                 using TextureType = Pica::TexturingRegs::TextureConfig::TextureType;
                 switch (texture.config.type.Value()) {
                 case TextureType::Shadow2D: {
-                    if (!allow_shadow)
-                        continue;
-
-                    Surface surface = res_cache.GetTextureSurface(texture);
+                    auto surface = res_cache.GetTextureSurface(texture);
                     if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_px = surface->texture.handle);
+                        pipeline_cache.BindStorageImage(0, surface->alloc.image_view);
                     } else {
-                        state.image_shadow_texture_px = 0;
+                        pipeline_cache.BindStorageImage(0, default_texture.image_view);
                     }
                     continue;
                 }
                 case TextureType::ShadowCube: {
-                    if (!allow_shadow)
-                        continue;
-                    Pica::Texture::TextureInfo info = Pica::Texture::TextureInfo::FromPicaRegister(
-                        texture.config, texture.format);
-                    Surface surface;
-
                     using CubeFace = Pica::TexturingRegs::CubeFace;
-                    info.physical_address =
-                        regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_px = surface->texture.handle);
-                    } else {
-                        state.image_shadow_texture_px = 0;
-                    }
-
-                    info.physical_address =
-                        regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_nx = surface->texture.handle);
-                    } else {
-                        state.image_shadow_texture_nx = 0;
-                    }
-
-                    info.physical_address =
-                        regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_py = surface->texture.handle);
-                    } else {
-                        state.image_shadow_texture_py = 0;
-                    }
-
-                    info.physical_address =
-                        regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_ny = surface->texture.handle);
-                    } else {
-                        state.image_shadow_texture_ny = 0;
-                    }
-
-                    info.physical_address =
-                        regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_pz = surface->texture.handle);
-                    } else {
-                        state.image_shadow_texture_pz = 0;
-                    }
-
-                    info.physical_address =
-                        regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_nz = surface->texture.handle);
-                    } else {
-                        state.image_shadow_texture_nz = 0;
-                    }
-
+                    auto info = Pica::Texture::TextureInfo::FromPicaRegister(texture.config,
+                                                                             texture.format);
+                    BindCubeFace(CubeFace::PositiveX, info);
+                    BindCubeFace(CubeFace::NegativeX, info);
+                    BindCubeFace(CubeFace::PositiveY, info);
+                    BindCubeFace(CubeFace::NegativeY, info);
+                    BindCubeFace(CubeFace::PositiveZ, info);
+                    BindCubeFace(CubeFace::NegativeZ, info);
                     continue;
                 }
-                case TextureType::TextureCube:
+                case TextureType::TextureCube: {
                     using CubeFace = Pica::TexturingRegs::CubeFace;
-                    TextureCubeConfig config;
-                    config.px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX);
-                    config.nx = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX);
-                    config.py = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY);
-                    config.ny = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY);
-                    config.pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ);
-                    config.nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ);
-                    config.width = texture.config.width;
-                    config.format = texture.format;
-                    state.texture_cube_unit.texture_cube =
-                        res_cache.GetTextureCube(config).texture.handle;
+                    const VideoCore::TextureCubeConfig config = {
+                        .px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX),
+                        .nx = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX),
+                        .py = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY),
+                        .ny = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY),
+                        .pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ),
+                        .nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ),
+                        .width = texture.config.width,
+                        .format = texture.format
+                    };
 
-                    texture_cube_sampler.SyncWithConfig(texture.config);
-                    state.texture_units[texture_index].texture_2d = 0;
+                    auto surface = res_cache.GetTextureCube(config);
+                    if (surface != nullptr) {
+                        runtime.Transition(command_buffer, surface->alloc,
+                                           vk::ImageLayout::eShaderReadOnlyOptimal,
+                                           0, surface->alloc.levels, 0, 6);
+                        pipeline_cache.BindTexture(3, surface->alloc.image_view);
+                    } else {
+                        pipeline_cache.BindTexture(3, default_texture.image_view);
+                    }
+
+                    BindSampler(3, texture_cube_sampler, texture);
                     continue; // Texture unit 0 setup finished. Continue to next unit
-                default:
-                    state.texture_cube_unit.texture_cube = 0;
                 }
-            }*/
-
-            //texture_samplers[texture_index].SyncWithConfig(texture.config);
+                default:
+                    break;
+                }
+            }
 
             // Update sampler key
-            texture_samplers[texture_index] = SamplerInfo{
-                .mag_filter = texture.config.mag_filter,
-                .min_filter = texture.config.min_filter,
-                .mip_filter = texture.config.mip_filter,
-                .wrap_s = texture.config.wrap_s,
-                .wrap_t = texture.config.wrap_t,
-                .border_color = texture.config.border_color.raw,
-                .lod_min = texture.config.lod.min_level,
-                .lod_max = texture.config.lod.max_level,
-                .lod_bias = texture.config.lod.bias
-            };
-
-            // Search the cache and bind the appropriate sampler
-            const SamplerInfo& key = texture_samplers[texture_index];
-            if (auto it = samplers.find(key); it != samplers.end()) {
-                pipeline_cache.BindSampler(texture_index, it->second);
-            } else {
-                vk::Sampler texture_sampler = CreateSampler(key);
-                samplers.emplace(key, texture_sampler);
-                pipeline_cache.BindSampler(texture_index, texture_sampler);
-            }
+            BindSampler(texture_index, texture_samplers[texture_index], texture);
 
             auto surface = res_cache.GetTextureSurface(texture);
             if (surface != nullptr) {
                 runtime.Transition(command_buffer, surface->alloc,
-                                   vk::ImageLayout::eShaderReadOnlyOptimal, 0, surface->alloc.levels);
+                                   vk::ImageLayout::eShaderReadOnlyOptimal,
+                                   0, surface->alloc.levels);
                 CheckBarrier(surface->alloc.image_view, texture_index);
             } else {
                 // Can occur when texture addr is null or its memory is unmapped/invalid
@@ -807,6 +779,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     // Viewport can have negative offsets or larger dimensions than our framebuffer sub-rect.
     // Enable scissor test to prevent drawing outside of the framebuffer region
     pipeline_cache.SetScissor(draw_rect.left, draw_rect.bottom, draw_rect.GetWidth(), draw_rect.GetHeight());
+
+    //return true;
 
     auto valid_surface = color_surface ? color_surface : depth_surface;
     const FramebufferInfo framebuffer_info = {
@@ -1599,10 +1573,13 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
         .mipmapMode = PicaToVK::TextureMipFilterMode(info.mip_filter),
         .addressModeU = PicaToVK::WrapMode(info.wrap_s),
         .addressModeV = PicaToVK::WrapMode(info.wrap_t),
+        .mipLodBias = info.lod_bias / 256.0f,
         .anisotropyEnable = true,
         .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
         .compareEnable = false,
         .compareOp = vk::CompareOp::eAlways,
+        .minLod = static_cast<float>(info.lod_min),
+        .maxLod = static_cast<float>(info.lod_max),
         .borderColor = vk::BorderColor::eIntOpaqueBlack,
         .unnormalizedCoordinates = false
     };

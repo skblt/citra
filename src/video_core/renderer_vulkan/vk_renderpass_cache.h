@@ -13,7 +13,7 @@ class Instance;
 class TaskScheduler;
 
 constexpr u32 MAX_COLOR_FORMATS = 5;
-constexpr u32 MAX_DEPTH_FORMATS = 3;
+constexpr u32 MAX_DEPTH_FORMATS = 4;
 
 class RenderpassCache {
 public:
@@ -27,11 +27,11 @@ public:
     void ExitRenderpass();
 
     /// Returns the renderpass associated with the color-depth format pair
-    vk::RenderPass GetRenderpass(VideoCore::PixelFormat color, VideoCore::PixelFormat depth,
-                                 bool is_clear) const;
+    [[nodiscard]] vk::RenderPass GetRenderpass(VideoCore::PixelFormat color, VideoCore::PixelFormat depth,
+                                               bool is_clear) const;
 
     /// Returns the swapchain clear renderpass
-    vk::RenderPass GetPresentRenderpass() const {
+    [[nodiscard]] vk::RenderPass GetPresentRenderpass() const {
         return present_renderpass;
     }
 

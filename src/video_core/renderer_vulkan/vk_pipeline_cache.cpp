@@ -150,6 +150,7 @@ PipelineCache::~PipelineCache() {
     SaveDiskCache();
 
     device.destroyPipelineLayout(layout);
+    device.destroyShaderModule(trivial_vertex_shader);
     for (std::size_t i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
         device.destroyDescriptorSetLayout(descriptor_set_layouts[i]);
         device.destroyDescriptorUpdateTemplate(update_templates[i]);
@@ -624,9 +625,9 @@ void PipelineCache::LoadDiskCache() {
 
 void PipelineCache::SaveDiskCache() {
     const std::string cache_path =
-            FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir) + DIR_SEP "vulkan" + DIR_SEP "pipelines.bin";
+            FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir) + "vulkan" + DIR_SEP "pipelines.bin";
 
-    FileUtil::IOFile cache_file{cache_path, "w"};
+    FileUtil::IOFile cache_file{cache_path, "wb"};
     if (!cache_file.IsOpen()) {
         LOG_INFO(Render_Vulkan, "Unable to open pipeline cache for writing");
         return;

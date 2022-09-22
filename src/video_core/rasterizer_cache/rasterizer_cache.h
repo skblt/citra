@@ -894,7 +894,7 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
     ASSERT(load_start >= surface->addr && load_end <= surface->end);
 
     const auto& staging = runtime.FindStaging(
-                surface->width * surface->height * GetBytesPerPixel(surface->pixel_format), true);
+                surface->width * surface->height * GetBytesPerPixel(surface->pixel_format) * 2, true);
     MemoryRef source_ptr = VideoCore::g_memory->GetPhysicalRef(info.addr);
     if (!source_ptr) [[unlikely]] {
         return;

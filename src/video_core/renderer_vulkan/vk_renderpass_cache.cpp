@@ -13,19 +13,20 @@ namespace Vulkan {
 
 vk::Format ToVkFormatColor(u32 index) {
     switch (index) {
-    case 1: return vk::Format::eR8G8B8A8Unorm;
-    case 2: return vk::Format::eR8G8B8Unorm;
-    case 3: return vk::Format::eR5G5B5A1UnormPack16;
-    case 4: return vk::Format::eR5G6B5UnormPack16;
-    case 5: return vk::Format::eR4G4B4A4UnormPack16;
+    case 0: return vk::Format::eR8G8B8A8Unorm;
+    case 1: return vk::Format::eR8G8B8Unorm;
+    case 2: return vk::Format::eR5G5B5A1UnormPack16;
+    case 3: return vk::Format::eR5G6B5UnormPack16;
+    case 4: return vk::Format::eR4G4B4A4UnormPack16;
     default: return vk::Format::eUndefined;
     }
 }
 
 vk::Format ToVkFormatDepth(u32 index) {
     switch (index) {
-    case 1: return vk::Format::eD16Unorm;
-    case 2: return vk::Format::eX8D24UnormPack32;
+    case 0: return vk::Format::eD16Unorm;
+    case 1: return vk::Format::eX8D24UnormPack32;
+    // Notice the similar gap in PixelFormat
     case 3: return vk::Format::eD24UnormS8Uint;
     default: return vk::Format::eUndefined;
     }
@@ -36,14 +37,15 @@ RenderpassCache::RenderpassCache(const Instance& instance, TaskScheduler& schedu
     // Pre-create all needed renderpasses by the renderer
     for (u32 color = 0; color <= MAX_COLOR_FORMATS; color++) {
         for (u32 depth = 0; depth <= MAX_DEPTH_FORMATS; depth++) {
-            if (color == 0 && depth == 0) {
-                continue;
-             }
-
             const vk::Format color_format =
-                    color == 0 ? vk::Format::eUndefined : instance.GetFormatAlternative(ToVkFormatColor(color));
+                    instance.GetFormatAlternative(ToVkFormatColor(color));
             const vk::Format depth_stencil_format =
-                    depth == 0 ? vk::Format::eUndefined : instance.GetFormatAlternative(ToVkFormatDepth(depth));
+                    instance.GetFormatAlternative(ToVkFormatDepth(depth));
+
+            if (color_format == vk::Format::eUndefined &&
+                    depth_stencil_format == vk::Format::eUndefined) {
+                continue;
+            }
 
             cached_renderpasses[color][depth][0] = CreateRenderPass(color_format, depth_stencil_format,
                                                                     vk::AttachmentLoadOp::eLoad,
@@ -61,16 +63,13 @@ RenderpassCache::~RenderpassCache() {
     vk::Device device = instance.GetDevice();
     for (u32 color = 0; color <= MAX_COLOR_FORMATS; color++) {
         for (u32 depth = 0; depth <= MAX_DEPTH_FORMATS; depth++) {
-            if (color == 0 && depth == 0) {
-                continue;
-             }
+            if (vk::RenderPass load_pass = cached_renderpasses[color][depth][0]; load_pass) {
+                device.destroyRenderPass(load_pass);
+            }
 
-            auto& load_pass = cached_renderpasses[color][depth][0];
-            auto& clear_pass = cached_renderpasses[color][depth][1];
-
-            // Destroy renderpasses
-            device.destroyRenderPass(load_pass);
-            device.destroyRenderPass(clear_pass);
+            if (vk::RenderPass clear_pass = cached_renderpasses[color][depth][1]; clear_pass) {
+                device.destroyRenderPass(clear_pass);
+            }
         }
     }
 
@@ -109,9 +108,9 @@ void RenderpassCache::CreatePresentRenderpass(vk::Format format) {
 vk::RenderPass RenderpassCache::GetRenderpass(VideoCore::PixelFormat color, VideoCore::PixelFormat depth,
                                               bool is_clear) const {
     const u32 color_index =
-            color == VideoCore::PixelFormat::Invalid ? 0 : (static_cast<u32>(color) + 1);
+            color == VideoCore::PixelFormat::Invalid ? MAX_COLOR_FORMATS : static_cast<u32>(color);
     const u32 depth_index =
-            depth == VideoCore::PixelFormat::Invalid ? 0 : (static_cast<u32>(depth) - 14);
+            depth == VideoCore::PixelFormat::Invalid ? MAX_DEPTH_FORMATS : (static_cast<u32>(depth) - 14);
 
     ASSERT(color_index <= MAX_COLOR_FORMATS && depth_index <= MAX_DEPTH_FORMATS);
     return cached_renderpasses[color_index][depth_index][is_clear];
@@ -120,7 +119,6 @@ vk::RenderPass RenderpassCache::GetRenderpass(VideoCore::PixelFormat color, Vide
 vk::RenderPass RenderpassCache::CreateRenderPass(vk::Format color, vk::Format depth, vk::AttachmentLoadOp load_op,
                                                  vk::ImageLayout initial_layout, vk::ImageLayout final_layout) const {
     // Define attachments
-
     u32 attachment_count = 0;
     std::array<vk::AttachmentDescription, 2> attachments;
 
