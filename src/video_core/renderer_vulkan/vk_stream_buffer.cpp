@@ -171,7 +171,6 @@ void StreamBuffer::Commit(u32 size) {
         command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, stage_mask,
                                        vk::DependencyFlagBits::eByRegion, {}, buffer_barrier, {});
 
-
         buffer_offset += size;
         available_size -= size;
     }

@@ -233,7 +233,7 @@ void ConvertBGRToRGB(std::span<const std::byte> source, std::span<std::byte> des
 
 void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
     u32 j = 0;
-    for (u32 i = 0; i < source.size(); i += 3) {
+    for (std::size_t i = 0; i < source.size(); i += 3) {
         dest[j] = source[i + 2];
         dest[j + 1] = source[i + 1];
         dest[j + 2] = source[i];

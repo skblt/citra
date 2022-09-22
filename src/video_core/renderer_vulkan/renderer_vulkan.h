@@ -79,10 +79,10 @@ private:
     void CompileShaders();
     void BuildLayouts();
     void BuildPipelines();
+    void ConfigureFramebufferTexture(TextureInfo& texture, const GPU::Regs::FramebufferConfig& framebuffer);
     void ConfigureRenderPipeline();
     void PrepareRendertarget();
     void BeginRendering();
-    void ConfigureFramebufferTexture(TextureInfo& texture, const GPU::Regs::FramebufferConfig& framebuffer);
 
     void DrawScreens(const Layout::FramebufferLayout& layout, bool flipped);
     void DrawSingleScreenRotated(u32 screen_id, float x, float y, float w, float h);
@@ -95,9 +95,6 @@ private:
     /// Loads framebuffer from emulated memory into the display information structure
     void LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& framebuffer,
                             ScreenInfo& screen_info, bool right_eye);
-
-    /// Fills active OpenGL texture with the given RGB color.
-    void LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture);
 
 private:
     Instance instance;
@@ -121,7 +118,7 @@ private:
     u32 current_sampler = 0;
 
     /// Display information for top and bottom screens respectively
-    std::array<ScreenInfo, 3> screen_infos;
+    std::array<ScreenInfo, 3> screen_infos{};
     PresentUniformData draw_info{};
     vk::ClearColorValue clear_color{};
 };
