@@ -206,13 +206,14 @@ void TextureRuntime::FormatConvert(VideoCore::PixelFormat format,  bool upload,
                                    std::span<std::byte> source, std::span<std::byte> dest) {
     const VideoCore::SurfaceType type = VideoCore::GetFormatType(format);
     const vk::FormatFeatureFlagBits feature = ToVkFormatFeatures(type);
-    if (instance.IsFormatSupported(ToVkFormat(format), feature)) {
+
+    if (format == VideoCore::PixelFormat::RGBA8) {
+        return Pica::Texture::ConvertABGRToRGBA(source, dest);
+    } else if (format == VideoCore::PixelFormat::RGB8 && upload) {
+        return Pica::Texture::ConvertBGRToRGBA(source, dest);
+    } else if (instance.IsFormatSupported(ToVkFormat(format), feature)) {
         std::memcpy(dest.data(), source.data(), source.size());
     } else {
-        if (format == VideoCore::PixelFormat::RGB8 && upload) {
-            return Pica::Texture::ConvertBGRToRGBA(source, dest);
-        }
-
         LOG_CRITICAL(Render_Vulkan, "Unimplemented converion for format {}!", format);
         UNREACHABLE();
     }
