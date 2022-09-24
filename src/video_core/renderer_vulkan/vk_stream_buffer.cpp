@@ -130,11 +130,20 @@ std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
     // Have we run out of available space?
     bool invalidate = false;
     if (available_size < size) {
-        // Flush any pending writes before continuing
-        Flush();
-
         // If we are at the end of the buffer, start over
         if (buffer_offset + size > total_size) {
+            // Flush any pending writes before looping back
+            Flush();
+
+            // Since new regions are discovered based on locks, insert a lock
+            // that reaches the end of the buffer to avoid having an empty region
+            const LockedRegion region = {
+                .size = total_size - buffer_offset,
+                .fence_counter = scheduler.GetFenceCounter()
+            };
+
+            regions.emplace(buffer_offset, region);
+
             Invalidate();
             invalidate = true;
         }
@@ -154,26 +163,8 @@ std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
 }
 
 void StreamBuffer::Commit(u32 size) {
-    if (size > 0) {
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-
-        auto [access_mask, stage_mask] = ToVkAccessStageFlags(usage);
-        const vk::BufferMemoryBarrier buffer_barrier = {
-            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
-            .dstAccessMask = access_mask,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = buffer,
-            .offset = buffer_offset,
-            .size = size
-        };
-
-        command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, stage_mask,
-                                       vk::DependencyFlagBits::eByRegion, {}, buffer_barrier, {});
-
-        buffer_offset += size;
-        available_size -= size;
-    }
+    buffer_offset += size;
+    available_size -= size;
 }
 
 void StreamBuffer::Flush() {
@@ -199,6 +190,22 @@ void StreamBuffer::Flush() {
         };
 
         regions.emplace(flush_start, region);
+
+        // Add pipeline barrier for the flushed region
+        auto [access_mask, stage_mask] = ToVkAccessStageFlags(usage);
+        const vk::BufferMemoryBarrier buffer_barrier = {
+            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = access_mask,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = buffer,
+            .offset = flush_start,
+            .size = flush_size
+        };
+
+        command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, stage_mask,
+                                       vk::DependencyFlagBits::eByRegion, {}, buffer_barrier, {});
+
         flush_start = buffer_offset;
     }
 }
@@ -225,7 +232,7 @@ bool StreamBuffer::UnlockFreeRegions(u32 target_size) {
     }
 
     // If that wasn't enough, try waiting for some fences
-    while (available_size < target_size) {
+    while (it != regions.end() && available_size < target_size) {
         const auto& [offset, region] = *it;
 
         if (region.fence_counter > scheduler.GetFenceCounter()) {
