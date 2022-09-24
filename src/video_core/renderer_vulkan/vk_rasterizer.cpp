@@ -172,8 +172,7 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
 }
 
 RasterizerVulkan::~RasterizerVulkan() {
-    // Submit any remaining work
-    scheduler.Submit(true, false);
+    scheduler.Submit(SubmitMode::Flush | SubmitMode::Shutdown);
 
     VmaAllocator allocator = instance.GetAllocator();
     vk::Device device = instance.GetDevice();

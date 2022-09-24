@@ -593,7 +593,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
         command_buffer.copyImageToBuffer(alloc.image, vk::ImageLayout::eTransferSrcOptimal,
                                          staging.buffer, region_count, copy_regions.data());
 
-        scheduler.Submit(true);
+        scheduler.Submit(SubmitMode::Flush);
     }
 
     // Lock this data until the next scheduler switch

@@ -50,7 +50,7 @@ Instance::Instance(Frontend::EmuWindow& window) {
 
     // TODO: GPU select dialog
     auto physical_devices = instance.enumeratePhysicalDevices();
-    physical_device = physical_devices[0];
+    physical_device = physical_devices[1];
     device_properties = physical_device.getProperties();
 
     CreateDevice();
