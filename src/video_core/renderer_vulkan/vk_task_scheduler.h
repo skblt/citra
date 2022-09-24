@@ -75,6 +75,7 @@ private:
     };
 
     vk::CommandPool command_pool{};
+    vk::Semaphore timeline{};
     std::array<ExecutionSlot, SCHEDULER_COMMAND_COUNT> commands;
     u32 current_command = 0;
 };

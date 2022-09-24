@@ -67,12 +67,18 @@ public:
         return present_queue;
     }
 
-    /// Feature support
+    /// Returns true when VK_KHR_timeline_semaphore is supported
+    bool IsTimelineSemaphoreSupported() const {
+        return timeline_semaphores;
+    }
+
+    /// Returns true when VK_EXT_extended_dynamic_state is supported
     bool IsExtendedDynamicStateSupported() const {
         // TODO: Enable this when the pipeline builder is confirmed functional
         return false;
     }
 
+    /// Returns true when VK_KHR_push_descriptors is supported
     bool IsPushDescriptorsSupported() const {
         return push_descriptors;
     }
@@ -115,6 +121,8 @@ private:
     vk::Queue graphics_queue;
     u32 present_queue_family_index = 0;
     u32 graphics_queue_family_index = 0;
+
+    bool timeline_semaphores = false;
     bool extended_dynamic_state = false;
     bool push_descriptors = false;
 };
