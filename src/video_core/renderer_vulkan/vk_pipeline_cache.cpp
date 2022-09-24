@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
+#include <filesystem>
 #include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
@@ -150,6 +151,7 @@ PipelineCache::~PipelineCache() {
     SaveDiskCache();
 
     device.destroyPipelineLayout(layout);
+    device.destroyPipelineCache(pipeline_cache);
     device.destroyShaderModule(trivial_vertex_shader);
     for (std::size_t i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
         device.destroyDescriptorSetLayout(descriptor_set_layouts[i]);
@@ -595,39 +597,45 @@ void PipelineCache::BindDescriptorSets() {
 }
 
 void PipelineCache::LoadDiskCache() {
-    const std::string cache_path =
-            FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir) + DIR_SEP "vulkan" + DIR_SEP "pipelines.bin";
-
-    FileUtil::IOFile cache_file{cache_path, "r"};
-    if (!cache_file.IsOpen()) {
-        LOG_INFO(Render_Vulkan, "No pipeline cache found");
+    if (!EnsureDirectories()) {
         return;
     }
 
-    const u32 cache_file_size = cache_file.GetSize();
-    auto cache_data = std::vector<u8>(cache_file_size);
-    if (!cache_file.ReadBytes(cache_data.data(), cache_file_size)) {
-        LOG_WARNING(Render_Vulkan, "Error during pipeline cache read");
-        return;
-    }
-
-    cache_file.Close();
-
-    const bool is_valid = ValidateData(cache_data.data(), cache_file_size);
-    const vk::PipelineCacheCreateInfo cache_info = {
-        .initialDataSize = is_valid ? cache_file_size : 0,
-        .pInitialData = cache_data.data()
+    const std::string cache_file_path = GetPipelineCacheDir() + DIR_SEP "pipelines.bin";
+    vk::PipelineCacheCreateInfo cache_info = {
+        .initialDataSize = 0,
+        .pInitialData = nullptr
     };
+
+    FileUtil::IOFile cache_file{cache_file_path, "r"};
+    if (cache_file.IsOpen()) {
+        LOG_INFO(Render_Vulkan, "Loading pipeline cache");
+
+        const u32 cache_file_size = cache_file.GetSize();
+        auto cache_data = std::vector<u8>(cache_file_size);
+        if (cache_file.ReadBytes(cache_data.data(), cache_file_size)) {
+            if (!IsCacheValid(cache_data.data(), cache_file_size)) {
+                LOG_WARNING(Render_Vulkan, "Pipeline cache provided invalid");
+            } else {
+                cache_info.initialDataSize = cache_file_size;
+                cache_info.pInitialData = cache_data.data();
+            }
+        }
+
+        cache_file.Close();
+    }
 
     vk::Device device = instance.GetDevice();
     pipeline_cache = device.createPipelineCache(cache_info);
 }
 
 void PipelineCache::SaveDiskCache() {
-    const std::string cache_path =
-            FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir) + "vulkan" + DIR_SEP "pipelines.bin";
+    if (!EnsureDirectories()) {
+        return;
+    }
 
-    FileUtil::IOFile cache_file{cache_path, "wb"};
+    const std::string cache_file_path = GetPipelineCacheDir() + DIR_SEP "pipelines.bin";
+    FileUtil::IOFile cache_file{cache_file_path, "wb"};
     if (!cache_file.IsOpen()) {
         LOG_INFO(Render_Vulkan, "Unable to open pipeline cache for writing");
         return;
@@ -643,7 +651,7 @@ void PipelineCache::SaveDiskCache() {
     cache_file.Close();
 }
 
-bool PipelineCache::ValidateData(const u8* data, u32 size) {
+bool PipelineCache::IsCacheValid(const u8* data, u32 size) const {
     if (size < sizeof(vk::PipelineCacheHeaderVersionOne)) {
         LOG_ERROR(Render_Vulkan, "Pipeline cache failed validation: Invalid header");
         return false;
@@ -681,6 +689,24 @@ bool PipelineCache::ValidateData(const u8* data, u32 size) {
     }
 
     return true;
+}
+
+bool PipelineCache::EnsureDirectories() const {
+    const auto CreateDir = [](const std::string& dir) {
+        if (!FileUtil::CreateDir(dir)) {
+            LOG_ERROR(Render_Vulkan, "Failed to create directory={}", dir);
+            return false;
+        }
+
+        return true;
+    };
+
+    return CreateDir(FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir)) &&
+           CreateDir(GetPipelineCacheDir());
+}
+
+std::string PipelineCache::GetPipelineCacheDir() const {
+    return FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir) + "vulkan";
 }
 
 } // namespace Vulkan
