@@ -56,6 +56,8 @@ TaskScheduler::TaskScheduler(const Instance& instance) : instance{instance} {
     const auto command_buffers = device.allocateCommandBuffers(buffer_info);
     for (std::size_t i = 0; i < commands.size(); i++) {
         commands[i] = ExecutionSlot{
+            .image_acquired = device.createSemaphore({}),
+            .present_ready = device.createSemaphore({}),
             .fence = device.createFence({}),
             .descriptor_pool = device.createDescriptorPool(descriptor_pool_info),
             .render_command_buffer = command_buffers[2 * i],
@@ -83,6 +85,8 @@ TaskScheduler::~TaskScheduler() {
 
     for (const auto& command : commands) {
         device.destroyFence(command.fence);
+        device.destroySemaphore(command.image_acquired);
+        device.destroySemaphore(command.present_ready);
         device.destroyDescriptorPool(command.descriptor_pool);
     }
 
@@ -134,8 +138,7 @@ void TaskScheduler::WaitFence(u32 counter) {
     UNREACHABLE();
 }
 
-void TaskScheduler::Submit(bool wait_completion, bool begin_next,
-                           vk::Semaphore wait_semaphore, vk::Semaphore signal_semaphore) {
+void TaskScheduler::Submit(SubmitMode mode) {
     const auto& command = commands[current_command];
     command.render_command_buffer.end();
     if (command.use_upload_buffer) {
@@ -151,14 +154,15 @@ void TaskScheduler::Submit(bool wait_completion, bool begin_next,
 
     command_buffers[command_buffer_count++] = command.render_command_buffer;
 
+    const bool swapchain_sync = True(mode & SubmitMode::SwapchainSynced);
     if (instance.IsTimelineSemaphoreSupported()) {
-        const u32 signal_semaphore_count = signal_semaphore ? 2u : 1u;
-        const std::array signal_values{command.fence_counter, 0ul};
-        const std::array signal_semaphores{timeline, signal_semaphore};
-
-        const u32 wait_semaphore_count = wait_semaphore ? 2u : 1u;
+        const u32 wait_semaphore_count = swapchain_sync ? 2u : 1u;
         const std::array wait_values{command.fence_counter - 1, 1ul};
-        const std::array wait_semaphores{timeline, wait_semaphore};
+        const std::array wait_semaphores{timeline, command.image_acquired};
+
+        const u32 signal_semaphore_count = swapchain_sync ? 2u : 1u;
+        const std::array signal_values{command.fence_counter, 0ul};
+        const std::array signal_semaphores{timeline, command.present_ready};
 
         const vk::TimelineSemaphoreSubmitInfoKHR timeline_si = {
             .waitSemaphoreValueCount = wait_semaphore_count,
@@ -187,19 +191,19 @@ void TaskScheduler::Submit(bool wait_completion, bool begin_next,
         queue.submit(submit_info);
 
     } else {
-        const u32 signal_semaphore_count = signal_semaphore ? 1u : 0u;
-        const u32 wait_semaphore_count = wait_semaphore ? 1u : 0u;
+        const u32 signal_semaphore_count = swapchain_sync ? 1u : 0u;
+        const u32 wait_semaphore_count = swapchain_sync ? 1u : 0u;
         const vk::PipelineStageFlags wait_stage_masks =
                 vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
         const vk::SubmitInfo submit_info = {
             .waitSemaphoreCount = wait_semaphore_count,
-            .pWaitSemaphores = &wait_semaphore,
+            .pWaitSemaphores = &command.image_acquired,
             .pWaitDstStageMask = &wait_stage_masks,
             .commandBufferCount = command_buffer_count,
             .pCommandBuffers = command_buffers.data(),
             .signalSemaphoreCount = signal_semaphore_count,
-            .pSignalSemaphores = &signal_semaphore,
+            .pSignalSemaphores = &command.present_ready,
         };
 
         vk::Queue queue = instance.GetGraphicsQueue();
@@ -207,14 +211,23 @@ void TaskScheduler::Submit(bool wait_completion, bool begin_next,
     }
 
     // Block host until the GPU catches up
-    if (wait_completion) {
+    if (True(mode & SubmitMode::Flush)) {
         Synchronize(current_command);
     }
 
     // Switch to next cmdbuffer.
-    if (begin_next) {
+    if (False(mode & SubmitMode::Shutdown)) {
         SwitchSlot();
     }
+}
+
+u64 TaskScheduler::GetFenceCounter() const {
+    vk::Device device = instance.GetDevice();
+    if (instance.IsTimelineSemaphoreSupported()) {
+        return device.getSemaphoreCounterValue(timeline);
+    }
+
+    return completed_fence_counter;
 }
 
 vk::CommandBuffer TaskScheduler::GetUploadCommandBuffer() {

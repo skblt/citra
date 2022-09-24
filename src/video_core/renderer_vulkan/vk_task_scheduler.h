@@ -8,6 +8,7 @@
 #include <array>
 #include <functional>
 #include "common/common_types.h"
+#include "common/common_funcs.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 
 namespace Vulkan {
@@ -16,6 +17,14 @@ constexpr u32 SCHEDULER_COMMAND_COUNT = 4;
 
 class Buffer;
 class Instance;
+
+enum class SubmitMode : u8 {
+    SwapchainSynced = 1 << 0, ///< Synchronizes command buffer execution with the swapchain
+    Flush = 1 << 1, ///< Causes a GPU command flush, useful for texture downloads
+    Shutdown = 1 << 2 ///< Submits all current commands without starting a new command buffer
+};
+
+DECLARE_ENUM_FLAG_OPERATORS(SubmitMode);
 
 class TaskScheduler {
 public:
@@ -29,9 +38,10 @@ public:
     void WaitFence(u32 counter);
 
     /// Submits the current command to the graphics queue
-    void Submit(bool wait_completion = false, bool begin_next = true,
-                vk::Semaphore wait = VK_NULL_HANDLE,
-                vk::Semaphore signal = VK_NULL_HANDLE);
+    void Submit(SubmitMode mode);
+
+    /// Returns the last completed fence counter
+    u64 GetFenceCounter() const;
 
     /// Returns the command buffer used for early upload operations.
     vk::CommandBuffer GetUploadCommandBuffer();
@@ -51,9 +61,12 @@ public:
         return current_command;
     }
 
-    /// Returns the last completed fence counter
-    u64 GetFenceCounter() const {
-        return completed_fence_counter;
+    vk::Semaphore GetImageAcquiredSemaphore() const {
+        return commands[current_command].image_acquired;
+    }
+
+    vk::Semaphore GetPresentReadySemaphore() const {
+        return commands[current_command].present_ready;
     }
 
 private:
@@ -68,15 +81,17 @@ private:
     struct ExecutionSlot {
         bool use_upload_buffer = false;
         u64 fence_counter = 0;
-        vk::Fence fence{};
+        vk::Semaphore image_acquired;
+        vk::Semaphore present_ready;
+        vk::Fence fence;
         vk::DescriptorPool descriptor_pool;
-        vk::CommandBuffer render_command_buffer{};
-        vk::CommandBuffer upload_command_buffer{};
+        vk::CommandBuffer render_command_buffer;
+        vk::CommandBuffer upload_command_buffer;
     };
 
     vk::CommandPool command_pool{};
     vk::Semaphore timeline{};
-    std::array<ExecutionSlot, SCHEDULER_COMMAND_COUNT> commands;
+    std::array<ExecutionSlot, SCHEDULER_COMMAND_COUNT> commands{};
     u32 current_command = 0;
 };
 

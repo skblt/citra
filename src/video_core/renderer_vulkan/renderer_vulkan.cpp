@@ -1004,7 +1004,10 @@ void RendererVulkan::SwapBuffers() {
         swapchain.Create(layout.width, layout.height, false);
     }
 
-    swapchain.AcquireNextImage();
+    // Calling Submit will change the slot so get the required semaphores now
+    const vk::Semaphore image_acquired = scheduler.GetImageAcquiredSemaphore();
+    const vk::Semaphore present_ready = scheduler.GetPresentReadySemaphore();
+    swapchain.AcquireNextImage(image_acquired);
 
     const vk::Viewport viewport = {
         .x = 0.0f,
@@ -1032,11 +1035,11 @@ void RendererVulkan::SwapBuffers() {
     DrawScreens(layout, false);
 
     // Flush all buffers to make the data visible to the GPU before submitting
-    vertex_buffer.Flush();
     rasterizer->FlushBuffers();
+    vertex_buffer.Flush();
 
-    scheduler.Submit(false, true, swapchain.GetAvailableSemaphore(), swapchain.GetPresentSemaphore());
-    swapchain.Present();
+    scheduler.Submit(SubmitMode::SwapchainSynced);
+    swapchain.Present(present_ready);
 
     // Inform texture runtime about the switch
     runtime.OnSlotSwitch(scheduler.GetCurrentSlotIndex());
