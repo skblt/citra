@@ -14,7 +14,7 @@ namespace Frontend {
 
 /// Information for the Graphics Backends signifying what type of screen pointer is in
 /// WindowInformation
-enum class WindowSystemType {
+enum class WindowSystemType : u8 {
     Headless,
     Windows,
     X11,
