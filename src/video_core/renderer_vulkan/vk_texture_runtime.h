@@ -5,6 +5,7 @@
 #pragma once
 #include <span>
 #include <set>
+#include <vulkan/vulkan_hash.hpp>
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/rasterizer_cache/types.h"
@@ -97,6 +98,7 @@ private:
     std::array<std::unique_ptr<StagingBuffer>, SCHEDULER_COMMAND_COUNT> staging_buffers;
     std::array<u32, SCHEDULER_COMMAND_COUNT> staging_offsets{};
     std::unordered_multimap<VideoCore::HostTextureTag, ImageAlloc> texture_recycler;
+    std::unordered_map<vk::ImageView, vk::Framebuffer> clear_framebuffers;
 };
 
 class Surface : public VideoCore::SurfaceBase<Surface> {
