@@ -19,6 +19,19 @@ TaskScheduler::TaskScheduler(const Instance& instance) : instance{instance} {
 
     command_pool = device.createCommandPool(command_pool_info);
 
+    // If supported, prefer timeline semaphores over binary ones
+    if (instance.IsTimelineSemaphoreSupported()) {
+        const vk::StructureChain timeline_info = {
+            vk::SemaphoreCreateInfo{},
+            vk::SemaphoreTypeCreateInfo{
+                .semaphoreType = vk::SemaphoreType::eTimeline,
+                .initialValue = 0
+            }
+        };
+
+        timeline = device.createSemaphore(timeline_info.get());
+    }
+
     constexpr std::array pool_sizes = {
         vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 1024},
         vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 1024},
@@ -64,6 +77,10 @@ TaskScheduler::~TaskScheduler() {
     vk::Device device = instance.GetDevice();
     device.waitIdle();
 
+    if (timeline) {
+        device.destroySemaphore(timeline);
+    }
+
     for (const auto& command : commands) {
         device.destroyFence(command.fence);
         device.destroyDescriptorPool(command.descriptor_pool);
@@ -76,9 +93,27 @@ void TaskScheduler::Synchronize(u32 slot) {
     const auto& command = commands[slot];
     vk::Device device = instance.GetDevice();
 
-    if (command.fence_counter > completed_fence_counter) {
-        if (device.waitForFences(command.fence, true, UINT64_MAX) != vk::Result::eSuccess) {
-            LOG_ERROR(Render_Vulkan, "Waiting for fences failed!");
+    u32 completed_counter = completed_fence_counter;
+    if (instance.IsTimelineSemaphoreSupported()) {
+        completed_counter = device.getSemaphoreCounterValue(timeline);
+    }
+
+    if (command.fence_counter > completed_counter) {
+        if (instance.IsTimelineSemaphoreSupported()) {
+            const vk::SemaphoreWaitInfo wait_info = {
+                .semaphoreCount = 1,
+                .pSemaphores = &timeline,
+                .pValues = &command.fence_counter
+            };
+
+            if (device.waitSemaphores(wait_info, UINT64_MAX) != vk::Result::eSuccess) {
+                LOG_ERROR(Render_Vulkan, "Waiting for fence counter {} failed!", command.fence_counter);
+                UNREACHABLE();
+            }
+
+        } else if (device.waitForFences(command.fence, true, UINT64_MAX) != vk::Result::eSuccess) {
+            LOG_ERROR(Render_Vulkan, "Waiting for fence counter {} failed!", command.fence_counter);
+            UNREACHABLE();
         }
 
         completed_fence_counter = command.fence_counter;
@@ -116,22 +151,60 @@ void TaskScheduler::Submit(bool wait_completion, bool begin_next,
 
     command_buffers[command_buffer_count++] = command.render_command_buffer;
 
-    const u32 signal_semaphore_count = signal_semaphore ? 1u : 0u;
-    const u32 wait_semaphore_count = wait_semaphore ? 1u : 0u;
-    const vk::PipelineStageFlags wait_stage_masks =
-            vk::PipelineStageFlagBits::eColorAttachmentOutput;
-    const vk::SubmitInfo submit_info = {
-        .waitSemaphoreCount = wait_semaphore_count,
-        .pWaitSemaphores = &wait_semaphore,
-        .pWaitDstStageMask = &wait_stage_masks,
-        .commandBufferCount = command_buffer_count,
-        .pCommandBuffers = command_buffers.data(),
-        .signalSemaphoreCount = signal_semaphore_count,
-        .pSignalSemaphores = &signal_semaphore,
-    };
+    if (instance.IsTimelineSemaphoreSupported()) {
+        const u32 signal_semaphore_count = signal_semaphore ? 2u : 1u;
+        const std::array signal_values{command.fence_counter, 0ul};
+        const std::array signal_semaphores{timeline, signal_semaphore};
 
-    vk::Queue queue = instance.GetGraphicsQueue();
-    queue.submit(submit_info, command.fence);
+        const u32 wait_semaphore_count = wait_semaphore ? 2u : 1u;
+        const std::array wait_values{command.fence_counter - 1, 1ul};
+        const std::array wait_semaphores{timeline, wait_semaphore};
+
+        const vk::TimelineSemaphoreSubmitInfoKHR timeline_si = {
+            .waitSemaphoreValueCount = wait_semaphore_count,
+            .pWaitSemaphoreValues = wait_values.data(),
+            .signalSemaphoreValueCount = signal_semaphore_count,
+            .pSignalSemaphoreValues = signal_values.data()
+        };
+
+        const std::array<vk::PipelineStageFlags, 2> wait_stage_masks = {
+            vk::PipelineStageFlagBits::eAllCommands,
+            vk::PipelineStageFlagBits::eColorAttachmentOutput,
+        };
+
+        const vk::SubmitInfo submit_info = {
+            .pNext = &timeline_si,
+            .waitSemaphoreCount = wait_semaphore_count,
+            .pWaitSemaphores = wait_semaphores.data(),
+            .pWaitDstStageMask = wait_stage_masks.data(),
+            .commandBufferCount = command_buffer_count,
+            .pCommandBuffers = command_buffers.data(),
+            .signalSemaphoreCount = signal_semaphore_count,
+            .pSignalSemaphores = signal_semaphores.data(),
+        };
+
+        vk::Queue queue = instance.GetGraphicsQueue();
+        queue.submit(submit_info);
+
+    } else {
+        const u32 signal_semaphore_count = signal_semaphore ? 1u : 0u;
+        const u32 wait_semaphore_count = wait_semaphore ? 1u : 0u;
+        const vk::PipelineStageFlags wait_stage_masks =
+                vk::PipelineStageFlagBits::eColorAttachmentOutput;
+
+        const vk::SubmitInfo submit_info = {
+            .waitSemaphoreCount = wait_semaphore_count,
+            .pWaitSemaphores = &wait_semaphore,
+            .pWaitDstStageMask = &wait_stage_masks,
+            .commandBufferCount = command_buffer_count,
+            .pCommandBuffers = command_buffers.data(),
+            .signalSemaphoreCount = signal_semaphore_count,
+            .pSignalSemaphores = &signal_semaphore,
+        };
+
+        vk::Queue queue = instance.GetGraphicsQueue();
+        queue.submit(submit_info, command.fence);
+    }
 
     // Block host until the GPU catches up
     if (wait_completion) {
