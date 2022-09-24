@@ -77,11 +77,12 @@ RenderpassCache::~RenderpassCache() {
 }
 
 void RenderpassCache::EnterRenderpass(const vk::RenderPassBeginInfo begin_info) {
+    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+
     if (renderpass_active) {
-        return;
+        command_buffer.endRenderPass();
     }
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
     renderpass_active = true;
 }
