@@ -94,6 +94,10 @@ TextureRuntime::~TextureRuntime() {
         device.destroyImageView(alloc.image_view);
     }
 
+    for (const auto& [key, framebuffer] : clear_framebuffers) {
+        device.destroyFramebuffer(framebuffer);
+    }
+
     texture_recycler.clear();
 }
 
@@ -221,49 +225,84 @@ void TextureRuntime::FormatConvert(VideoCore::PixelFormat format,  bool upload,
 
 bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
                                   VideoCore::ClearValue value) {
+    const vk::ImageAspectFlags aspect = ToVkAspect(surface.type);
     renderpass_cache.ExitRenderpass();
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     Transition(command_buffer, surface.alloc, vk::ImageLayout::eTransferDstOptimal,
                0, surface.alloc.levels, 0, surface.texture_type == VideoCore::TextureType::CubeMap ? 6 : 1);
 
+    vk::ClearValue clear_value{};
+    if (aspect & vk::ImageAspectFlagBits::eColor) {
+        clear_value.color = vk::ClearColorValue{
+            .float32 = std::to_array({value.color[0], value.color[1], value.color[2], value.color[3]})
+        };
+    } else if (aspect & vk::ImageAspectFlagBits::eDepth || aspect & vk::ImageAspectFlagBits::eStencil) {
+        clear_value.depthStencil = vk::ClearDepthStencilValue{
+            .depth = value.depth,
+            .stencil = value.stencil
+        };
+    }
+
     // For full clears we can use vkCmdClearColorImage/vkCmdClearDepthStencilImage
     if (clear.texture_rect == surface.GetScaledRect()) {
-        vk::ImageAspectFlags aspect = ToVkAspect(surface.type);
+        const vk::ImageSubresourceRange range = {
+            .aspectMask = aspect,
+            .baseMipLevel = clear.texture_level,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1
+        };
+
         if (aspect & vk::ImageAspectFlagBits::eColor) {
-            const vk::ClearColorValue clear_color = {
-                .float32 = std::to_array({value.color[0], value.color[1], value.color[2], value.color[3]})
-            };
-
-            const vk::ImageSubresourceRange range = {
-                .aspectMask = aspect,
-                .baseMipLevel = clear.texture_level,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1
-            };
-
             command_buffer.clearColorImage(surface.alloc.image, vk::ImageLayout::eTransferDstOptimal,
-                                           clear_color, range);
+                                           clear_value.color, range);
         } else if (aspect & vk::ImageAspectFlagBits::eDepth || aspect & vk::ImageAspectFlagBits::eStencil) {
-            const vk::ClearDepthStencilValue clear_depth = {
-                .depth = value.depth,
-                .stencil = value.stencil
-            };
-
-            const vk::ImageSubresourceRange range = {
-                .aspectMask = aspect,
-                .baseMipLevel = clear.texture_level,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1
-            };
-
             command_buffer.clearDepthStencilImage(surface.alloc.image, vk::ImageLayout::eTransferDstOptimal,
-                                                  clear_depth, range);
+                                                  clear_value.depthStencil, range);
         }
     } else {
-        LOG_WARNING(Render_Vulkan, "Partial clears are unimplemented!");
+        // For partial clears we begin a clear renderpass with the appropriate render area
+        vk::RenderPass clear_renderpass{};
+        ImageAlloc& alloc = surface.alloc;
+        if (aspect & vk::ImageAspectFlagBits::eColor) {
+            clear_renderpass = renderpass_cache.GetRenderpass(surface.pixel_format,
+                                                              VideoCore::PixelFormat::Invalid, true);
+            Transition(command_buffer, alloc, vk::ImageLayout::eColorAttachmentOptimal, 0, alloc.levels);
+        } else if (aspect & vk::ImageAspectFlagBits::eDepth || aspect & vk::ImageAspectFlagBits::eStencil) {
+            clear_renderpass = renderpass_cache.GetRenderpass(VideoCore::PixelFormat::Invalid,
+                                                              surface.pixel_format, true);
+            Transition(command_buffer, alloc, vk::ImageLayout::eDepthStencilAttachmentOptimal, 0, alloc.levels);
+        }
+
+        auto [it, new_framebuffer] = clear_framebuffers.try_emplace(alloc.image_view, vk::Framebuffer{});
+        if (new_framebuffer) {
+            const vk::FramebufferCreateInfo framebuffer_info = {
+                .renderPass = clear_renderpass,
+                .attachmentCount = 1,
+                .pAttachments = &alloc.image_view,
+                .width = surface.GetScaledWidth(),
+                .height = surface.GetScaledHeight(),
+                .layers = 1
+            };
+
+            vk::Device device = instance.GetDevice();
+            it->second = device.createFramebuffer(framebuffer_info);
+        }
+
+        const vk::RenderPassBeginInfo clear_begin_info = {
+            .renderPass = clear_renderpass,
+            .framebuffer = it->second,
+            .renderArea = vk::Rect2D{
+                .offset = {static_cast<s32>(clear.texture_rect.left), static_cast<s32>(clear.texture_rect.bottom)},
+                .extent = {clear.texture_rect.GetWidth(), clear.texture_rect.GetHeight()}
+            },
+            .clearValueCount = 1,
+            .pClearValues = &clear_value
+        };
+
+        renderpass_cache.EnterRenderpass(clear_begin_info);
+        renderpass_cache.ExitRenderpass();
     }
 
     return true;
