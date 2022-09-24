@@ -68,10 +68,6 @@ public:
     }
 
     /// Feature support
-    bool IsDynamicRenderingSupported() const {
-        return dynamic_rendering;
-    }
-
     bool IsExtendedDynamicStateSupported() const {
         // TODO: Enable this when the pipeline builder is confirmed functional
         return false;
@@ -102,27 +98,25 @@ public:
     }
 
 private:
-    bool CreateDevice(bool validation_enabled);
+    /// Creates the logical device opportunistically enabling extensions
+    bool CreateDevice();
+
+    /// Creates the VMA allocator handle
     void CreateAllocator();
 
 private:
-    // Queue family indexes
-    u32 present_queue_family_index = 0;
-    u32 graphics_queue_family_index = 0;
-    vk::Queue present_queue, graphics_queue;
-
-    // Core vulkan objects
     vk::Device device;
     vk::PhysicalDevice physical_device;
     vk::Instance instance;
     vk::SurfaceKHR surface;
     vk::PhysicalDeviceProperties device_properties;
     VmaAllocator allocator;
-
-    // Features per vulkan version
-    bool dynamic_rendering = false;
+    vk::Queue present_queue;
+    vk::Queue graphics_queue;
+    u32 present_queue_family_index = 0;
+    u32 graphics_queue_family_index = 0;
     bool extended_dynamic_state = false;
     bool push_descriptors = false;
 };
 
-} // namespace VideoCore::Vulkan
+} // namespace Vulkan
