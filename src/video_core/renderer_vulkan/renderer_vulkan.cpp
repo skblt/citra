@@ -335,6 +335,24 @@ void RendererVulkan::BeginRendering() {
 
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, present_pipeline_layout,
                                       0, 1, &set, 0, nullptr);
+
+    const vk::ClearValue clear_value = {
+        .color = clear_color
+    };
+
+    const auto& layout = render_window.GetFramebufferLayout();
+    const vk::RenderPassBeginInfo begin_info = {
+        .renderPass = renderpass_cache.GetPresentRenderpass(),
+        .framebuffer = swapchain.GetFramebuffer(),
+        .renderArea = vk::Rect2D{
+            .offset = {0, 0},
+            .extent = {layout.width, layout.height}
+        },
+        .clearValueCount = 1,
+        .pClearValues = &clear_value,
+    };
+
+    command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
 }
 
 void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& framebuffer,
@@ -686,27 +704,8 @@ void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, fl
                                  vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
                                  0, sizeof(draw_info), &draw_info);
 
-    const vk::ClearValue clear_value = {
-        .color = clear_color
-    };
-
-    const auto& layout = render_window.GetFramebufferLayout();
-    const vk::RenderPassBeginInfo begin_info = {
-        .renderPass = renderpass_cache.GetPresentRenderpass(),
-        .framebuffer = swapchain.GetFramebuffer(),
-        .renderArea = vk::Rect2D{
-            .offset = {0, 0},
-            .extent = {layout.width, layout.height}
-        },
-        .clearValueCount = 1,
-        .pClearValues = &clear_value,
-    };
-
-    command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
-
     command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
     command_buffer.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
-    command_buffer.endRenderPass();
 }
 
 void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, float h) {
@@ -930,7 +929,6 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
         }
     }
 
-    return;
     draw_info.layer = 0;
     if (layout.bottom_screen_enabled) {
         if (layout.is_rotated) {
@@ -993,6 +991,9 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
             }
         }
     }
+
+    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+    command_buffer.endRenderPass();
 }
 
 void RendererVulkan::SwapBuffers() {

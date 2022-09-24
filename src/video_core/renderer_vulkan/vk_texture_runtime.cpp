@@ -513,6 +513,8 @@ MICROPROFILE_DEFINE(Vulkan_Upload, "VulkanSurface", "Texture Upload", MP_RGB(128
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
     MICROPROFILE_SCOPE(Vulkan_Upload);
 
+    runtime.renderpass_cache.ExitRenderpass();
+
     const bool is_scaled = res_scale != 1;
     if (is_scaled) {
         ScaledUpload(upload);
@@ -550,6 +552,8 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
 MICROPROFILE_DEFINE(Vulkan_Download, "VulkanSurface", "Texture Download", MP_RGB(128, 192, 64));
 void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
     MICROPROFILE_SCOPE(Vulkan_Download);
+
+    runtime.renderpass_cache.ExitRenderpass();
 
     const bool is_scaled = res_scale != 1;
     if (is_scaled) {

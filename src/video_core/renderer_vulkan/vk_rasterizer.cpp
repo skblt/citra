@@ -124,7 +124,7 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
     default_texture = runtime.Allocate(1, 1, VideoCore::PixelFormat::RGBA8,
                                        VideoCore::TextureType::Texture2D);
     runtime.Transition(scheduler.GetUploadCommandBuffer(), default_texture,
-                       vk::ImageLayout::eGeneral, 0, 1);
+                       vk::ImageLayout::eShaderReadOnlyOptimal, 0, 1);
 
     uniform_block_data.lighting_lut_dirty.fill(true);
 
@@ -822,6 +822,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         .pClearValues = nullptr
     };
 
+    renderpass_cache.EnterRenderpass(renderpass_begin);
+
     // Draw the vertex batch
     bool succeeded = true;
     if (accelerate) {
@@ -848,9 +850,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             std::memcpy(array_ptr, vertex_batch.data() + base_vertex, vertex_size);
             vertex_buffer.Commit(vertex_size);
 
-            renderpass_cache.EnterRenderpass(renderpass_begin);
             command_buffer.draw(vertices, 1, base_vertex, 0);
-            renderpass_cache.ExitRenderpass();
         }
     }
 
