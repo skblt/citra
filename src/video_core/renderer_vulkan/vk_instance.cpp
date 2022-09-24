@@ -113,7 +113,8 @@ vk::Format Instance::GetFormatAlternative(vk::Format format) const {
 
 bool Instance::CreateDevice() {
     auto feature_chain = physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
-                                                      vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+                                                      vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+                                                      vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>();
 
     // Not having geometry shaders will cause issues with accelerated rendering.
     const vk::PhysicalDeviceFeatures available = feature_chain.get().features;
@@ -146,9 +147,10 @@ bool Instance::CreateDevice() {
         return false;
     };
 
+    AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    timeline_semaphores = AddExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
     // Search queue families for graphics and present queues
     auto family_properties = physical_device.getQueueFamilyProperties();
@@ -220,6 +222,7 @@ bool Instance::CreateDevice() {
             }
         },
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
+        feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>()
     };
 
     // Create logical device
