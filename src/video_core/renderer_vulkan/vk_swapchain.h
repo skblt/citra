@@ -11,7 +11,6 @@
 namespace Vulkan {
 
 class Instance;
-class TaskScheduler;
 class RenderpassCache;
 
 class Swapchain {
@@ -23,10 +22,10 @@ public:
     void Create(u32 width, u32 height, bool vsync_enabled);
 
     /// Acquires the next image in the swapchain.
-    void AcquireNextImage();
+    void AcquireNextImage(vk::Semaphore signal_acquired);
 
     /// Presents the current image and move to the next one
-    void Present();
+    void Present(vk::Semaphore wait_for_present);
 
     /// Returns current swapchain state
     vk::Extent2D GetExtent() const {
@@ -51,16 +50,6 @@ public:
     /// Returns the Vulkan swapchain handle
     vk::SwapchainKHR GetHandle() const {
         return swapchain;
-    }
-
-    /// Returns the semaphore that will be signaled when vkAcquireNextImageKHR completes
-    vk::Semaphore GetAvailableSemaphore() const {
-        return image_available;
-    }
-
-    /// Returns the semaphore that will signal when the current image will be presented
-    vk::Semaphore GetPresentSemaphore() const {
-        return render_finished;
     }
 
     /// Returns true when the swapchain should be recreated
@@ -92,8 +81,6 @@ private:
 
     // Swapchain state
     std::vector<Image> swapchain_images;
-    vk::Semaphore image_available{};
-    vk::Semaphore render_finished{};
     u32 current_image = 0;
     u32 current_frame = 0;
     bool vsync_enabled = false;

@@ -21,8 +21,6 @@ Swapchain::Swapchain(const Instance& instance, RenderpassCache& renderpass_cache
 
 Swapchain::~Swapchain() {
     vk::Device device = instance.GetDevice();
-    device.destroySemaphore(render_finished);
-    device.destroySemaphore(image_available);
     device.destroySwapchainKHR(swapchain);
 
     for (auto& image : swapchain_images) {
@@ -70,15 +68,6 @@ void Swapchain::Create(u32 width, u32 height, bool vsync_enabled) {
     // If an old swapchain exists, destroy it and move the new one to its place.
     if (vk::SwapchainKHR old_swapchain = std::exchange(swapchain, new_swapchain); old_swapchain) {
         device.destroySwapchainKHR(old_swapchain);
-    }
-
-    // Create sync objects if not already created
-    if (!image_available) {
-        image_available = device.createSemaphore({});
-    }
-
-    if (!render_finished) {
-        render_finished = device.createSemaphore({});
     }
 
     vk::RenderPass present_renderpass = renderpass_cache.GetPresentRenderpass();
@@ -132,10 +121,10 @@ void Swapchain::Create(u32 width, u32 height, bool vsync_enabled) {
 // Wait for maximum of 1 second
 constexpr u64 ACQUIRE_TIMEOUT = 1000000000;
 
-void Swapchain::AcquireNextImage() {
+void Swapchain::AcquireNextImage(vk::Semaphore signal_acquired) {
     vk::Device device = instance.GetDevice();
-    vk::Result result = device.acquireNextImageKHR(swapchain, ACQUIRE_TIMEOUT, image_available, VK_NULL_HANDLE,
-                                                   &current_image);
+    vk::Result result = device.acquireNextImageKHR(swapchain, ACQUIRE_TIMEOUT, signal_acquired,
+                                                   VK_NULL_HANDLE, &current_image);
     switch (result) {
     case vk::Result::eSuccess:
         break;
@@ -151,10 +140,10 @@ void Swapchain::AcquireNextImage() {
     }
 }
 
-void Swapchain::Present() {
+void Swapchain::Present(vk::Semaphore wait_for_present) {
     const vk::PresentInfoKHR present_info = {
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &render_finished,
+        .pWaitSemaphores = &wait_for_present,
         .swapchainCount = 1,
         .pSwapchains = &swapchain,
         .pImageIndices = &current_image
