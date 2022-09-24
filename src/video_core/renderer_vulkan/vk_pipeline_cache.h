@@ -198,10 +198,6 @@ public:
     /// Marks all descriptor sets as dirty
     void MarkDescriptorSetsDirty();
 
-    vk::ImageView GetTexture(u32 set, u32 binding) const {
-        return update_data[set][binding].image_info.imageView;
-    }
-
 private:
     /// Binds a resource to the provided binding
     void SetBinding(u32 set, u32 binding, DescriptorData data);
@@ -224,8 +220,14 @@ private:
     /// Stores the generated pipeline cache to disk
     void SaveDiskCache();
 
-    /// Ensures the disk data was generated from the same driver
-    bool ValidateData(const u8* data, u32 size);
+    /// Returns true when the disk data can be used by the current driver
+    bool IsCacheValid(const u8* data, u32 size) const;
+
+    /// Create shader disk cache directories. Returns true on success.
+    bool EnsureDirectories() const;
+
+    /// Returns the pipeline cache storage dir
+    std::string GetPipelineCacheDir() const;
 
 private:
     const Instance& instance;
