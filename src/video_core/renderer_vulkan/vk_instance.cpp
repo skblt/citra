@@ -4,8 +4,8 @@
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <span>
-#include <array>
 #include "common/assert.h"
+#include "core/frontend/emu_window.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 
@@ -45,9 +45,7 @@ Instance::Instance(Frontend::EmuWindow& window) {
         .ppEnabledExtensionNames = extensions.data()
     };
 
-    // Create VkInstance
     instance = vk::createInstance(instance_info);
-    VULKAN_HPP_DEFAULT_DISPATCHER.init(instance);
     surface = CreateSurface(instance, window);
 
     // TODO: GPU select dialog
@@ -55,8 +53,7 @@ Instance::Instance(Frontend::EmuWindow& window) {
     physical_device = physical_devices[0];
     device_properties = physical_device.getProperties();
 
-    // Create logical device
-    CreateDevice(false);
+    CreateDevice();
 }
 
 Instance::~Instance() {
@@ -114,44 +111,15 @@ vk::Format Instance::GetFormatAlternative(vk::Format format) const {
     }
 }
 
-bool Instance::CreateDevice(bool validation_enabled) {
-    // Determine required extensions and features
+bool Instance::CreateDevice() {
     auto feature_chain = physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
-                                                      vk::PhysicalDeviceDynamicRenderingFeaturesKHR,
-                                                      vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-                                                      vk::PhysicalDeviceExtendedDynamicState2FeaturesEXT>();
+                                                      vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
 
-    // Not having geometry shaders or wide lines will cause issues with rendering.
+    // Not having geometry shaders will cause issues with accelerated rendering.
     const vk::PhysicalDeviceFeatures available = feature_chain.get().features;
-    if (!available.geometryShader && !available.wideLines) {
+    if (!available.geometryShader) {
         LOG_WARNING(Render_Vulkan, "Geometry shaders not availabe! Accelerated rendering not possible!");
     }
-
-    // Enable some common features other emulators like Dolphin use
-    const vk::PhysicalDeviceFeatures2 features = {
-        .features = {
-            .robustBufferAccess = available.robustBufferAccess,
-            .geometryShader = available.geometryShader,
-            .sampleRateShading = available.sampleRateShading,
-            .dualSrcBlend = available.dualSrcBlend,
-            .logicOp = available.logicOp,
-            .depthClamp = available.depthClamp,
-            .largePoints = available.largePoints,
-            .samplerAnisotropy = available.samplerAnisotropy,
-            .occlusionQueryPrecise = available.occlusionQueryPrecise,
-            .fragmentStoresAndAtomics = available.fragmentStoresAndAtomics,
-            .shaderStorageImageMultisample = available.shaderStorageImageMultisample,
-            .shaderClipDistance = available.shaderClipDistance
-        }
-    };
-
-    // Enable newer Vulkan features
-    auto enabled_features = vk::StructureChain{
-        features,
-        //feature_chain.get<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>(),
-        //feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
-        //feature_chain.get<vk::PhysicalDeviceExtendedDynamicState2FeaturesEXT>()
-    };
 
     auto extension_list = physical_device.enumerateDeviceExtensionProperties();
     if (extension_list.empty()) {
@@ -163,7 +131,7 @@ bool Instance::CreateDevice(bool validation_enabled) {
     std::array<const char*, 6> enabled_extensions;
     u32 enabled_extension_count = 0;
 
-    auto AddExtension = [&](std::string_view name, bool required) -> bool {
+    auto AddExtension = [&](std::string_view name) -> bool {
         auto result = std::find_if(extension_list.begin(), extension_list.end(), [&](const auto& prop) {
             return name.compare(prop.extensionName.data());
         });
@@ -174,20 +142,13 @@ bool Instance::CreateDevice(bool validation_enabled) {
             return true;
         }
 
-        if (required) {
-            LOG_ERROR(Render_Vulkan, "Unable to find required extension {}.", name);
-        }
-
+        LOG_WARNING(Render_Vulkan, "Extension {} unavailable.", name);
         return false;
     };
 
-    // Add required extensions
-    AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME, true);
-
-    // Check for optional features
-    //dynamic_rendering = AddExtension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, false);
-    //extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, false);
-    //push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME, false);
+    extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
+    push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
     // Search queue families for graphics and present queues
     auto family_properties = physical_device.getQueueFamilyProperties();
@@ -236,39 +197,50 @@ bool Instance::CreateDevice(bool validation_enabled) {
         }
     };
 
-    vk::DeviceCreateInfo device_info = {
-        .pNext = &features, // TODO: Change this
-        .queueCreateInfoCount = 1,
-        .pQueueCreateInfos = queue_infos.data(),
-        .enabledExtensionCount = enabled_extension_count,
-        .ppEnabledExtensionNames = enabled_extensions.data(),
+    const u32 queue_count = graphics_queue_family_index != present_queue_family_index ? 2u : 1u;
+    const vk::StructureChain device_chain = {
+        vk::DeviceCreateInfo{
+            .queueCreateInfoCount = queue_count,
+            .pQueueCreateInfos = queue_infos.data(),
+            .enabledExtensionCount = enabled_extension_count,
+            .ppEnabledExtensionNames = enabled_extensions.data(),
+        },
+        vk::PhysicalDeviceFeatures2{
+            .features = {
+                .robustBufferAccess = available.robustBufferAccess,
+                .geometryShader = available.geometryShader,
+                .dualSrcBlend = available.dualSrcBlend,
+                .logicOp = available.logicOp,
+                .depthClamp = available.depthClamp,
+                .largePoints = available.largePoints,
+                .samplerAnisotropy = available.samplerAnisotropy,
+                .fragmentStoresAndAtomics = available.fragmentStoresAndAtomics,
+                .shaderStorageImageMultisample = available.shaderStorageImageMultisample,
+                .shaderClipDistance = available.shaderClipDistance
+            }
+        },
+        feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
     };
 
-    if (graphics_queue_family_index != present_queue_family_index) {
-        device_info.queueCreateInfoCount = 2;
-    }
-
     // Create logical device
-    device = physical_device.createDevice(device_info);
+    device = physical_device.createDevice(device_chain.get());
     VULKAN_HPP_DEFAULT_DISPATCHER.init(device);
 
     // Grab the graphics and present queues.
     graphics_queue = device.getQueue(graphics_queue_family_index, 0);
     present_queue = device.getQueue(present_queue_family_index, 0);
 
-    // Create the VMA allocator
     CreateAllocator();
-
     return true;
 }
 
 void Instance::CreateAllocator() {
-    VmaVulkanFunctions functions = {
+    const VmaVulkanFunctions functions = {
         .vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr,
         .vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr
     };
 
-    VmaAllocatorCreateInfo allocator_info = {
+    const VmaAllocatorCreateInfo allocator_info = {
         .physicalDevice = physical_device,
         .device = device,
         .pVulkanFunctions = &functions,
@@ -276,7 +248,7 @@ void Instance::CreateAllocator() {
         .vulkanApiVersion = VK_API_VERSION_1_1
     };
 
-    if (auto result = vmaCreateAllocator(&allocator_info, &allocator); result != VK_SUCCESS) {
+    if (VkResult result = vmaCreateAllocator(&allocator_info, &allocator); result != VK_SUCCESS) {
         LOG_CRITICAL(Render_Vulkan, "Failed to initialize VMA with error {}", result);
         UNREACHABLE();
     }
