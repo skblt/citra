@@ -1046,8 +1046,7 @@ void RendererVulkan::SwapBuffers() {
     runtime.OnSlotSwitch(scheduler.GetCurrentSlotIndex());
 
     // When the command buffer switches, all state becomes undefined.
-    // This is problematic when using dynamic states, so set all
-    // states here
+    // This is problematic with dynamic states, so set all states here
     if (instance.IsExtendedDynamicStateSupported()) {
         rasterizer->SyncFixedState();
     }

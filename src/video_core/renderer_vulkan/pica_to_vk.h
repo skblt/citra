@@ -250,7 +250,7 @@ inline vk::CullModeFlags CullMode(Pica::RasterizerRegs::CullMode mode) {
         return vk::CullModeFlagBits::eNone;
     case Pica::RasterizerRegs::CullMode::KeepClockWise:
     case Pica::RasterizerRegs::CullMode::KeepCounterClockWise:
-        return vk::CullModeFlagBits::eNone;
+        return vk::CullModeFlagBits::eBack;
     }
 }
 
