@@ -103,6 +103,9 @@ public:
     /// Syncs entire status to match PICA registers
     void SyncEntireState() override;
 
+    /// Sync fixed function pipeline state
+    void SyncFixedState();
+
     /// Flushes all rasterizer owned buffers
     void FlushBuffers();
 
