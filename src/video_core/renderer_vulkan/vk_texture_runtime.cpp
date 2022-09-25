@@ -215,6 +215,8 @@ void TextureRuntime::FormatConvert(VideoCore::PixelFormat format,  bool upload,
         return Pica::Texture::ConvertABGRToRGBA(source, dest);
     } else if (format == VideoCore::PixelFormat::RGB8 && upload) {
         return Pica::Texture::ConvertBGRToRGBA(source, dest);
+    } else if (format == VideoCore::PixelFormat::D24S8 && !upload) {
+        return; // HACK: Skip depth download
     } else if (instance.IsFormatSupported(ToVkFormat(format), feature)) {
         std::memcpy(dest.data(), source.data(), source.size());
     } else {
@@ -624,6 +626,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
             copy_regions[region_count++] = copy_region;
 
             if (alloc.aspect & vk::ImageAspectFlagBits::eStencil) {
+                return; // HACK: Skip depth + stencil downloads for now
                 copy_region.bufferOffset += staging.mapped.size();
                 copy_region.imageSubresource.aspectMask |= vk::ImageAspectFlagBits::eStencil;
                 copy_regions[region_count++] = copy_region;

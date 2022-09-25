@@ -136,7 +136,7 @@ inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer, std::sp
 }
 
 template <bool morton_to_linear, PixelFormat format>
-static void MortonCopy(u32 stride, u32 height, u32 start_offset,
+static void MortonCopy(u32 stride, u32 height, u32 start_offset, u32 end_offset,
                        std::span<std::byte> linear_buffer,
                        std::span<std::byte> tiled_buffer) {
 
@@ -148,7 +148,6 @@ static void MortonCopy(u32 stride, u32 height, u32 start_offset,
     // becomes zero for 4-bit textures!
     constexpr u32 tile_size = GetFormatBpp(format) * 64 / 8;
     const u32 linear_tile_size = (7 * stride + 8) * aligned_bytes_per_pixel;
-    const u32 end_offset = start_offset + static_cast<u32>(tiled_buffer.size());
 
     // Does this line have any significance?
     //u32 linear_offset = aligned_bytes_per_pixel - bytes_per_pixel;
@@ -216,7 +215,7 @@ static void MortonCopy(u32 stride, u32 height, u32 start_offset,
     }
 }
 
-using MortonFunc = void (*)(u32, u32, u32, std::span<std::byte>, std::span<std::byte>);
+using MortonFunc = void (*)(u32, u32, u32, u32, std::span<std::byte>, std::span<std::byte>);
 
 static constexpr std::array<MortonFunc, 18> UNSWIZZLE_TABLE = {
     MortonCopy<true, PixelFormat::RGBA8>,  // 0

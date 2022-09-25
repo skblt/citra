@@ -894,20 +894,20 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
     ASSERT(load_start >= surface->addr && load_end <= surface->end);
 
     const auto& staging = runtime.FindStaging(
-                surface->width * surface->height * GetBytesPerPixel(surface->pixel_format) * 2, true);
+                surface->width * surface->height * 4, true);
     MemoryRef source_ptr = VideoCore::g_memory->GetPhysicalRef(info.addr);
     if (!source_ptr) [[unlikely]] {
         return;
     }
 
     const auto upload_data = source_ptr.GetWriteBytes(load_end - load_start);
-    const u32 start_offset = load_start - surface->addr;
 
     MICROPROFILE_SCOPE(RasterizerCache_SurfaceLoad);
 
     if (surface->is_tiled) {
         std::vector<std::byte> unswizzled_data(staging.size);
-        UnswizzleTexture(*surface, start_offset, upload_data, unswizzled_data);
+        UnswizzleTexture(*surface, load_start - surface->addr, load_end - surface->addr,
+                         upload_data, unswizzled_data);
         runtime.FormatConvert(surface->pixel_format, true, unswizzled_data, staging.mapped);
     } else {
         runtime.FormatConvert(surface->pixel_format, true, upload_data, staging.mapped);
@@ -931,7 +931,7 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
     ASSERT(flush_start >= surface->addr && flush_end <= surface->end);
 
     const auto& staging = runtime.FindStaging(
-                surface->width * surface->height * GetBytesPerPixel(surface->pixel_format), false);
+                surface->width * surface->height * 4, false);
     const SurfaceParams params = surface->FromInterval(interval);
     const BufferTextureCopy download = {
         .buffer_offset = 0,
@@ -948,13 +948,13 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
     }
 
     const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
-    const u32 start_offset = flush_start - surface->addr;
 
     MICROPROFILE_SCOPE(RasterizerCache_SurfaceFlush);
 
     if (surface->is_tiled) {
         std::vector<std::byte> swizzled_data(staging.size);
-        SwizzleTexture(*surface, start_offset, staging.mapped, swizzled_data);
+        SwizzleTexture(*surface, flush_start - surface->addr, flush_end - surface->addr,
+                       staging.mapped, swizzled_data);
         runtime.FormatConvert(surface->pixel_format, false, swizzled_data, download_dest);
     } else {
         runtime.FormatConvert(surface->pixel_format, false, staging.mapped, download_dest);
