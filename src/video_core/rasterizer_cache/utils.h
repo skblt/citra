@@ -44,7 +44,7 @@ class SurfaceParams;
 
 [[nodiscard]] ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data);
 
-void SwizzleTexture(const SurfaceParams& params, u32 start_offset,
+void SwizzleTexture(const SurfaceParams& params, u32 start_offset, u32 end_offset,
                     std::span<std::byte> source_linear, std::span<std::byte> dest_tiled);
 
 /**
@@ -55,7 +55,7 @@ void SwizzleTexture(const SurfaceParams& params, u32 start_offset,
  * @param source_tiled The source morton swizzled data.
  * @param dest_linear The output buffer where the generated linear data will be written to.
  */
-void UnswizzleTexture(const SurfaceParams& params, u32 start_offset,
+void UnswizzleTexture(const SurfaceParams& params, u32 start_offset, u32 end_offset,
                       std::span<std::byte> source_tiled, std::span<std::byte> dest_linear);
 
 } // namespace VideoCore
