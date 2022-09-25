@@ -3,30 +3,26 @@
 // Refer to the license.txt file included.
 
 #pragma once
-#include <glad/glad.h>
 #include "common/assert.h"
-#include "core/memory.h"
 #include "video_core/texture/texture_decode.h"
 #include "video_core/rasterizer_cache/morton_swizzle.h"
 #include "video_core/rasterizer_cache/surface_params.h"
 #include "video_core/rasterizer_cache/utils.h"
-#include "video_core/renderer_opengl/gl_vars.h"
-#include "video_core/video_core.h"
 
 namespace VideoCore {
 
-void SwizzleTexture(const SurfaceParams& params, u32 start_offset,
+void SwizzleTexture(const SurfaceParams& params, u32 start_offset, u32 end_offset,
                     std::span<std::byte> source_linear, std::span<std::byte> dest_tiled) {
     const u32 func_index = static_cast<u32>(params.pixel_format);
     const MortonFunc SwizzleImpl = SWIZZLE_TABLE[func_index];
-    SwizzleImpl(params.stride, params.height, start_offset, source_linear, dest_tiled);
+    SwizzleImpl(params.stride, params.height, start_offset, end_offset, source_linear, dest_tiled);
 }
 
-void UnswizzleTexture(const SurfaceParams& params, u32 start_offset,
+void UnswizzleTexture(const SurfaceParams& params, u32 start_offset, u32 end_offset,
                       std::span<std::byte> source_tiled, std::span<std::byte> dest_linear) {
     const u32 func_index = static_cast<u32>(params.pixel_format);
     const MortonFunc UnswizzleImpl = UNSWIZZLE_TABLE[func_index];
-    UnswizzleImpl(params.stride, params.height, start_offset, dest_linear, source_tiled);
+    UnswizzleImpl(params.stride, params.height, start_offset, end_offset, dest_linear, source_tiled);
 }
 
 ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data) {
@@ -68,4 +64,4 @@ ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_d
     return result;
 }
 
-} // namespace OpenGL
+} // namespace VideoCore
