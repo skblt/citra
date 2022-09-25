@@ -74,8 +74,7 @@ public:
 
     /// Returns true when VK_EXT_extended_dynamic_state is supported
     bool IsExtendedDynamicStateSupported() const {
-        // TODO: Enable this when the pipeline builder is confirmed functional
-        return false;
+        return extended_dynamic_state;
     }
 
     /// Returns true when VK_KHR_push_descriptors is supported

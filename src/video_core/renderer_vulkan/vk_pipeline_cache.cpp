@@ -197,8 +197,11 @@ void PipelineCache::BindPipeline(const PipelineInfo& info) {
         it->second = BuildPipeline(info);
     }
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, it->second);
+    if (it->second != current_pipeline) {
+        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, it->second);
+        current_pipeline = it->second;
+    }
 
     BindDescriptorSets();
 }
@@ -302,27 +305,13 @@ void PipelineCache::SetScissor(s32 x, s32 y, u32 width, u32 height) {
 
 void PipelineCache::MarkDescriptorSetsDirty() {
     descriptor_dirty.fill(true);
+    current_pipeline = VK_NULL_HANDLE;
 }
 
 void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack, info.depth_stencil.stencil_compare_mask);
-    command_buffer.setStencilWriteMask(vk::StencilFaceFlagBits::eFrontAndBack, info.depth_stencil.stencil_write_mask);
-    command_buffer.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, info.depth_stencil.stencil_reference);
-
     if (instance.IsExtendedDynamicStateSupported()) {
-        command_buffer.setCullModeEXT(PicaToVK::CullMode(info.rasterization.cull_mode));
-        command_buffer.setDepthCompareOpEXT(PicaToVK::CompareFunc(info.depth_stencil.depth_compare_op));
-        command_buffer.setDepthTestEnableEXT(info.depth_stencil.depth_test_enable);
-        command_buffer.setDepthWriteEnableEXT(info.depth_stencil.depth_write_enable);
-        command_buffer.setFrontFaceEXT(PicaToVK::FrontFace(info.rasterization.cull_mode));
+        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
         command_buffer.setPrimitiveTopologyEXT(PicaToVK::PrimitiveTopology(info.rasterization.topology));
-        command_buffer.setStencilTestEnableEXT(info.depth_stencil.stencil_test_enable);
-        command_buffer.setStencilOpEXT(vk::StencilFaceFlagBits::eFrontAndBack,
-                                       PicaToVK::StencilOp(info.depth_stencil.stencil_fail_op),
-                                       PicaToVK::StencilOp(info.depth_stencil.stencil_pass_op),
-                                       PicaToVK::StencilOp(info.depth_stencil.stencil_depth_fail_op),
-                                       PicaToVK::CompareFunc(info.depth_stencil.stencil_compare_op));
     }
 }
 
@@ -505,7 +494,6 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
     const std::array dynamic_states = {
         vk::DynamicState::eViewport,
         vk::DynamicState::eScissor,
-        vk::DynamicState::eLineWidth,
         vk::DynamicState::eStencilCompareMask,
         vk::DynamicState::eStencilWriteMask,
         vk::DynamicState::eStencilReference,

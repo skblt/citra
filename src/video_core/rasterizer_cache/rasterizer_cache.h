@@ -953,9 +953,9 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
 
     if (surface->is_tiled) {
         std::vector<std::byte> swizzled_data(staging.size);
+        runtime.FormatConvert(surface->pixel_format, false, swizzled_data, swizzled_data);
         SwizzleTexture(*surface, flush_start - surface->addr, flush_end - surface->addr,
-                       staging.mapped, swizzled_data);
-        runtime.FormatConvert(surface->pixel_format, false, swizzled_data, download_dest);
+                       staging.mapped, download_dest);
     } else {
         runtime.FormatConvert(surface->pixel_format, false, staging.mapped, download_dest);
     }
