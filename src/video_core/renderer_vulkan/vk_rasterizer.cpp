@@ -172,6 +172,7 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
 }
 
 RasterizerVulkan::~RasterizerVulkan() {
+    renderpass_cache.ExitRenderpass();
     scheduler.Submit(SubmitMode::Flush | SubmitMode::Shutdown);
 
     VmaAllocator allocator = instance.GetAllocator();
@@ -197,17 +198,7 @@ void RasterizerVulkan::LoadDiskResources(const std::atomic_bool& stop_loading,
 
 void RasterizerVulkan::SyncEntireState() {
     // Sync fixed function Vulkan state
-    SyncClipEnabled();
-    SyncCullMode();
-    SyncBlendEnabled();
-    SyncBlendFuncs();
-    SyncBlendColor();
-    SyncLogicOp();
-    SyncStencilTest();
-    SyncDepthTest();
-    SyncColorWriteMask();
-    SyncStencilWriteMask();
-    SyncDepthWriteMask();
+    SyncFixedState();
 
     // Sync uniforms
     SyncClipCoef();
@@ -235,6 +226,20 @@ void RasterizerVulkan::SyncEntireState() {
     SyncProcTexBias();
     SyncShadowBias();
     SyncShadowTextureBias();
+}
+
+void RasterizerVulkan::SyncFixedState() {
+    SyncClipEnabled();
+    SyncCullMode();
+    SyncBlendEnabled();
+    SyncBlendFuncs();
+    SyncBlendColor();
+    SyncLogicOp();
+    SyncStencilTest();
+    SyncDepthTest();
+    SyncColorWriteMask();
+    SyncStencilWriteMask();
+    SyncDepthWriteMask();
 }
 
 /**
@@ -1641,6 +1646,12 @@ void RasterizerVulkan::SyncClipCoef() {
 
 void RasterizerVulkan::SyncCullMode() {
     const auto& regs = Pica::g_state.regs;
+    if (instance.IsExtendedDynamicStateSupported()) {
+        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+        command_buffer.setCullModeEXT(PicaToVK::CullMode(regs.rasterizer.cull_mode));
+        command_buffer.setFrontFaceEXT(PicaToVK::FrontFace(regs.rasterizer.cull_mode));
+    }
+
     pipeline_info.rasterization.cull_mode.Assign(regs.rasterizer.cull_mode);
 }
 
@@ -1748,36 +1759,71 @@ void RasterizerVulkan::SyncStencilWriteMask() {
         (regs.framebuffer.framebuffer.allow_depth_stencil_write != 0)
             ? static_cast<u32>(regs.framebuffer.output_merger.stencil_test.write_mask)
             : 0;
+
+    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+    command_buffer.setStencilWriteMask(vk::StencilFaceFlagBits::eFrontAndBack, pipeline_info.depth_stencil.stencil_write_mask);
 }
 
 void RasterizerVulkan::SyncDepthWriteMask() {
     const auto& regs = Pica::g_state.regs;
-    pipeline_info.depth_stencil.depth_write_enable.Assign(
-                (regs.framebuffer.framebuffer.allow_depth_stencil_write != 0 &&
-                 regs.framebuffer.output_merger.depth_write_enable));
+
+    const bool write_enable = (regs.framebuffer.framebuffer.allow_depth_stencil_write != 0 &&
+            regs.framebuffer.output_merger.depth_write_enable);
+
+    if (instance.IsExtendedDynamicStateSupported()) {
+        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+        command_buffer.setDepthWriteEnableEXT(write_enable);
+    }
+
+    pipeline_info.depth_stencil.depth_write_enable.Assign(write_enable);
 }
 
 void RasterizerVulkan::SyncStencilTest() {
     const auto& regs = Pica::g_state.regs;
 
-    pipeline_info.depth_stencil.stencil_test_enable.Assign(regs.framebuffer.output_merger.stencil_test.enable &&
-                        regs.framebuffer.framebuffer.depth_format == Pica::FramebufferRegs::DepthFormat::D24S8);
-    pipeline_info.depth_stencil.stencil_fail_op.Assign(regs.framebuffer.output_merger.stencil_test.action_stencil_fail);
-    pipeline_info.depth_stencil.stencil_pass_op.Assign(regs.framebuffer.output_merger.stencil_test.action_depth_pass);
-    pipeline_info.depth_stencil.stencil_depth_fail_op.Assign(regs.framebuffer.output_merger.stencil_test.action_depth_fail);
-    pipeline_info.depth_stencil.stencil_compare_op.Assign(regs.framebuffer.output_merger.stencil_test.func);
-    pipeline_info.depth_stencil.stencil_reference = regs.framebuffer.output_merger.stencil_test.reference_value;
-    pipeline_info.depth_stencil.stencil_write_mask = regs.framebuffer.output_merger.stencil_test.input_mask;
+    const bool test_enable = regs.framebuffer.output_merger.stencil_test.enable &&
+            regs.framebuffer.framebuffer.depth_format == Pica::FramebufferRegs::DepthFormat::D24S8;
+    const auto& stencil_test = regs.framebuffer.output_merger.stencil_test;
+
+    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+    command_buffer.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack, stencil_test.input_mask);
+    command_buffer.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, stencil_test.reference_value);
+
+    if (instance.IsExtendedDynamicStateSupported()) {
+        command_buffer.setStencilTestEnableEXT(test_enable);
+        command_buffer.setStencilOpEXT(vk::StencilFaceFlagBits::eFrontAndBack,
+                                       PicaToVK::StencilOp(stencil_test.action_stencil_fail),
+                                       PicaToVK::StencilOp(stencil_test.action_depth_pass),
+                                       PicaToVK::StencilOp(stencil_test.action_depth_fail),
+                                       PicaToVK::CompareFunc(stencil_test.func));
+    }
+
+    pipeline_info.depth_stencil.stencil_test_enable.Assign(test_enable);
+    pipeline_info.depth_stencil.stencil_fail_op.Assign(stencil_test.action_stencil_fail);
+    pipeline_info.depth_stencil.stencil_pass_op.Assign(stencil_test.action_depth_pass);
+    pipeline_info.depth_stencil.stencil_depth_fail_op.Assign(stencil_test.action_depth_fail);
+    pipeline_info.depth_stencil.stencil_compare_op.Assign(stencil_test.func);
+    pipeline_info.depth_stencil.stencil_reference = stencil_test.reference_value;
+    pipeline_info.depth_stencil.stencil_write_mask = stencil_test.input_mask;
 }
 
 void RasterizerVulkan::SyncDepthTest() {
     const auto& regs = Pica::g_state.regs;
-    pipeline_info.depth_stencil.depth_test_enable.Assign(regs.framebuffer.output_merger.depth_test_enable == 1 ||
-                                    regs.framebuffer.output_merger.depth_write_enable == 1);
-    pipeline_info.depth_stencil.depth_compare_op.Assign(
-        regs.framebuffer.output_merger.depth_test_enable == 1
+
+    const bool test_enabled = regs.framebuffer.output_merger.depth_test_enable == 1 ||
+            regs.framebuffer.output_merger.depth_write_enable == 1;
+    const auto compare_op = regs.framebuffer.output_merger.depth_test_enable == 1
             ? regs.framebuffer.output_merger.depth_test_func.Value()
-            : Pica::FramebufferRegs::CompareFunc::Always);
+            : Pica::FramebufferRegs::CompareFunc::Always;
+
+    if (instance.IsExtendedDynamicStateSupported()) {
+        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+        command_buffer.setDepthCompareOpEXT(PicaToVK::CompareFunc(compare_op));
+        command_buffer.setDepthTestEnableEXT(test_enabled);
+    }
+
+    pipeline_info.depth_stencil.depth_test_enable.Assign(test_enabled);
+    pipeline_info.depth_stencil.depth_compare_op.Assign(compare_op);
 }
 
 void RasterizerVulkan::SyncCombinerColor() {

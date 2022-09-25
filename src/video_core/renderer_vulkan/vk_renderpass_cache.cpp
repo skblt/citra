@@ -7,7 +7,6 @@
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
-#include "video_core/renderer_vulkan/vk_swapchain.h"
 
 namespace Vulkan {
 
@@ -77,24 +76,27 @@ RenderpassCache::~RenderpassCache() {
 }
 
 void RenderpassCache::EnterRenderpass(const vk::RenderPassBeginInfo begin_info) {
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+    if (active_renderpass == begin_info.renderPass) {
+        return;
+    }
 
-    if (renderpass_active) {
+    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+    if (active_renderpass) {
         command_buffer.endRenderPass();
     }
 
     command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
-    renderpass_active = true;
+    active_renderpass = begin_info.renderPass;
 }
 
 void RenderpassCache::ExitRenderpass() {
-    if (!renderpass_active) {
+    if (!active_renderpass) {
         return;
     }
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.endRenderPass();
-    renderpass_active = false;
+    active_renderpass = VK_NULL_HANDLE;
 }
 
 void RenderpassCache::CreatePresentRenderpass(vk::Format format) {
