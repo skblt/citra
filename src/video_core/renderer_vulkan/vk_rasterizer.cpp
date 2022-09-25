@@ -93,7 +93,7 @@ constexpr VertexLayout RasterizerVulkan::HardwareVertex::GetVertexLayout() {
     return layout;
 }
 
-constexpr u32 VERTEX_BUFFER_SIZE = 16 * 1024 * 1024;
+constexpr u32 VERTEX_BUFFER_SIZE = 128 * 1024 * 1024;
 constexpr u32 INDEX_BUFFER_SIZE = 2 * 1024 * 1024;
 constexpr u32 UNIFORM_BUFFER_SIZE = 2 * 1024 * 1024;
 constexpr u32 TEXTURE_BUFFER_SIZE = 2 * 1024 * 1024;
