@@ -47,7 +47,7 @@ private:
     const Instance& instance;
     TaskScheduler& scheduler;
 
-    bool renderpass_active = false;
+    vk::RenderPass active_renderpass = VK_NULL_HANDLE;
     vk::RenderPass present_renderpass{};
     vk::RenderPass cached_renderpasses[MAX_COLOR_FORMATS+1][MAX_DEPTH_FORMATS+1][2];
 };
