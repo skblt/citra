@@ -106,8 +106,8 @@ StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler,
         views[i] = device.createBufferView(view_info);
     }
 
-    available_size = total_size;
     view_count = view_formats.size();
+    bucket_size = size / SCHEDULER_COMMAND_COUNT;
 }
 
 StreamBuffer::~StreamBuffer() {
@@ -123,57 +123,38 @@ StreamBuffer::~StreamBuffer() {
 std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
     ASSERT(size <= total_size && alignment <= total_size);
 
-    if (alignment > 0) {
-        buffer_offset = Common::AlignUp(buffer_offset, alignment);
+    const u32 current_bucket = scheduler.GetCurrentSlotIndex();
+    auto& bucket = buckets[current_bucket];
+    if (bucket.offset + size > bucket_size) {
+        UNREACHABLE();
     }
 
-    // Have we run out of available space?
     bool invalidate = false;
-    if (available_size < size) {
-        // If we are at the end of the buffer, start over
-        if (buffer_offset + size > total_size) {
-            // Flush any pending writes before looping back
-            Flush();
-
-            // Since new regions are discovered based on locks, insert a lock
-            // that reaches the end of the buffer to avoid having an empty region
-            const LockedRegion region = {
-                .size = total_size - buffer_offset,
-                .fence_counter = scheduler.GetFenceCounter()
-            };
-
-            regions.emplace(buffer_offset, region);
-
-            Invalidate();
-            invalidate = true;
-        }
-
-        // Try to garbage collect old regions
-        if (!UnlockFreeRegions(size)) {
-            // Nuclear option: stall the GPU to remove all the locks
-            LOG_WARNING(Render_Vulkan, "Buffer GPU stall");
-            Invalidate();
-            regions.clear();
-            available_size = total_size;
-        }
+    if (bucket.invalid) {
+        invalidate = true;
+        bucket.invalid = false;
     }
 
+    const u32 buffer_offset = current_bucket * bucket_size + bucket.offset;
     u8* mapped = reinterpret_cast<u8*>(staging.mapped.data() + buffer_offset);
     return std::make_tuple(mapped, buffer_offset, invalidate);
+
 }
 
 void StreamBuffer::Commit(u32 size) {
-    buffer_offset += size;
-    available_size -= size;
+    buckets[scheduler.GetCurrentSlotIndex()].offset += size;
 }
 
 void StreamBuffer::Flush() {
-    const u32 flush_size = buffer_offset - flush_start;
+    const u32 current_bucket = scheduler.GetCurrentSlotIndex();
+    const u32 flush_size = buckets[current_bucket].offset;
+    ASSERT(flush_size <= bucket_size);
+
     if (flush_size > 0) {
         vk::CommandBuffer command_buffer = scheduler.GetUploadCommandBuffer();
         VmaAllocator allocator = instance.GetAllocator();
 
-        const u32 flush_size = buffer_offset - flush_start;
+        const u32 flush_start = current_bucket * bucket_size;
         const vk::BufferCopy copy_region = {
             .srcOffset = flush_start,
             .dstOffset = flush_start,
@@ -182,14 +163,6 @@ void StreamBuffer::Flush() {
 
         vmaFlushAllocation(allocator, allocation, flush_start, flush_size);
         command_buffer.copyBuffer(staging.buffer, buffer, copy_region);
-
-        // Lock the region
-        const LockedRegion region = {
-            .size = flush_size,
-            .fence_counter = scheduler.GetFenceCounter()
-        };
-
-        regions.emplace(flush_start, region);
 
         // Add pipeline barrier for the flushed region
         auto [access_mask, stage_mask] = ToVkAccessStageFlags(usage);
@@ -205,45 +178,17 @@ void StreamBuffer::Flush() {
 
         command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, stage_mask,
                                        vk::DependencyFlagBits::eByRegion, {}, buffer_barrier, {});
-
-        flush_start = buffer_offset;
     }
+
+    // Reset the offset of the next bucket
+    const u32 next_bucket = (current_bucket + 1) % SCHEDULER_COMMAND_COUNT;
+    buckets[next_bucket].offset = 0;
+    buckets[next_bucket].invalid = true;
 }
 
-void StreamBuffer::Invalidate() {
-    buffer_offset = 0;
-    flush_start = 0;
-}
-
-bool StreamBuffer::UnlockFreeRegions(u32 target_size) {
-    available_size = 0;
-
-    // Free regions that don't need waiting
-    auto it = regions.lower_bound(buffer_offset);
-    while (it != regions.end()) {
-        const auto& [offset, region] = *it;
-        if (region.fence_counter <= scheduler.GetFenceCounter()) {
-            available_size += region.size;
-            it = regions.erase(it);
-        }
-        else {
-            break;
-        }
-    }
-
-    // If that wasn't enough, try waiting for some fences
-    while (it != regions.end() && available_size < target_size) {
-        const auto& [offset, region] = *it;
-
-        if (region.fence_counter > scheduler.GetFenceCounter()) {
-            scheduler.WaitFence(region.fence_counter);
-        }
-
-        available_size += region.size;
-        it = regions.erase(it);
-    }
-
-    return available_size >= target_size;
+u32 StreamBuffer::GetBufferOffset() const {
+    const u32 current_bucket = scheduler.GetCurrentSlotIndex();
+    return current_bucket * bucket_size + buckets[current_bucket].offset;
 }
 
 } // namespace Vulkan

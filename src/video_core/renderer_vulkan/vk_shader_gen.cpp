@@ -55,6 +55,7 @@ layout (set = 0, binding = 1, std140) uniform shader_data {
     int proctex_diff_lut_offset;
     float proctex_bias;
     int shadow_texture_bias;
+    bool enable_clip1;
     ivec4 lighting_lut_offset[NUM_LIGHTING_SAMPLERS / 4];
     vec3 fog_color;
     vec2 proctex_noise_f;
@@ -89,9 +90,7 @@ static std::string GetVertexInterfaceDeclaration(bool is_output) {
         out += R"(
 out gl_PerVertex {
     vec4 gl_Position;
-#if !defined(CITRA_GLES) || defined(GL_EXT_clip_cull_distance)
     float gl_ClipDistance[2];
-#endif // !defined(CITRA_GLES) || defined(GL_EXT_clip_cull_distance)
 };
 )";
     }
@@ -1568,11 +1567,13 @@ void main() {
     normquat = vert_normquat;
     view = vert_view;
     gl_Position = vert_position;
-    gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;
-#if !defined(CITRA_GLES) || defined(GL_EXT_clip_cull_distance)
+
     gl_ClipDistance[0] = -vert_position.z; // fixed PICA clipping plane z <= 0
-    gl_ClipDistance[1] = dot(clip_coef, vert_position);
-#endif // !defined(CITRA_GLES) || defined(GL_EXT_clip_cull_distance)
+    if (enable_clip1) {
+        gl_ClipDistance[1] = dot(clip_coef, vert_position);
+    } else {
+        gl_ClipDistance[1] = 0;
+    }
 }
 )";
 
