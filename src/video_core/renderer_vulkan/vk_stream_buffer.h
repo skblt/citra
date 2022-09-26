@@ -34,7 +34,7 @@ struct StagingBuffer {
 class StreamBuffer {
 public:
     StreamBuffer(const Instance& instance, TaskScheduler& scheduler,
-                 u32 size, vk::BufferUsageFlagBits usage, std::span<const vk::Format> views);
+                  u32 size, vk::BufferUsageFlagBits usage, std::span<const vk::Format> views);
     ~StreamBuffer();
 
     std::tuple<u8*, u32, bool> Map(u32 size, u32 alignment = 0);
@@ -45,13 +45,12 @@ public:
     /// Flushes staging memory to the GPU buffer
     void Flush();
 
+    /// Returns the current buffer offset
+    u32 GetBufferOffset() const;
+
     /// Returns the Vulkan buffer handle
     vk::Buffer GetHandle() const {
         return buffer;
-    }
-
-    u32 GetBufferOffset() const {
-        return buffer_offset;
     }
 
     /// Returns an immutable reference to the requested buffer view
@@ -68,6 +67,12 @@ private:
     bool UnlockFreeRegions(u32 target_size);
 
 private:
+    struct Bucket {
+        bool invalid;
+        u32 fence_counter;
+        u32 offset;
+    };
+
     const Instance& instance;
     TaskScheduler& scheduler;
     StagingBuffer staging;
@@ -79,10 +84,8 @@ private:
     std::array<vk::BufferView, MAX_BUFFER_VIEWS> views{};
     std::size_t view_count = 0;
 
-    u32 buffer_offset = 0;
-    u32 flush_start = 0;
-    s32 available_size = 0;
-    std::map<u32, LockedRegion> regions;
+    u32 bucket_size = 0;
+    std::array<Bucket, SCHEDULER_COMMAND_COUNT> buckets{};
 };
 
 } // namespace Vulkan
