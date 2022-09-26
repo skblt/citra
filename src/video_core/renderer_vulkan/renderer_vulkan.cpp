@@ -151,7 +151,7 @@ struct ScreenRectVertex {
     Common::Vec2f tex_coord;
 };
 
-constexpr u32 VERTEX_BUFFER_SIZE = sizeof(ScreenRectVertex) * 64;
+constexpr u32 VERTEX_BUFFER_SIZE = sizeof(ScreenRectVertex) * 8192;
 
 /**
  * Defines a 1:1 pixel ortographic projection matrix with (0,0) on the top-left

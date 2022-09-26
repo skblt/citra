@@ -859,6 +859,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         }
     }
 
+    renderpass_cache.ExitRenderpass();
+
     vertex_batch.clear();
 
     // Mark framebuffer surfaces as dirty
@@ -1631,7 +1633,7 @@ void RasterizerVulkan::SetShader() {
 }
 
 void RasterizerVulkan::SyncClipEnabled() {
-    //state.clip_distance[1] = Pica::g_state.regs.rasterizer.clip_enable != 0;
+    uniform_block_data.data.enable_clip1 = Pica::g_state.regs.rasterizer.clip_enable != 0;
 }
 
 void RasterizerVulkan::SyncClipCoef() {
@@ -1689,12 +1691,11 @@ void RasterizerVulkan::SyncBlendFuncs() {
 }
 
 void RasterizerVulkan::SyncBlendColor() {
-    /*auto blend_color =
-        PicaToGL::ColorRGBA8(Pica::g_state.regs.framebuffer.output_merger.blend_const.raw);
-    state.blend.color.red = blend_color[0];
-    state.blend.color.green = blend_color[1];
-    state.blend.color.blue = blend_color[2];
-    state.blend.color.alpha = blend_color[3];*/
+    auto blend_color =
+        PicaToVK::ColorRGBA8(Pica::g_state.regs.framebuffer.output_merger.blend_const.raw);
+
+    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+    command_buffer.setBlendConstants(blend_color.AsArray());
 }
 
 void RasterizerVulkan::SyncFogColor() {

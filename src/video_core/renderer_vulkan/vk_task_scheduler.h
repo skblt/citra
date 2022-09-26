@@ -13,8 +13,6 @@
 
 namespace Vulkan {
 
-constexpr u32 SCHEDULER_COMMAND_COUNT = 4;
-
 class Buffer;
 class Instance;
 

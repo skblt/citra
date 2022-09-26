@@ -483,7 +483,12 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .extent = {1, 1}
     };
 
+    vk::PipelineViewportDepthClipControlCreateInfoEXT depth_clip_control = {
+        .negativeOneToOne = true
+    };
+
     const vk::PipelineViewportStateCreateInfo viewport_info = {
+        .pNext = &depth_clip_control,
         .viewportCount = 1,
         .pViewports = &viewport,
         .scissorCount = 1,
@@ -497,6 +502,7 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         vk::DynamicState::eStencilCompareMask,
         vk::DynamicState::eStencilWriteMask,
         vk::DynamicState::eStencilReference,
+        vk::DynamicState::eBlendConstants,
         // VK_EXT_extended_dynamic_state
         vk::DynamicState::eCullModeEXT,
         vk::DynamicState::eDepthCompareOpEXT,

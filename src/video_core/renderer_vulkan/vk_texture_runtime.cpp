@@ -215,13 +215,11 @@ void TextureRuntime::FormatConvert(VideoCore::PixelFormat format,  bool upload,
         return Pica::Texture::ConvertABGRToRGBA(source, dest);
     } else if (format == VideoCore::PixelFormat::RGB8 && upload) {
         return Pica::Texture::ConvertBGRToRGBA(source, dest);
-    } else if (format == VideoCore::PixelFormat::D24S8 && !upload) {
-        return; // HACK: Skip depth download
     } else if (instance.IsFormatSupported(ToVkFormat(format), feature)) {
         std::memcpy(dest.data(), source.data(), source.size());
     } else {
         LOG_CRITICAL(Render_Vulkan, "Unimplemented converion for format {}!", format);
-        UNREACHABLE();
+        std::memcpy(dest.data(), source.data(), source.size());
     }
 }
 

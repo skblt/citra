@@ -148,6 +148,7 @@ bool Instance::CreateDevice() {
     };
 
     AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    AddExtension(VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME);
     timeline_semaphores = AddExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
@@ -159,27 +160,31 @@ bool Instance::CreateDevice() {
         return false;
     }
 
-    graphics_queue_family_index = -1;
-    present_queue_family_index = -1;
-    for (int i = 0; i < family_properties.size(); i++) {
+    bool graphics_queue_found = false;
+    bool present_queue_found = false;
+    for (std::size_t i = 0; i < family_properties.size(); i++) {
         // Check if queue supports graphics
+        const u32 index = static_cast<u32>(i);
         if (family_properties[i].queueFlags & vk::QueueFlagBits::eGraphics) {
-            graphics_queue_family_index = i;
+            graphics_queue_family_index = index;
+            graphics_queue_found = true;
 
             // If this queue also supports presentation we are finished
-            if (physical_device.getSurfaceSupportKHR(i, surface)) {
-                present_queue_family_index = i;
+            if (physical_device.getSurfaceSupportKHR(static_cast<u32>(i), surface)) {
+                present_queue_family_index = index;
+                present_queue_found = true;
                 break;
             }
         }
 
         // Check if queue supports presentation
-        if (physical_device.getSurfaceSupportKHR(i, surface)) {
-            present_queue_family_index = i;
+        if (physical_device.getSurfaceSupportKHR(index, surface)) {
+            present_queue_family_index = index;
+            present_queue_found = true;
         }
     }
 
-    if (graphics_queue_family_index == -1 || present_queue_family_index == -1) {
+    if (!graphics_queue_found || !present_queue_found) {
         LOG_CRITICAL(Render_Vulkan, "Unable to find graphics and/or present queues.");
         return false;
     }
@@ -220,6 +225,9 @@ bool Instance::CreateDevice() {
                 .shaderStorageImageMultisample = available.shaderStorageImageMultisample,
                 .shaderClipDistance = available.shaderClipDistance
             }
+        },
+        vk::PhysicalDeviceDepthClipControlFeaturesEXT{
+            .depthClipControl = true
         },
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>()
