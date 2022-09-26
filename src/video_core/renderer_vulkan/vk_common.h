@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "common/common_types.h"
+
 // Include vulkan-hpp header
 #define VK_NO_PROTOTYPES 1
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
@@ -16,6 +18,8 @@
 #include <vk_mem_alloc.h>
 
 namespace Vulkan {
+
+constexpr u32 SCHEDULER_COMMAND_COUNT = 4;
 
 /// Return the image aspect associated on the provided format
 constexpr vk::ImageAspectFlags GetImageAspect(vk::Format format) {
