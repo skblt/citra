@@ -4,18 +4,15 @@
 
 // Include the vulkan platform specific header
 #if defined(ANDROID) || defined (__ANDROID__)
-  #define VK_USE_PLATFORM_ANDROID_KHR
+    #define VK_USE_PLATFORM_ANDROID_KHR
 #elif defined(_WIN32)
-  #define VK_USE_PLATFORM_WIN32_KHR
+    #define VK_USE_PLATFORM_WIN32_KHR
 #elif defined(__APPLE__)
-  #define VK_USE_PLATFORM_MACOS_MVK
-  #define VK_USE_PLATFORM_METAL_EXT
+    #define VK_USE_PLATFORM_MACOS_MVK
+    #define VK_USE_PLATFORM_METAL_EXT
 #else
-  #ifdef WAYLAND_DISPLAY
     #define VK_USE_PLATFORM_WAYLAND_KHR
-  #else // wayland
     #define VK_USE_PLATFORM_XLIB_KHR
-  #endif
 #endif
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
@@ -45,7 +42,7 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& e
             UNREACHABLE();
         }
     }
-#elif defined(VK_USE_PLATFORM_XLIB_KHR)
+#elif defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_WAYLAND_KHR)
     if (window_info.type == Frontend::WindowSystemType::X11) {
         const vk::XlibSurfaceCreateInfoKHR xlib_ci = {
             .dpy = static_cast<Display*>(window_info.display_connection),
@@ -58,11 +55,12 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& e
         }
     }
 
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
     if (window_info.type == Frontend::WindowSystemType::Wayland) {
-        const vk::WaylandSurfaceCreateInfoKHR wayland_ci{{},
-            static_cast<wl_display*>(window_info.display_connection),
-            static_cast<wl_surface*>(window_info.render_surface)};
+        const vk::WaylandSurfaceCreateInfoKHR wayland_ci = {
+            .display = static_cast<wl_display*>(window_info.display_connection),
+            .surface = static_cast<wl_surface*>(window_info.render_surface)
+        };
+
         if (instance.createWaylandSurfaceKHR(&wayland_ci, nullptr, &surface) != vk::Result::eSuccess) {
             LOG_ERROR(Render_Vulkan, "Failed to initialize Wayland surface");
             UNREACHABLE();
@@ -95,11 +93,10 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
     case Frontend::WindowSystemType::Windows:
         extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
         break;
-#elif defined(VK_USE_PLATFORM_XLIB_KHR)
+#elif defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_WAYLAND_KHR)
     case Frontend::WindowSystemType::X11:
         extensions.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
         break;
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
     case Frontend::WindowSystemType::Wayland:
         extensions.push_back(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
         break;
