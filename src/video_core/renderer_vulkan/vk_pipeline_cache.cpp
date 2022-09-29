@@ -180,6 +180,13 @@ PipelineCache::~PipelineCache() {
 void PipelineCache::BindPipeline(const PipelineInfo& info) {
     ApplyDynamic(info);
 
+    // When texture downloads occur the runtime will flush the GPU and cause
+    // a scheduler slot switch behind our back. This might invalidate any
+    // cached descriptor sets/require pipeline rebinding.
+    if (timestamp != scheduler.GetHostFenceCounter()) {
+        MarkDirty();
+    }
+
     u64 shader_hash = 0;
     for (u32 i = 0; i < MAX_SHADER_STAGES; i++) {
         shader_hash = Common::HashCombine(shader_hash, shader_hashes[i]);
@@ -303,9 +310,10 @@ void PipelineCache::SetScissor(s32 x, s32 y, u32 width, u32 height) {
     command_buffer.setScissor(0, vk::Rect2D{{x, y}, {width, height}});
 }
 
-void PipelineCache::MarkDescriptorSetsDirty() {
+void PipelineCache::MarkDirty() {
     descriptor_dirty.fill(true);
     current_pipeline = VK_NULL_HANDLE;
+    timestamp = scheduler.GetHostFenceCounter();
 }
 
 void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
