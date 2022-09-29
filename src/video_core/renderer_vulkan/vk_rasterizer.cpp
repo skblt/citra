@@ -784,8 +784,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     // Enable scissor test to prevent drawing outside of the framebuffer region
     pipeline_cache.SetScissor(draw_rect.left, draw_rect.bottom, draw_rect.GetWidth(), draw_rect.GetHeight());
 
-    //return true;
-
     auto valid_surface = color_surface ? color_surface : depth_surface;
     const FramebufferInfo framebuffer_info = {
         .color = color_surface ? color_surface->alloc.image_view : VK_NULL_HANDLE,
@@ -834,6 +832,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     if (accelerate) {
         succeeded = AccelerateDrawBatchInternal(is_indexed);
     } else {
+        pipeline_info.rasterization.topology.Assign(Pica::PipelineRegs::TriangleTopology::List);
         pipeline_cache.UseTrivialVertexShader();
         pipeline_cache.UseTrivialGeometryShader();
         pipeline_cache.BindPipeline(pipeline_info);
@@ -1625,7 +1624,6 @@ void RasterizerVulkan::FlushBuffers() {
     index_buffer.Flush();
     texture_buffer.Flush();
     texture_lf_buffer.Flush();
-    pipeline_cache.MarkDescriptorSetsDirty();
 }
 
 void RasterizerVulkan::SetShader() {
