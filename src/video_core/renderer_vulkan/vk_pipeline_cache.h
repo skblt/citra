@@ -195,8 +195,8 @@ public:
     /// Sets the scissor rectange to the provided values
     void SetScissor(s32 x, s32 y, u32 width, u32 height);
 
-    /// Marks all descriptor sets as dirty
-    void MarkDescriptorSetsDirty();
+    /// Marks all cached pipeline cache state as dirty
+    void MarkDirty();
 
 private:
     /// Binds a resource to the provided binding
@@ -248,6 +248,7 @@ private:
     std::array<DescriptorSetData, MAX_DESCRIPTOR_SETS> update_data{};
     std::array<bool, MAX_DESCRIPTOR_SETS> descriptor_dirty{};
     std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> descriptor_sets;
+    u64 timestamp = 0;
 
     // Bound shader modules
     enum ProgramType : u32 {
