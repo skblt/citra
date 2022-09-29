@@ -32,9 +32,6 @@ public:
     /// Blocks the host until the current command completes execution
     void Synchronize(u32 slot);
 
-    /// Waits for the fence counter to be reached by the GPU
-    void WaitFence(u32 counter);
-
     /// Submits the current command to the graphics queue
     void Submit(SubmitMode mode);
 
@@ -57,6 +54,10 @@ public:
     /// Returns the index of the current command slot
     u32 GetCurrentSlotIndex() const {
         return current_command;
+    }
+
+    u64 GetHostFenceCounter() const {
+        return next_fence_counter - 1;
     }
 
     vk::Semaphore GetImageAcquiredSemaphore() const {

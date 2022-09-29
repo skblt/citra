@@ -119,23 +119,11 @@ void TaskScheduler::Synchronize(u32 slot) {
             LOG_ERROR(Render_Vulkan, "Waiting for fence counter {} failed!", command.fence_counter);
             UNREACHABLE();
         }
-
-        completed_fence_counter = command.fence_counter;
     }
 
+    completed_fence_counter = command.fence_counter;
     device.resetFences(command.fence);
     device.resetDescriptorPool(command.descriptor_pool);
-}
-
-void TaskScheduler::WaitFence(u32 counter) {
-    for (u32 i = 0; i < SCHEDULER_COMMAND_COUNT; i++) {
-        if (commands[i].fence_counter == counter) {
-            return Synchronize(i);
-        }
-    }
-
-    LOG_CRITICAL(Render_Vulkan,"Invalid fence counter {}!", counter);
-    UNREACHABLE();
 }
 
 void TaskScheduler::Submit(SubmitMode mode) {
