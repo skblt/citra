@@ -15,6 +15,7 @@ namespace Vulkan {
 
 class Buffer;
 class Instance;
+class RendererVulkan;
 
 enum class SubmitMode : u8 {
     SwapchainSynced = 1 << 0, ///< Synchronizes command buffer execution with the swapchain
@@ -26,7 +27,7 @@ DECLARE_ENUM_FLAG_OPERATORS(SubmitMode);
 
 class TaskScheduler {
 public:
-    TaskScheduler(const Instance& instance);
+    TaskScheduler(const Instance& instance, RendererVulkan& renderer);
     ~TaskScheduler();
 
     /// Blocks the host until the current command completes execution
@@ -74,6 +75,7 @@ private:
 
 private:
     const Instance& instance;
+    RendererVulkan& renderer;
     u64 next_fence_counter = 1;
     u64 completed_fence_counter = 0;
 
