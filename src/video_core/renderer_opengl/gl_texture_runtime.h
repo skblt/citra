@@ -70,8 +70,10 @@ public:
     /// Returns the OpenGL format tuple associated with the provided pixel format
     const FormatTuple& GetFormatTuple(VideoCore::PixelFormat pixel_format);
 
+    void Finish() const {}
+
     /// Performs required format convertions on the staging data
-    void FormatConvert(VideoCore::PixelFormat format, bool upload,
+    void FormatConvert(const Surface& surface, bool upload,
                        std::span<std::byte> source, std::span<std::byte> dest);
 
     /// Allocates an OpenGL texture with the specified dimentions and format
@@ -135,6 +137,11 @@ public:
 
     /// Downloads pixel data to staging from a rectangle region of the surface texture
     void Download(const VideoCore::BufferTextureCopy& download, const StagingBuffer& staging);
+
+    /// Returns the bpp of the internal surface format
+    u32 GetInternalBytesPerPixel() const {
+        return VideoCore::GetBytesPerPixel(pixel_format);
+    }
 
 private:
     /// Downloads scaled image by downscaling the requested rectangle

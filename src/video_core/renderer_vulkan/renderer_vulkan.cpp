@@ -183,7 +183,7 @@ static std::array<float, 3 * 2> MakeOrthographicMatrix(float width, float height
 }
 
 RendererVulkan::RendererVulkan(Frontend::EmuWindow& window)
-    : RendererBase{window}, instance{window}, scheduler{instance}, renderpass_cache{instance, scheduler},
+    : RendererBase{window}, instance{window}, scheduler{instance, *this}, renderpass_cache{instance, scheduler},
       runtime{instance, scheduler, renderpass_cache}, swapchain{instance, renderpass_cache},
       vertex_buffer{instance, scheduler, VERTEX_BUFFER_SIZE, vk::BufferUsageFlagBits::eVertexBuffer, {}} {
 
@@ -626,7 +626,7 @@ void RendererVulkan::BuildPipelines() {
 
 void RendererVulkan::ConfigureFramebufferTexture(TextureInfo& texture, const GPU::Regs::FramebufferConfig& framebuffer) {
     TextureInfo old_texture = texture;
-    texture = TextureInfo {
+    texture = TextureInfo{
         .alloc = runtime.Allocate(framebuffer.width, framebuffer.height,
                                   VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format),
                                   VideoCore::TextureType::Texture2D),
@@ -1035,21 +1035,24 @@ void RendererVulkan::SwapBuffers() {
 
     DrawScreens(layout, false);
 
-    // Flush all buffers to make the data visible to the GPU before submitting
-    rasterizer->FlushBuffers();
-    vertex_buffer.Flush();
-
     scheduler.Submit(SubmitMode::SwapchainSynced);
     swapchain.Present(present_ready);
+}
 
-    // Inform texture runtime about the switch
-    runtime.OnSlotSwitch(scheduler.GetCurrentSlotIndex());
+void RendererVulkan::FlushBuffers() {
+    vertex_buffer.Flush();
+    rasterizer->FlushBuffers();
+}
 
+void RendererVulkan::OnSlotSwitch() {
     // When the command buffer switches, all state becomes undefined.
     // This is problematic with dynamic states, so set all states here
     if (instance.IsExtendedDynamicStateSupported()) {
         rasterizer->SyncFixedState();
     }
+
+    runtime.OnSlotSwitch(scheduler.GetCurrentSlotIndex());
+    rasterizer->pipeline_cache.MarkDirty();
 }
 
 } // namespace Vulkan

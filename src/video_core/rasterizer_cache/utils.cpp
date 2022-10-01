@@ -11,18 +11,22 @@
 
 namespace VideoCore {
 
-void SwizzleTexture(const SurfaceParams& params, u32 start_offset, u32 end_offset,
+void SwizzleTexture(const SurfaceParams& swizzle_info, PAddr start_addr, PAddr end_addr,
                     std::span<std::byte> source_linear, std::span<std::byte> dest_tiled) {
-    const u32 func_index = static_cast<u32>(params.pixel_format);
+    const u32 func_index = static_cast<u32>(swizzle_info.pixel_format);
     const MortonFunc SwizzleImpl = SWIZZLE_TABLE[func_index];
-    SwizzleImpl(params.stride, params.height, start_offset, end_offset, source_linear, dest_tiled);
+    SwizzleImpl(swizzle_info.width, swizzle_info.height,
+                start_addr - swizzle_info.addr, end_addr - swizzle_info.addr,
+                source_linear, dest_tiled);
 }
 
-void UnswizzleTexture(const SurfaceParams& params, u32 start_offset, u32 end_offset,
+void UnswizzleTexture(const SurfaceParams& unswizzle_info, PAddr start_addr, PAddr end_addr,
                       std::span<std::byte> source_tiled, std::span<std::byte> dest_linear) {
-    const u32 func_index = static_cast<u32>(params.pixel_format);
+    const u32 func_index = static_cast<u32>(unswizzle_info.pixel_format);
     const MortonFunc UnswizzleImpl = UNSWIZZLE_TABLE[func_index];
-    UnswizzleImpl(params.stride, params.height, start_offset, end_offset, dest_linear, source_tiled);
+    UnswizzleImpl(unswizzle_info.width, unswizzle_info.height,
+                  start_addr - unswizzle_info.addr, end_addr - unswizzle_info.addr,
+                  dest_linear, source_tiled);
 }
 
 ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data) {

@@ -80,4 +80,12 @@ void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> de
  */
 void ConvertABGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest);
 
+void ConvertD32S8ToD24S8(std::span<const std::byte> source, std::span<std::byte> dest);
+
+void ConvertRGBA4ToRGBA8(std::span<const std::byte> source, std::span<std::byte> dest);
+
+void ConvertRGBA8ToRGBA4(std::span<const std::byte> source, std::span<std::byte> dest);
+
+void InterleaveD24S8(std::span<const std::byte> source, std::span<std::byte> dest);
+
 } // namespace Pica::Texture

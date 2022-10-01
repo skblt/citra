@@ -10,6 +10,7 @@
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/rasterizer_cache/types.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
+#include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
 
 namespace Vulkan {
@@ -24,10 +25,14 @@ struct StagingData {
 struct ImageAlloc {
     vk::Image image;
     vk::ImageView image_view;
+    vk::ImageView base_view;
     VmaAllocation allocation;
+    vk::ImageUsageFlags usage;
+    vk::Format format;
     vk::ImageLayout layout = vk::ImageLayout::eUndefined;
     vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eNone;
     u32 levels = 1;
+    u32 layers = 1;
 };
 
 class Instance;
@@ -48,6 +53,9 @@ public:
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
     [[nodiscard]] StagingData FindStaging(u32 size, bool upload);
 
+    /// Causes a GPU command flush
+    void Finish();
+
     /// Allocates a vulkan image possibly resusing an existing one
     [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
                                       VideoCore::TextureType type);
@@ -56,7 +64,7 @@ public:
     void Recycle(const VideoCore::HostTextureTag tag, ImageAlloc&& alloc);
 
     /// Performs required format convertions on the staging data
-    void FormatConvert(VideoCore::PixelFormat format,  bool upload,
+    void FormatConvert(const Surface& surface, bool upload,
                        std::span<std::byte> source, std::span<std::byte> dest);
 
     /// Transitions the mip level range of the surface to new_layout
@@ -114,6 +122,27 @@ public:
     /// Downloads pixel data to staging from a rectangle region of the surface texture
     void Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging);
 
+    /// Returns true if the surface requires pixel data convertion
+    bool NeedsConvert() const;
+
+    /// Returns the bpp of the internal surface format
+    u32 GetInternalBytesPerPixel() const;
+
+    /// Returns an image view used to sample the surface from a shader
+    vk::ImageView GetImageView() const {
+        return alloc.image_view;
+    }
+
+    /// Returns an image view used to create a framebuffer
+    vk::ImageView GetFramebufferView() {
+        return alloc.base_view;
+    }
+
+    /// Returns the internal format of the allocated texture
+    vk::Format GetInternalFormat() const {
+        return alloc.format;
+    }
+
 private:
     /// Downloads scaled image by downscaling the requested rectangle
     void ScaledDownload(const VideoCore::BufferTextureCopy& download);
@@ -128,9 +157,8 @@ private:
     TextureRuntime& runtime;
     const Instance& instance;
     TaskScheduler& scheduler;
-
     ImageAlloc alloc{};
-    vk::Format internal_format = vk::Format::eUndefined;
+    FormatTraits traits;
 };
 
 struct Traits {

@@ -5,12 +5,14 @@
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include "common/assert.h"
 #include "common/logging/log.h"
+#include "video_core/renderer_vulkan/renderer_vulkan.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 
 namespace Vulkan {
 
-TaskScheduler::TaskScheduler(const Instance& instance) : instance{instance} {
+TaskScheduler::TaskScheduler(const Instance& instance, RendererVulkan& renderer)
+    : instance{instance}, renderer{renderer} {
     vk::Device device = instance.GetDevice();
     const vk::CommandPoolCreateInfo command_pool_info = {
         .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
@@ -97,11 +99,7 @@ void TaskScheduler::Synchronize(u32 slot) {
     const auto& command = commands[slot];
     vk::Device device = instance.GetDevice();
 
-    u32 completed_counter = completed_fence_counter;
-    if (instance.IsTimelineSemaphoreSupported()) {
-        completed_counter = device.getSemaphoreCounterValue(timeline);
-    }
-
+    u32 completed_counter = GetFenceCounter();
     if (command.fence_counter > completed_counter) {
         if (instance.IsTimelineSemaphoreSupported()) {
             const vk::SemaphoreWaitInfo wait_info = {
@@ -127,6 +125,10 @@ void TaskScheduler::Synchronize(u32 slot) {
 }
 
 void TaskScheduler::Submit(SubmitMode mode) {
+    if (False(mode & SubmitMode::Shutdown)) {
+        renderer.FlushBuffers();
+    }
+
     const auto& command = commands[current_command];
     command.render_command_buffer.end();
     if (command.use_upload_buffer) {
@@ -206,6 +208,7 @@ void TaskScheduler::Submit(SubmitMode mode) {
     // Switch to next cmdbuffer.
     if (False(mode & SubmitMode::Shutdown)) {
         SwitchSlot();
+        renderer.OnSlotSwitch();
     }
 }
 

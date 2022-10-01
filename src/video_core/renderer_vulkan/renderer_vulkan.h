@@ -72,6 +72,8 @@ public:
     void PrepareVideoDumping() override {}
     void CleanupVideoDumping() override {}
     void Sync() override;
+    void FlushBuffers();
+    void OnSlotSwitch();
 
 private:
     void ReloadSampler();

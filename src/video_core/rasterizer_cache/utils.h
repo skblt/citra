@@ -44,19 +44,29 @@ class SurfaceParams;
 
 [[nodiscard]] ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data);
 
-void SwizzleTexture(const SurfaceParams& params, u32 start_offset, u32 end_offset,
-                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled);
-
 /**
  * Converts a morton swizzled texture to linear format.
  *
- * @param params Structure used to query the surface information.
- * @param start_offset Is the offset at which the source_tiled span begins
+ * @param unswizzle_info Structure used to query the surface information.
+ * @param start_addr The start address of the source_tiled data.
+ * @param end_addr The end address of the source_tiled data.
+ * @param source_tiled The tiled data to convert.
+ * @param dest_linear The output buffer where the generated linear data will be written to.
+ */
+void UnswizzleTexture(const SurfaceParams& unswizzle_info, PAddr start_addr, PAddr end_addr,
+                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear);
+
+/**
+ * Swizzles a linear texture according to the morton code.
+ *
+ * @param swizzle_info Structure used to query the surface information.
+ * @param start_addr The start address of the dest_tiled data.
+ * @param end_addr The end address of the dest_tiled data.
  * @param source_tiled The source morton swizzled data.
  * @param dest_linear The output buffer where the generated linear data will be written to.
  */
-void UnswizzleTexture(const SurfaceParams& params, u32 start_offset, u32 end_offset,
-                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear);
+void SwizzleTexture(const SurfaceParams& swizzle_info, PAddr start_addr, PAddr end_addr,
+                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled);
 
 } // namespace VideoCore
 

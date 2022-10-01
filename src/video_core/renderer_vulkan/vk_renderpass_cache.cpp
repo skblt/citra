@@ -10,24 +10,23 @@
 
 namespace Vulkan {
 
-vk::Format ToVkFormatColor(u32 index) {
+VideoCore::PixelFormat ToFormatColor(u32 index) {
     switch (index) {
-    case 0: return vk::Format::eR8G8B8A8Unorm;
-    case 1: return vk::Format::eR8G8B8Unorm;
-    case 2: return vk::Format::eR5G5B5A1UnormPack16;
-    case 3: return vk::Format::eR5G6B5UnormPack16;
-    case 4: return vk::Format::eR4G4B4A4UnormPack16;
-    default: return vk::Format::eUndefined;
+    case 0: return VideoCore::PixelFormat::RGBA8;
+    case 1: return VideoCore::PixelFormat::RGB8;
+    case 2: return VideoCore::PixelFormat::RGB5A1;
+    case 3: return VideoCore::PixelFormat::RGB565;
+    case 4: return VideoCore::PixelFormat::RGBA4;
+    default: return VideoCore::PixelFormat::Invalid;
     }
 }
 
-vk::Format ToVkFormatDepth(u32 index) {
+VideoCore::PixelFormat ToFormatDepth(u32 index) {
     switch (index) {
-    case 0: return vk::Format::eD16Unorm;
-    case 1: return vk::Format::eX8D24UnormPack32;
-    // Notice the similar gap in PixelFormat
-    case 3: return vk::Format::eD24UnormS8Uint;
-    default: return vk::Format::eUndefined;
+    case 0: return VideoCore::PixelFormat::D16;
+    case 1: return VideoCore::PixelFormat::D24;
+    case 3: return VideoCore::PixelFormat::D24S8;
+    default: return VideoCore::PixelFormat::Invalid;
     }
 }
 
@@ -36,21 +35,23 @@ RenderpassCache::RenderpassCache(const Instance& instance, TaskScheduler& schedu
     // Pre-create all needed renderpasses by the renderer
     for (u32 color = 0; color <= MAX_COLOR_FORMATS; color++) {
         for (u32 depth = 0; depth <= MAX_DEPTH_FORMATS; depth++) {
-            const vk::Format color_format =
-                    instance.GetFormatAlternative(ToVkFormatColor(color));
-            const vk::Format depth_stencil_format =
-                    instance.GetFormatAlternative(ToVkFormatDepth(depth));
+            const FormatTraits color_traits = instance.GetTraits(ToFormatColor(color));
+            const FormatTraits depth_traits = instance.GetTraits(ToFormatDepth(depth));
 
-            if (color_format == vk::Format::eUndefined &&
-                    depth_stencil_format == vk::Format::eUndefined) {
+            const vk::Format color_format =
+                    color_traits.attachment_support ? color_traits.native : color_traits.fallback;
+            const vk::Format depth_format =
+                    depth_traits.attachment_support ? depth_traits.native : depth_traits.fallback;
+
+            if (color_format == vk::Format::eUndefined && depth_format == vk::Format::eUndefined) {
                 continue;
             }
 
-            cached_renderpasses[color][depth][0] = CreateRenderPass(color_format, depth_stencil_format,
+            cached_renderpasses[color][depth][0] = CreateRenderPass(color_format, depth_format,
                                                                     vk::AttachmentLoadOp::eLoad,
                                                                     vk::ImageLayout::eColorAttachmentOptimal,
                                                                     vk::ImageLayout::eColorAttachmentOptimal);
-            cached_renderpasses[color][depth][1] = CreateRenderPass(color_format, depth_stencil_format,
+            cached_renderpasses[color][depth][1] = CreateRenderPass(color_format, depth_format,
                                                                     vk::AttachmentLoadOp::eClear,
                                                                     vk::ImageLayout::eColorAttachmentOptimal,
                                                                     vk::ImageLayout::eColorAttachmentOptimal);

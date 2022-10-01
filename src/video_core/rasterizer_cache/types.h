@@ -41,6 +41,8 @@ struct TextureClear {
 struct TextureCopy {
     u32 src_level;
     u32 dst_level;
+    u32 src_layer;
+    u32 dst_layer;
     Offset src_offset;
     Offset dst_offset;
     Extent extent;

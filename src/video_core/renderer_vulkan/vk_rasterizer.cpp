@@ -94,9 +94,9 @@ constexpr VertexLayout RasterizerVulkan::HardwareVertex::GetVertexLayout() {
 }
 
 constexpr u32 VERTEX_BUFFER_SIZE = 128 * 1024 * 1024;
-constexpr u32 INDEX_BUFFER_SIZE = 2 * 1024 * 1024;
-constexpr u32 UNIFORM_BUFFER_SIZE = 2 * 1024 * 1024;
-constexpr u32 TEXTURE_BUFFER_SIZE = 2 * 1024 * 1024;
+constexpr u32 INDEX_BUFFER_SIZE = 8 * 1024 * 1024;
+constexpr u32 UNIFORM_BUFFER_SIZE = 16 * 1024 * 1024;
+constexpr u32 TEXTURE_BUFFER_SIZE = 16 * 1024 * 1024;
 
 constexpr std::array TEXTURE_BUFFER_LF_FORMATS = {
     vk::Format::eR32G32Sfloat
@@ -188,6 +188,7 @@ RasterizerVulkan::~RasterizerVulkan() {
 
     vmaDestroyImage(allocator, default_texture.image, default_texture.allocation);
     device.destroyImageView(default_texture.image_view);
+    device.destroyImageView(default_texture.base_view);
     device.destroySampler(default_sampler);
 }
 
@@ -598,12 +599,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                                          surfaces_rect.bottom, surfaces_rect.top))
     };
 
-    // Sync the viewport
-    pipeline_cache.SetViewport(surfaces_rect.left + viewport_rect_unscaled.left * res_scale,
-                               surfaces_rect.bottom + viewport_rect_unscaled.bottom * res_scale,
-                               viewport_rect_unscaled.GetWidth() * res_scale,
-                               viewport_rect_unscaled.GetHeight() * res_scale);
-
     if (uniform_block_data.data.framebuffer_scale != res_scale) {
         uniform_block_data.data.framebuffer_scale = res_scale;
         uniform_block_data.dirty = true;
@@ -678,8 +673,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         }
     };
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-
     // Sync and bind the texture surfaces
     const auto pica_textures = regs.texturing.GetTextures();
     for (unsigned texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
@@ -725,7 +718,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
                     auto surface = res_cache.GetTextureCube(config);
                     if (surface != nullptr) {
-                        runtime.Transition(command_buffer, surface->alloc,
+                        runtime.Transition(scheduler.GetRenderCommandBuffer(), surface->alloc,
                                            vk::ImageLayout::eShaderReadOnlyOptimal,
                                            0, surface->alloc.levels, 0, 6);
                         pipeline_cache.BindTexture(3, surface->alloc.image_view);
@@ -746,7 +739,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
             auto surface = res_cache.GetTextureSurface(texture);
             if (surface != nullptr) {
-                runtime.Transition(command_buffer, surface->alloc,
+                runtime.Transition(scheduler.GetRenderCommandBuffer(), surface->alloc,
                                    vk::ImageLayout::eShaderReadOnlyOptimal,
                                    0, surface->alloc.levels);
                 CheckBarrier(surface->alloc.image_view, texture_index);
@@ -767,6 +760,15 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         }
     }
 
+    // NOTE: From here onwards its a safe zone to set the draw state, doing that any earlier will cause
+    // issues as the rasterizer cache might cause a scheduler switch and invalidate our state
+
+    // Sync the viewport
+    pipeline_cache.SetViewport(surfaces_rect.left + viewport_rect_unscaled.left * res_scale,
+                               surfaces_rect.bottom + viewport_rect_unscaled.bottom * res_scale,
+                               viewport_rect_unscaled.GetWidth() * res_scale,
+                               viewport_rect_unscaled.GetHeight() * res_scale);
+
     // Sync and bind the shader
     if (shader_dirty) {
         SetShader();
@@ -786,8 +788,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     auto valid_surface = color_surface ? color_surface : depth_surface;
     const FramebufferInfo framebuffer_info = {
-        .color = color_surface ? color_surface->alloc.image_view : VK_NULL_HANDLE,
-        .depth = depth_surface ? depth_surface->alloc.image_view : VK_NULL_HANDLE,
+        .color = color_surface ? color_surface->GetFramebufferView() : VK_NULL_HANDLE,
+        .depth = depth_surface ? depth_surface->GetFramebufferView() : VK_NULL_HANDLE,
         .renderpass = renderpass_cache.GetRenderpass(pipeline_info.color_attachment,
                                                      pipeline_info.depth_attachment, false),
         .width = valid_surface->GetScaledWidth(),
@@ -799,6 +801,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         it->second = CreateFramebuffer(framebuffer_info);
     }
 
+    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     if (color_surface) {
         runtime.Transition(command_buffer, color_surface->alloc,
                            vk::ImageLayout::eColorAttachmentOptimal,
@@ -1509,15 +1512,9 @@ bool RasterizerVulkan::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
     const bool load_gap = output_gap != 0;
     auto [dst_surface, dst_rect] =
         res_cache.GetSurfaceSubRect(dst_params, VideoCore::ScaleMatch::Upscale, load_gap);
-    if (dst_surface == nullptr) {
-        return false;
-    }
 
-    if (dst_surface->type == VideoCore::SurfaceType::Texture) {
-        return false;
-    }
-
-    if (!res_cache.BlitSurfaces(src_surface, src_rect, dst_surface, dst_rect)) {
+    if (!dst_surface || dst_surface->type == VideoCore::SurfaceType::Texture ||
+            !res_cache.BlitSurfaces(src_surface, src_rect, dst_surface, dst_rect)) {
         return false;
     }
 

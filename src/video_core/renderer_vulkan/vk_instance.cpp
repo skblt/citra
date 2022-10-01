@@ -11,6 +11,33 @@
 
 namespace Vulkan {
 
+vk::Format ToVkFormat(VideoCore::PixelFormat format) {
+    switch (format) {
+    case VideoCore::PixelFormat::RGBA8:
+        return vk::Format::eR8G8B8A8Unorm;
+    case VideoCore::PixelFormat::RGB8:
+        return vk::Format::eB8G8R8Unorm;
+    case VideoCore::PixelFormat::RGB5A1:
+        return vk::Format::eR5G5B5A1UnormPack16;
+    case VideoCore::PixelFormat::RGB565:
+        return vk::Format::eR5G6B5UnormPack16;
+    case VideoCore::PixelFormat::RGBA4:
+        return vk::Format::eR4G4B4A4UnormPack16;
+    case VideoCore::PixelFormat::D16:
+        return vk::Format::eD16Unorm;
+    case VideoCore::PixelFormat::D24:
+        return vk::Format::eX8D24UnormPack32;
+    case VideoCore::PixelFormat::D24S8:
+        return vk::Format::eD24UnormS8Uint;
+    case VideoCore::PixelFormat::Invalid:
+        LOG_ERROR(Render_Vulkan, "Unknown texture format {}!", format);
+        return vk::Format::eUndefined;
+    default:
+        // Use default case for the texture formats
+        return vk::Format::eR8G8B8A8Unorm;
+    }
+}
+
 Instance::Instance(Frontend::EmuWindow& window) {
     auto window_info = window.GetWindowInfo();
 
@@ -54,6 +81,7 @@ Instance::Instance(Frontend::EmuWindow& window) {
     device_properties = physical_device.getProperties();
 
     CreateDevice();
+    CreateFormatTable();
 }
 
 Instance::~Instance() {
@@ -64,50 +92,99 @@ Instance::~Instance() {
     instance.destroy();
 }
 
-bool Instance::IsFormatSupported(vk::Format format, vk::FormatFeatureFlags usage) const {
-    static std::unordered_map<vk::Format, vk::FormatProperties> supported;
-    if (auto it = supported.find(format); it != supported.end()) {
-        return (it->second.optimalTilingFeatures & usage) == usage;
+FormatTraits Instance::GetTraits(VideoCore::PixelFormat pixel_format) const {
+    if (pixel_format == VideoCore::PixelFormat::Invalid) [[unlikely]] {
+        return FormatTraits{};
     }
 
-    // Cache format properties so we don't have to query the driver all the time
-    const vk::FormatProperties properties = physical_device.getFormatProperties(format);
-    supported.insert(std::make_pair(format, properties));
-
-    return (properties.optimalTilingFeatures & usage) == usage;
+    const u32 index = static_cast<u32>(pixel_format);
+    return format_table[index];
 }
 
-vk::Format Instance::GetFormatAlternative(vk::Format format) const {
-    if (format == vk::Format::eUndefined) {
-        return format;
-    }
+void Instance::CreateFormatTable() {
+    constexpr std::array pixel_formats = {
+        VideoCore::PixelFormat::RGBA8,
+        VideoCore::PixelFormat::RGB8,
+        VideoCore::PixelFormat::RGB5A1,
+        VideoCore::PixelFormat::RGB565,
+        VideoCore::PixelFormat::RGBA4,
+        VideoCore::PixelFormat::IA8,
+        VideoCore::PixelFormat::RG8,
+        VideoCore::PixelFormat::I8,
+        VideoCore::PixelFormat::A8,
+        VideoCore::PixelFormat::IA4,
+        VideoCore::PixelFormat::I4,
+        VideoCore::PixelFormat::A4,
+        VideoCore::PixelFormat::ETC1,
+        VideoCore::PixelFormat::ETC1A4,
+        VideoCore::PixelFormat::D16,
+        VideoCore::PixelFormat::D24,
+        VideoCore::PixelFormat::D24S8
+    };
 
-    vk::FormatFeatureFlags features = GetFormatFeatures(GetImageAspect(format));
-    if (IsFormatSupported(format, features)) {
-       return format;
-    }
+    const vk::FormatFeatureFlags storage_usage = vk::FormatFeatureFlagBits::eStorageImage;
+    const vk::FormatFeatureFlags blit_usage = vk::FormatFeatureFlagBits::eSampledImage |
+                vk::FormatFeatureFlagBits::eTransferDst |
+                vk::FormatFeatureFlagBits::eTransferSrc |
+                vk::FormatFeatureFlagBits::eBlitSrc |
+                vk::FormatFeatureFlagBits::eBlitDst;
 
-    // Return the most supported alternative format preferably with the
-    // same block size according to the Vulkan spec.
-    // See 43.3. Required Format Support of the Vulkan spec
-    switch (format) {
-    case vk::Format::eD24UnormS8Uint:
-        return vk::Format::eD32SfloatS8Uint;
-    case vk::Format::eX8D24UnormPack32:
-        return vk::Format::eD32Sfloat;
-    case vk::Format::eR5G5B5A1UnormPack16:
-        return vk::Format::eA1R5G5B5UnormPack16;
-    case vk::Format::eR8G8B8Unorm:
-        return vk::Format::eR8G8B8A8Unorm;
-    case vk::Format::eUndefined:
-        return vk::Format::eUndefined;
-    case vk::Format::eR4G4B4A4UnormPack16:
-        // B4G4R4A4 is not guaranteed by the spec to support attachments
-        return GetFormatAlternative(vk::Format::eB4G4R4A4UnormPack16);
-    default:
-        LOG_WARNING(Render_Vulkan, "Format {} doesn't support attachments, falling back to RGBA8",
-                                    vk::to_string(format));
-        return vk::Format::eR8G8B8A8Unorm;
+    for (const auto& pixel_format : pixel_formats) {
+        const vk::Format format = ToVkFormat(pixel_format);
+        const vk::FormatProperties properties = physical_device.getFormatProperties(format);
+        const vk::ImageAspectFlags aspect = GetImageAspect(format);
+
+        const vk::FormatFeatureFlagBits attachment_usage = (aspect & vk::ImageAspectFlagBits::eDepth) ?
+                    vk::FormatFeatureFlagBits::eDepthStencilAttachment :
+                    vk::FormatFeatureFlagBits::eColorAttachment;
+
+        const bool supports_blit =
+                (properties.optimalTilingFeatures & blit_usage) == blit_usage;
+        const bool supports_attachment =
+                (properties.optimalTilingFeatures & attachment_usage) == attachment_usage;
+        const bool supports_storage =
+                (properties.optimalTilingFeatures & storage_usage) == storage_usage;
+
+        // Find the most inclusive usage flags for this format
+        vk::ImageUsageFlags best_usage;
+        if (supports_blit) {
+            best_usage |= vk::ImageUsageFlagBits::eSampled |
+                    vk::ImageUsageFlagBits::eTransferDst |
+                    vk::ImageUsageFlagBits::eTransferSrc;
+        }
+        if (supports_attachment) {
+            best_usage |= (aspect & vk::ImageAspectFlagBits::eDepth) ?
+                        vk::ImageUsageFlagBits::eDepthStencilAttachment :
+                        vk::ImageUsageFlagBits::eColorAttachment;
+        }
+        if (supports_storage) {
+            best_usage |= vk::ImageUsageFlagBits::eStorage;
+        }
+
+        // Always fallback to RGBA8 or D32(S8) for convenience
+        vk::Format fallback = vk::Format::eR8G8B8A8Unorm;
+        if (aspect & vk::ImageAspectFlagBits::eDepth) {
+            fallback = vk::Format::eD32Sfloat;
+            if (aspect & vk::ImageAspectFlagBits::eStencil) {
+                fallback = vk::Format::eD32SfloatS8Uint;
+            }
+        }
+
+        // Report completely unsupported formats
+        if (!supports_blit && !supports_attachment && !supports_storage) {
+            LOG_WARNING(Render_Vulkan, "Format {} unsupported, falling back unconditionally to {}",
+                        vk::to_string(format), vk::to_string(fallback));
+        }
+
+        const u32 index = static_cast<u32>(pixel_format);
+        format_table[index] = FormatTraits{
+            .blit_support = supports_blit,
+            .attachment_support = supports_attachment,
+            .storage_support = supports_storage,
+            .usage = best_usage,
+            .native = format,
+            .fallback = fallback
+        };
     }
 }
 

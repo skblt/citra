@@ -248,7 +248,6 @@ private:
     std::array<DescriptorSetData, MAX_DESCRIPTOR_SETS> update_data{};
     std::array<bool, MAX_DESCRIPTOR_SETS> descriptor_dirty{};
     std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> descriptor_sets;
-    u64 timestamp = 0;
 
     // Bound shader modules
     enum ProgramType : u32 {
