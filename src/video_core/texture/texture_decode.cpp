@@ -233,20 +233,66 @@ void ConvertBGRToRGB(std::span<const std::byte> source, std::span<std::byte> des
 
 void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
     u32 j = 0;
-    for (std::size_t i = 0; i < source.size(); i += 3) {
-        dest[j] = source[i + 2];
-        dest[j + 1] = source[i + 1];
-        dest[j + 2] = source[i];
-        dest[j + 3] = std::byte{0xFF};
-        j += 4;
+    for (std::size_t i = 0; i < dest.size(); i += 4) {
+        dest[i] = source[j + 2];
+        dest[i + 1] = source[j + 1];
+        dest[i + 2] = source[j];
+        dest[i + 3] = std::byte{0xFF};
+        j += 3;
     }
 }
 
 void ConvertABGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
-    for (u32 i = 0; i < source.size(); i += 4) {
+    for (u32 i = 0; i < dest.size(); i += 4) {
         const u32 abgr = *reinterpret_cast<const u32*>(source.data() + i);
         const u32 rgba = Common::swap32(abgr);
         std::memcpy(dest.data() + i, &rgba, 4);
+    }
+}
+
+void ConvertD32S8ToD24S8(std::span<const std::byte> source, std::span<std::byte> dest) {
+    u32 depth_offset = 0;
+    u32 stencil_offset = 4 * source.size() / 5;
+    for (std::size_t i = 0; i < dest.size(); i += 4) {
+        float depth;
+        std::memcpy(&depth, source.data() + depth_offset, sizeof(float));
+        u32 depth_uint = depth * 0xFFFFFF;
+
+        dest[i] = source[stencil_offset];
+        std::memcpy(dest.data() + i + 1, &depth_uint, 3);
+
+        depth_offset += 4;
+        stencil_offset += 1;
+    }
+}
+
+void ConvertRGBA4ToRGBA8(std::span<const std::byte> source, std::span<std::byte> dest) {
+    u32 j = 0;
+    for (std::size_t i = 0; i < dest.size(); i += 4) {
+        auto rgba = Color::DecodeRGBA4(reinterpret_cast<const u8*>(source.data() + j));
+        std::memcpy(dest.data() + i, rgba.AsArray(), sizeof(rgba));
+        j += 2;
+    }
+}
+
+void ConvertRGBA8ToRGBA4(std::span<const std::byte> source, std::span<std::byte> dest) {
+    u32 j = 0;
+    for (std::size_t i = 0; i < dest.size(); i += 2) {
+        Common::Vec4<u8> rgba;
+        std::memcpy(rgba.AsArray(), source.data() + j, sizeof(rgba));
+        Color::EncodeRGBA4(rgba, reinterpret_cast<u8*>(dest.data() + i));
+        j += 4;
+    }
+}
+
+void InterleaveD24S8(std::span<const std::byte> source, std::span<std::byte> dest) {
+    u32 depth_offset = 0;
+    u32 stencil_offset = 3 * source.size() / 4;
+    for (std::size_t i = 0; i < dest.size(); i += 4) {
+        dest[i] = source[stencil_offset];
+        std::memcpy(dest.data() + i + 1, source.data() + depth_offset, 3);
+        depth_offset += 3;
+        stencil_offset += 1;
     }
 }
 

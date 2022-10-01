@@ -124,8 +124,9 @@ const FormatTuple& TextureRuntime::GetFormatTuple(VideoCore::PixelFormat pixel_f
     return DEFAULT_TUPLE;
 }
 
-void TextureRuntime::FormatConvert(VideoCore::PixelFormat format,  bool upload,
+void TextureRuntime::FormatConvert(const Surface& surface,  bool upload,
                                    std::span<std::byte> source, std::span<std::byte> dest) {
+    const VideoCore::PixelFormat format = surface.pixel_format;
     if (format == VideoCore::PixelFormat::RGBA8 && driver.IsOpenGLES()) {
         Pica::Texture::ConvertABGRToRGBA(source, dest);
     } else if (format == VideoCore::PixelFormat::RGB8 && driver.IsOpenGLES()) {
