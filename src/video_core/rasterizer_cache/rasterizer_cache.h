@@ -163,7 +163,8 @@ private:
     SurfaceMap dirty_regions;
     SurfaceSet remove_surfaces;
     u16 resolution_scale_factor;
-
+    std::vector<std::function<void()>> download_queue;
+    std::vector<std::byte> staging_buffer;
     std::unordered_map<TextureCubeConfig, Surface> texture_cube_cache;
     std::recursive_mutex mutex;
 };
@@ -269,9 +270,26 @@ bool RasterizerCache<T>::BlitSurfaces(const Surface& src_surface, Common::Rectan
                                       const Surface& dst_surface, Common::Rectangle<u32> dst_rect) {
     MICROPROFILE_SCOPE(RasterizerCache_BlitSurface);
 
-    if (CheckFormatsBlittable(src_surface->pixel_format, dst_surface->pixel_format)) {
-        dst_surface->InvalidateAllWatcher();
+    if (!CheckFormatsBlittable(src_surface->pixel_format, dst_surface->pixel_format)) [[unlikely]] {
+        return false;
+    }
 
+    dst_surface->InvalidateAllWatcher();
+
+    // Prefer texture copy over blit if possible
+    if (src_rect.GetWidth() == dst_rect.GetWidth() && src_rect.bottom < src_rect.top) {
+        const TextureCopy texture_copy = {
+            .src_level = 0,
+            .dst_level = 0,
+            .src_layer = 0,
+            .dst_layer = 0,
+            .src_offset = {src_rect.left, src_rect.bottom},
+            .dst_offset = {dst_rect.left, dst_rect.bottom},
+            .extent = {src_rect.GetWidth(), src_rect.GetHeight()}
+        };
+
+        return runtime.CopyTextures(*src_surface, *dst_surface, texture_copy);
+    } else {
         const TextureBlit texture_blit = {
             .src_level = 0,
             .dst_level = 0,
@@ -283,8 +301,6 @@ bool RasterizerCache<T>::BlitSurfaces(const Surface& src_surface, Common::Rectan
 
         return runtime.BlitTextures(*src_surface, *dst_surface, texture_blit);
     }
-
-    return false;
 }
 
 MICROPROFILE_DECLARE(RasterizerCache_CopySurface);
@@ -888,35 +904,31 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
 MICROPROFILE_DECLARE(RasterizerCache_SurfaceLoad);
 template <class T>
 void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval interval) {
-    const SurfaceParams info = surface->FromInterval(interval);
-    const u32 load_start = info.addr;
-    const u32 load_end = info.end;
-    ASSERT(load_start >= surface->addr && load_end <= surface->end);
+    const SurfaceParams load_info = surface->FromInterval(interval);
+    ASSERT(load_info.addr >= surface->addr && load_info.end <= surface->end);
+
+    MICROPROFILE_SCOPE(RasterizerCache_SurfaceLoad);
 
     const auto& staging = runtime.FindStaging(
-                surface->width * surface->height * 4, true);
-    MemoryRef source_ptr = VideoCore::g_memory->GetPhysicalRef(info.addr);
+                load_info.width * load_info.height * surface->GetInternalBytesPerPixel(), true);
+    MemoryRef source_ptr = VideoCore::g_memory->GetPhysicalRef(load_info.addr);
     if (!source_ptr) [[unlikely]] {
         return;
     }
 
-    const auto upload_data = source_ptr.GetWriteBytes(load_end - load_start);
-
-    MICROPROFILE_SCOPE(RasterizerCache_SurfaceLoad);
-
+    const auto upload_data = source_ptr.GetWriteBytes(load_info.end - load_info.addr);
     if (surface->is_tiled) {
-        std::vector<std::byte> unswizzled_data(staging.size);
-        UnswizzleTexture(*surface, load_start - surface->addr, load_end - surface->addr,
-                         upload_data, unswizzled_data);
-        runtime.FormatConvert(surface->pixel_format, true, unswizzled_data, staging.mapped);
+        std::vector<std::byte> unswizzled_data(load_info.width * load_info.height * GetBytesPerPixel(load_info.pixel_format));
+        UnswizzleTexture(load_info, load_info.addr, load_info.end, upload_data, unswizzled_data);
+        runtime.FormatConvert(*surface, true, unswizzled_data, staging.mapped);
     } else {
-        runtime.FormatConvert(surface->pixel_format, true, upload_data, staging.mapped);
+        runtime.FormatConvert(*surface, true, upload_data, staging.mapped);
     }
 
     const BufferTextureCopy upload = {
         .buffer_offset = 0,
         .buffer_size = staging.size,
-        .texture_rect = surface->GetSubRect(info),
+        .texture_rect = surface->GetSubRect(load_info),
         .texture_level = 0
     };
 
@@ -926,17 +938,17 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
 MICROPROFILE_DECLARE(RasterizerCache_SurfaceFlush);
 template <class T>
 void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval interval) {
+    const SurfaceParams flush_info = surface->FromInterval(interval);
     const u32 flush_start = boost::icl::first(interval);
     const u32 flush_end = boost::icl::last_next(interval);
     ASSERT(flush_start >= surface->addr && flush_end <= surface->end);
 
     const auto& staging = runtime.FindStaging(
-                surface->width * surface->height * 4, false);
-    const SurfaceParams params = surface->FromInterval(interval);
+                flush_info.width * flush_info.height * surface->GetInternalBytesPerPixel(), false);
     const BufferTextureCopy download = {
         .buffer_offset = 0,
         .buffer_size = staging.size,
-        .texture_rect = surface->GetSubRect(params),
+        .texture_rect = surface->GetSubRect(flush_info),
         .texture_level = 0
     };
 
@@ -948,17 +960,15 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
     }
 
     const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
-
-    MICROPROFILE_SCOPE(RasterizerCache_SurfaceFlush);
-
-    if (surface->is_tiled) {
-        std::vector<std::byte> swizzled_data(staging.size);
-        runtime.FormatConvert(surface->pixel_format, false, swizzled_data, swizzled_data);
-        SwizzleTexture(*surface, flush_start - surface->addr, flush_end - surface->addr,
-                       staging.mapped, download_dest);
-    } else {
-        runtime.FormatConvert(surface->pixel_format, false, staging.mapped, download_dest);
-    }
+    download_queue.push_back([this, surface, download_dest, flush_start, flush_end, flush_info, mapped = staging.mapped]() {
+        if (surface->is_tiled) {
+            std::vector<std::byte> temp_data(flush_info.width * flush_info.height * GetBytesPerPixel(flush_info.pixel_format));
+            runtime.FormatConvert(*surface, false, mapped, temp_data);
+            SwizzleTexture(flush_info, flush_start, flush_end, temp_data, download_dest);
+        } else {
+            runtime.FormatConvert(*surface, false, mapped, download_dest);
+        }
+    });
 }
 
 template <class T>
@@ -1133,6 +1143,17 @@ void RasterizerCache<T>::FlushRegion(PAddr addr, u32 size, Surface flush_surface
         }
 
         flushed_intervals += interval;
+    }
+
+    // Batch execute all requested downloads. This gives more time for them to complete
+    // before we issue the CPU to GPU flush and reduces scheduler slot switches in Vulkan
+    if (!download_queue.empty()) {
+        runtime.Finish();
+        for (auto& download_func : download_queue) {
+            download_func();
+        }
+
+        download_queue.clear();
     }
 
     // Reset dirty regions
