@@ -135,42 +135,53 @@ inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer, std::sp
     }
 }
 
+/**
+ * @brief Performs morton to/from linear convertions on the provided pixel data
+ * @param width, height The dimentions of the rectangular region of pixels in linear_buffer
+ * @param start_offset The number of bytes from the start of the first tile to the start of tiled_buffer
+ * @param end_offset The number of bytes from the start of the first tile to the end of tiled_buffer
+ * @param linear_buffer The linear pixel data
+ * @param tiled_buffer The tiled pixel data
+ *
+ * The MortonCopy is at the heart of the PICA texture implementation, as it's responsible for converting between
+ * linear and morton tiled layouts. The function handles both convertions but there are slightly different
+ * paths and inputs for each:
+ *
+ * Morton to Linear:
+ * During uploads, tiled_buffer is always aligned to the tile or scanline boundary depending if the linear rectangle
+ * spans multiple vertical tiles. linear_buffer does not reference the entire texture area, but rather the
+ * specific rectangle affected by the upload.
+ *
+ * Linear to Morton:
+ * This is similar to the other convertion but with some differences. In this case tiled_buffer is not required
+ * to be aligned to any specific boundary which requires special care. start_offset/end_offset are useful
+ * here as they tell us exactly where the data should be placed in the linear_buffer.
+ */
 template <bool morton_to_linear, PixelFormat format>
-static void MortonCopy(u32 stride, u32 height, u32 start_offset, u32 end_offset,
-                       std::span<std::byte> linear_buffer,
-                       std::span<std::byte> tiled_buffer) {
-
+static void MortonCopy(u32 width, u32 height, u32 start_offset, u32 end_offset,
+                        std::span<std::byte> linear_buffer, std::span<std::byte> tiled_buffer) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
     constexpr u32 aligned_bytes_per_pixel = GetBytesPerPixel(format);
+    constexpr u32 tile_size = GetFormatBpp(format) * 64 / 8;
     static_assert(aligned_bytes_per_pixel >= bytes_per_pixel, "");
 
-    // We could use bytes_per_pixel here but it should be avoided because it
-    // becomes zero for 4-bit textures!
-    constexpr u32 tile_size = GetFormatBpp(format) * 64 / 8;
-    const u32 linear_tile_size = (7 * stride + 8) * aligned_bytes_per_pixel;
-
-    // Does this line have any significance?
-    //u32 linear_offset = aligned_bytes_per_pixel - bytes_per_pixel;
-    u32 linear_offset = 0;
-    u32 tiled_offset = 0;
-
-    const PAddr aligned_down_start_offset = Common::AlignDown(start_offset, tile_size);
-    const PAddr aligned_start_offset = Common::AlignUp(start_offset, tile_size);
-    PAddr aligned_end_offset = Common::AlignDown(end_offset, tile_size);
+    const u32 linear_tile_stride = (7 * width + 8) * aligned_bytes_per_pixel;
+    const u32 aligned_down_start_offset = Common::AlignDown(start_offset, tile_size);
+    const u32 aligned_start_offset = Common::AlignUp(start_offset, tile_size);
+    const u32 aligned_end_offset = Common::AlignDown(end_offset, tile_size);
 
     ASSERT(!morton_to_linear || (aligned_start_offset == start_offset && aligned_end_offset == end_offset));
 
-    const u32 begin_pixel_index = aligned_down_start_offset * 8 / GetFormatBpp(format);
-    u32 x = (begin_pixel_index % (stride * 8)) / 8;
-    u32 y = (begin_pixel_index / (stride * 8)) * 8;
-
     // In OpenGL the texture origin is in the bottom left corner as opposed to other
     // APIs that have it at the top left. To avoid flipping texture coordinates in
-    // the shader we read/write the linear buffer backwards
-    linear_offset += ((height - 8 - y) * stride + x) * aligned_bytes_per_pixel;
+    // the shader we read/write the linear buffer from the bottom up
+    u32 linear_offset = ((height - 8) * width) * aligned_bytes_per_pixel;
+    u32 tiled_offset = 0;
+    u32 x = 0;
+    u32 y = 0;
 
-    auto linear_next_tile = [&] {
-        x = (x + 8) % stride;
+    const auto LinearNextTile = [&] {
+        x = (x + 8) % width;
         linear_offset += 8 * aligned_bytes_per_pixel;
         if (!x) {
             y  = (y + 8) % height;
@@ -178,7 +189,7 @@ static void MortonCopy(u32 stride, u32 height, u32 start_offset, u32 end_offset,
                 return;
             }
 
-            linear_offset -= stride * 9 * aligned_bytes_per_pixel;
+            linear_offset -= width * 9 * aligned_bytes_per_pixel;
         }
     };
 
@@ -186,31 +197,31 @@ static void MortonCopy(u32 stride, u32 height, u32 start_offset, u32 end_offset,
     // the tile affected to a temporary buffer and copy the part we are interested in
     if (start_offset < aligned_start_offset && !morton_to_linear) {
         std::array<std::byte, tile_size> tmp_buf;
-        auto linear_data = linear_buffer.last(linear_buffer.size_bytes() - linear_offset);
-        MortonCopyTile<morton_to_linear, format>(stride, tmp_buf, linear_data);
+        auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_stride);
+        MortonCopyTile<morton_to_linear, format>(width, tmp_buf, linear_data);
 
         std::memcpy(tiled_buffer.data(), tmp_buf.data() + start_offset - aligned_down_start_offset,
                     std::min(aligned_start_offset, end_offset) - start_offset);
 
         tiled_offset += aligned_start_offset - start_offset;
-        linear_next_tile();
+        LinearNextTile();
     }
 
     const u32 buffer_end = tiled_offset + aligned_end_offset - aligned_start_offset;
     while (tiled_offset < buffer_end) {
-        auto linear_data = linear_buffer.last(linear_buffer.size_bytes() - linear_offset);
+        auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_stride);
         auto tiled_data = tiled_buffer.subspan(tiled_offset, tile_size);
-        MortonCopyTile<morton_to_linear, format>(stride, tiled_data, linear_data);
+        MortonCopyTile<morton_to_linear, format>(width, tiled_data, linear_data);
         tiled_offset += tile_size;
-        linear_next_tile();
+        LinearNextTile();
     }
 
     // If during a texture download the end coordinate is not tile aligned, swizzle
     // the tile affected to a temporary buffer and copy the part we are interested in
     if (end_offset > std::max(aligned_start_offset, aligned_end_offset) && !morton_to_linear) {
         std::array<std::byte, tile_size> tmp_buf;
-        auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_size);
-        MortonCopyTile<morton_to_linear, format>(stride, tmp_buf, linear_data);
+        auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_stride);
+        MortonCopyTile<morton_to_linear, format>(width, tmp_buf, linear_data);
         std::memcpy(tiled_buffer.data() + tiled_offset, tmp_buf.data(), end_offset - aligned_end_offset);
     }
 }

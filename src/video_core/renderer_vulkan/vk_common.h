@@ -26,11 +26,11 @@ constexpr vk::ImageAspectFlags GetImageAspect(vk::Format format) {
     switch (format) {
     case vk::Format::eD16UnormS8Uint:
     case vk::Format::eD24UnormS8Uint:
-    case vk::Format::eX8D24UnormPack32:
     case vk::Format::eD32SfloatS8Uint:
         return vk::ImageAspectFlagBits::eStencil | vk::ImageAspectFlagBits::eDepth;
         break;
     case vk::Format::eD16Unorm:
+    case vk::Format::eX8D24UnormPack32:
     case vk::Format::eD32Sfloat:
         return vk::ImageAspectFlagBits::eDepth;
         break;

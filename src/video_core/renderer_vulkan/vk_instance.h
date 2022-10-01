@@ -4,8 +4,9 @@
 
 #pragma once
 
-#include <memory>
-#include "common/common_types.h"
+#include <array>
+#include <unordered_map>
+#include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 
 namespace Frontend {
@@ -14,17 +15,23 @@ class EmuWindow;
 
 namespace Vulkan {
 
+struct FormatTraits {
+    bool blit_support = false; ///< True if the format supports omnidirectonal blit operations
+    bool attachment_support = false; ///< True if the format supports being used as an attachment
+    bool storage_support = false; ///< True if the format supports storage operations
+    vk::ImageUsageFlags usage{}; ///< Most supported usage for the native format
+    vk::Format native = vk::Format::eUndefined; ///< Closest possible native format
+    vk::Format fallback = vk::Format::eUndefined; ///< Best fallback format
+};
+
 /// The global Vulkan instance
 class Instance {
 public:
     Instance(Frontend::EmuWindow& window);
     ~Instance();
 
-    /// Returns true when the format supports the provided feature flags
-    bool IsFormatSupported(vk::Format format, vk::FormatFeatureFlags usage) const;
-
-    /// Returns the most compatible format that supports the provided feature flags
-    vk::Format GetFormatAlternative(vk::Format format) const;
+    /// Returns the FormatTraits struct for the provided pixel format
+    FormatTraits GetTraits(VideoCore::PixelFormat pixel_format) const;
 
     /// Returns the Vulkan instance
     vk::Instance GetInstance() const {
@@ -103,6 +110,12 @@ public:
     }
 
 private:
+    /// Returns the optimal supported usage for the requested format
+    vk::FormatFeatureFlags GetFormatFeatures(vk::Format format);
+
+    /// Creates the format compatibility table for the current device
+    void CreateFormatTable();
+
     /// Creates the logical device opportunistically enabling extensions
     bool CreateDevice();
 
@@ -118,9 +131,9 @@ private:
     VmaAllocator allocator;
     vk::Queue present_queue;
     vk::Queue graphics_queue;
+    std::array<FormatTraits, VideoCore::PIXEL_FORMAT_COUNT> format_table;
     u32 present_queue_family_index = 0;
     u32 graphics_queue_family_index = 0;
-
     bool timeline_semaphores = false;
     bool extended_dynamic_state = false;
     bool push_descriptors = false;
