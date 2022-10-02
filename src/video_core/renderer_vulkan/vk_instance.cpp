@@ -38,7 +38,7 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
     }
 }
 
-Instance::Instance(Frontend::EmuWindow& window) {
+Instance::Instance(Frontend::EmuWindow& window, bool enable_validation) {
     auto window_info = window.GetWindowInfo();
 
     // Fetch instance independant function pointers
@@ -64,9 +64,10 @@ Instance::Instance(Frontend::EmuWindow& window) {
     };
 
     const std::array layers = {"VK_LAYER_KHRONOS_validation"};
+    const u32 layer_count = enable_validation ? 1u : 0u;
     const vk::InstanceCreateInfo instance_info = {
         .pApplicationInfo = &application_info,
-        .enabledLayerCount = static_cast<u32>(layers.size()),
+        .enabledLayerCount = layer_count,
         .ppEnabledLayerNames = layers.data(),
         .enabledExtensionCount = static_cast<u32>(extensions.size()),
         .ppEnabledExtensionNames = extensions.data()

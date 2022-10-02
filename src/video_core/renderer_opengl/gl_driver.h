@@ -33,31 +33,37 @@ enum class DriverBug {
  */
 class Driver {
 public:
-    Driver(bool gles);
+    Driver(bool gles, bool enable_debug);
 
     /// Returns true of the driver has a particular bug stated in the DriverBug enum
     bool HasBug(DriverBug bug) const;
 
+    /// Returns the vendor of the currently selected physical device
     Vendor GetVendor() const {
         return vendor;
     }
 
+    /// Returns true if the current context is ES compatible
     bool IsOpenGLES() const {
         return is_gles;
     }
 
+    /// Returns true if the implementation supports ARB_buffer_storage
     bool HasArbBufferStorage() const {
         return arb_buffer_storage;
     }
 
+    /// Returns true if the implementation supports EXT_buffer_storage
     bool HasExtBufferStorage() const {
         return ext_buffer_storage;
     }
 
+    /// Returns true if the implementation supports EXT_clip_cull_distance
     bool HasExtClipCullDistance() const {
         return ext_clip_cull_distance;
     }
 
+    /// Returns true if the implementation supports ARB_direct_state_access
     bool HasArbDirectStateAccess() const {
         return arb_direct_state_access;
     }

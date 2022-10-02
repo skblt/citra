@@ -16,7 +16,6 @@
 #include "citra_qt/util/spinbox.h"
 #include "common/color.h"
 #include "core/core.h"
-#include "core/hw/gpu.h"
 #include "core/memory.h"
 #include "video_core/pica_state.h"
 #include "video_core/regs_framebuffer.h"

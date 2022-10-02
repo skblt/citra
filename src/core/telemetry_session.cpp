@@ -3,12 +3,9 @@
 // Refer to the license.txt file included.
 
 #include <cryptopp/osrng.h>
-
-#include "common/assert.h"
 #include "common/common_types.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
-#include "common/scm_rev.h"
 #include "core/core.h"
 #include "core/settings.h"
 #include "core/telemetry_session.h"

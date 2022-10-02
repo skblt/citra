@@ -9,7 +9,6 @@
 #include <QMessageBox>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
-#include <QOpenGLFunctions_4_3_Core>
 #include <QOpenGLExtraFunctions>
 #include <fmt/format.h>
 #include "citra_qt/bootmanager.h"
@@ -121,8 +120,20 @@ public:
     /// Create the original context that should be shared from
     explicit OpenGLSharedContext(QSurface* surface) : surface(surface) {
         QSurfaceFormat format;
-        format.setVersion(4, 4);
-        format.setProfile(QSurfaceFormat::CoreProfile);
+
+        if (Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES) {
+            QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
+            format.setVersion(3, 2);
+        } else {
+            QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
+            format.setVersion(4, 4);
+            format.setProfile(QSurfaceFormat::CoreProfile);
+        }
+
+        if (Settings::values.renderer_debug) {
+            format.setOption(QSurfaceFormat::FormatOption::DebugContext);
+        }
+
         // TODO: expose a setting for buffer value (ie default/single/double/triple)
         format.setSwapBehavior(QSurfaceFormat::DefaultSwapBehavior);
         format.setSwapInterval(0);
@@ -636,14 +647,6 @@ bool GRenderWindow::InitializeOpenGL() {
     main_context = context;
     child->SetContext(
         std::make_unique<OpenGLSharedContext>(context->GetShareContext(), child->windowHandle()));
-
-    // Check for OpenGL 4.3 support
-    if (!QOpenGLContext::globalShareContext()->versionFunctions<QOpenGLFunctions_4_3_Core>()) {
-        QMessageBox::critical(this, tr("OpenGL 4.3 Unsupported"),
-                              tr("Your GPU may not support OpenGL 4.3, or you do not "
-                                 "have the latest graphics driver."));
-        return false;
-    }
 
     return true;
 }

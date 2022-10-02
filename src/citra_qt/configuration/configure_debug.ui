@@ -122,6 +122,16 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QCheckBox" name="toggle_renderer_debug">
+        <property name="toolTip">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enables debug reporting in the currently selected graphics API. Causes measurable performance loss, don't enable unless for debugging purposes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+        <property name="text">
+         <string>Enable debug renderer</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>

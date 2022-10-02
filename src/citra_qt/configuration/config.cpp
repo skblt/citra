@@ -481,6 +481,10 @@ void Config::ReadPathValues() {
 void Config::ReadRendererValues() {
     qt_config->beginGroup(QStringLiteral("Renderer"));
 
+    Settings::values.graphics_api = static_cast<Settings::GraphicsAPI>(
+        ReadSetting(QStringLiteral("graphics_api"), static_cast<u32>(Settings::GraphicsAPI::OpenGL))
+                .toUInt());
+    Settings::values.renderer_debug = ReadSetting(QStringLiteral("renderer_debug"), false).toBool();
     Settings::values.use_hw_renderer =
         ReadSetting(QStringLiteral("use_hw_renderer"), true).toBool();
     Settings::values.use_hw_shader = ReadSetting(QStringLiteral("use_hw_shader"), true).toBool();
@@ -996,6 +1000,9 @@ void Config::SavePathValues() {
 void Config::SaveRendererValues() {
     qt_config->beginGroup(QStringLiteral("Renderer"));
 
+    WriteSetting(QStringLiteral("graphics_api"), static_cast<u32>(Settings::values.graphics_api),
+                 static_cast<u32>(Settings::GraphicsAPI::OpenGL));
+    WriteSetting(QStringLiteral("renderer_debug"), Settings::values.renderer_debug, false);
     WriteSetting(QStringLiteral("use_hw_renderer"), Settings::values.use_hw_renderer, true);
     WriteSetting(QStringLiteral("use_hw_shader"), Settings::values.use_hw_shader, true);
 #ifdef __APPLE__

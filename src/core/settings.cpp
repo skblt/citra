@@ -107,16 +107,15 @@ void LogSettings() {
     log_setting("Audio_OutputDevice", values.audio_device_id);
     log_setting("Audio_InputDeviceType", values.mic_input_type);
     log_setting("Audio_InputDevice", values.mic_input_device);
-    using namespace Service::CAM;
-    log_setting("Camera_OuterRightName", values.camera_name[OuterRightCamera]);
-    log_setting("Camera_OuterRightConfig", values.camera_config[OuterRightCamera]);
-    log_setting("Camera_OuterRightFlip", values.camera_flip[OuterRightCamera]);
-    log_setting("Camera_InnerName", values.camera_name[InnerCamera]);
-    log_setting("Camera_InnerConfig", values.camera_config[InnerCamera]);
-    log_setting("Camera_InnerFlip", values.camera_flip[InnerCamera]);
-    log_setting("Camera_OuterLeftName", values.camera_name[OuterLeftCamera]);
-    log_setting("Camera_OuterLeftConfig", values.camera_config[OuterLeftCamera]);
-    log_setting("Camera_OuterLeftFlip", values.camera_flip[OuterLeftCamera]);
+    log_setting("Camera_OuterRightName", values.camera_name[Service::CAM::OuterRightCamera]);
+    log_setting("Camera_OuterRightConfig", values.camera_config[Service::CAM::OuterRightCamera]);
+    log_setting("Camera_OuterRightFlip", values.camera_flip[Service::CAM::OuterRightCamera]);
+    log_setting("Camera_InnerName", values.camera_name[Service::CAM::InnerCamera]);
+    log_setting("Camera_InnerConfig", values.camera_config[Service::CAM::InnerCamera]);
+    log_setting("Camera_InnerFlip", values.camera_flip[Service::CAM::InnerCamera]);
+    log_setting("Camera_OuterLeftName", values.camera_name[Service::CAM::OuterLeftCamera]);
+    log_setting("Camera_OuterLeftConfig", values.camera_config[Service::CAM::OuterLeftCamera]);
+    log_setting("Camera_OuterLeftFlip", values.camera_flip[Service::CAM::OuterLeftCamera]);
     log_setting("DataStorage_UseVirtualSd", values.use_virtual_sd);
     log_setting("DataStorage_UseCustomStorage", values.use_custom_storage);
     if (values.use_custom_storage) {
