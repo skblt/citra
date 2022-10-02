@@ -2,7 +2,6 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#pragma once
 #include "common/assert.h"
 #include "video_core/texture/texture_decode.h"
 #include "video_core/rasterizer_cache/morton_swizzle.h"
@@ -10,24 +9,6 @@
 #include "video_core/rasterizer_cache/utils.h"
 
 namespace VideoCore {
-
-void SwizzleTexture(const SurfaceParams& swizzle_info, PAddr start_addr, PAddr end_addr,
-                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled) {
-    const u32 func_index = static_cast<u32>(swizzle_info.pixel_format);
-    const MortonFunc SwizzleImpl = SWIZZLE_TABLE[func_index];
-    SwizzleImpl(swizzle_info.width, swizzle_info.height,
-                start_addr - swizzle_info.addr, end_addr - swizzle_info.addr,
-                source_linear, dest_tiled);
-}
-
-void UnswizzleTexture(const SurfaceParams& unswizzle_info, PAddr start_addr, PAddr end_addr,
-                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear) {
-    const u32 func_index = static_cast<u32>(unswizzle_info.pixel_format);
-    const MortonFunc UnswizzleImpl = UNSWIZZLE_TABLE[func_index];
-    UnswizzleImpl(unswizzle_info.width, unswizzle_info.height,
-                  start_addr - unswizzle_info.addr, end_addr - unswizzle_info.addr,
-                  dest_linear, source_tiled);
-}
 
 ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data) {
     ClearValue result{};
@@ -37,8 +18,7 @@ ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_d
     case SurfaceType::Fill: {
         Pica::Texture::TextureInfo tex_info{};
         tex_info.format = static_cast<Pica::TexturingRegs::TextureFormat>(format);
-
-        Common::Vec4<u8> color = Pica::Texture::LookupTexture(fill_data, 0, 0, tex_info);
+        const auto color = Pica::Texture::LookupTexture(fill_data, 0, 0, tex_info);
         result.color = color / 255.f;
         break;
     }
@@ -56,7 +36,6 @@ ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_d
     case SurfaceType::DepthStencil: {
         u32 clear_value_uint;
         std::memcpy(&clear_value_uint, fill_data, sizeof(u32));
-
         result.depth = (clear_value_uint & 0xFFFFFF) / 16777215.0f; // 2^24 - 1
         result.stencil = (clear_value_uint >> 24);
         break;
@@ -66,6 +45,24 @@ ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_d
     }
 
     return result;
+}
+
+void SwizzleTexture(const SurfaceParams& swizzle_info, PAddr start_addr, PAddr end_addr,
+                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled) {
+    const u32 func_index = static_cast<u32>(swizzle_info.pixel_format);
+    const MortonFunc SwizzleImpl = SWIZZLE_TABLE[func_index];
+    SwizzleImpl(swizzle_info.width, swizzle_info.height,
+                start_addr - swizzle_info.addr, end_addr - swizzle_info.addr,
+                source_linear, dest_tiled);
+}
+
+void UnswizzleTexture(const SurfaceParams& unswizzle_info, PAddr start_addr, PAddr end_addr,
+                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear) {
+    const u32 func_index = static_cast<u32>(unswizzle_info.pixel_format);
+    const MortonFunc UnswizzleImpl = UNSWIZZLE_TABLE[func_index];
+    UnswizzleImpl(unswizzle_info.width, unswizzle_info.height,
+                  start_addr - unswizzle_info.addr, end_addr - unswizzle_info.addr,
+                  dest_linear, source_tiled);
 }
 
 } // namespace VideoCore
