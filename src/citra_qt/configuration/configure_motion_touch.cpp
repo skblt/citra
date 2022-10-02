@@ -46,6 +46,9 @@ CalibrationConfigurationDialog::CalibrationConfigurationDialog(QWidget* parent,
             case CalibrationConfigurationJob::Status::Completed:
                 text = tr("Configuration completed!");
                 break;
+            default:
+                LOG_ERROR(Frontend, "Unknown calibration status {}", status);
+                break;
             }
             QMetaObject::invokeMethod(this, "UpdateLabelText", Q_ARG(QString, text));
             if (status == CalibrationConfigurationJob::Status::Completed) {
@@ -99,9 +102,9 @@ ConfigureMotionTouch::ConfigureMotionTouch(QWidget* parent)
            "style=\"text-decoration: underline; color:#039be5;\">Learn More</span></a>"));
 
     timeout_timer->setSingleShot(true);
-    connect(timeout_timer.get(), &QTimer::timeout, [this]() { SetPollingResult({}, true); });
+    connect(timeout_timer.get(), &QTimer::timeout, this, [this]() { SetPollingResult({}, true); });
 
-    connect(poll_timer.get(), &QTimer::timeout, [this]() {
+    connect(poll_timer.get(), &QTimer::timeout, this, [this]() {
         Common::ParamPackage params;
         for (auto& poller : device_pollers) {
             params = poller->GetNextInput();
@@ -202,7 +205,7 @@ void ConfigureMotionTouch::ConnectEvents() {
     connect(ui->touch_provider,
             static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this,
             [this]([[maybe_unused]] int index) { UpdateUiDisplay(); });
-    connect(ui->motion_controller_button, &QPushButton::clicked, [=]() {
+    connect(ui->motion_controller_button, &QPushButton::clicked, this, [=]() {
         if (QMessageBox::information(this, tr("Information"),
                                      tr("After pressing OK, press a button on the controller whose "
                                         "motion you want to track."),
@@ -210,7 +213,7 @@ void ConfigureMotionTouch::ConnectEvents() {
             ui->motion_controller_button->setText(tr("[press button]"));
             ui->motion_controller_button->setFocus();
 
-            input_setter = [=](const Common::ParamPackage& params) {
+            input_setter = [this](const Common::ParamPackage& params) {
                 guid = params.Get("guid", "0");
                 port = params.Get("port", 0);
             };

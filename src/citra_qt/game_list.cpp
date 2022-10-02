@@ -170,7 +170,7 @@ GameListSearchField::GameListSearchField(GameList* parent) : QWidget{parent} {
  */
 static bool ContainsAllWords(const QString& haystack, const QString& userinput) {
     const QStringList userinput_split =
-        userinput.split(QLatin1Char{' '}, QString::SplitBehavior::SkipEmptyParts);
+        userinput.split(QLatin1Char{' '}, Qt::SkipEmptyParts);
 
     return std::all_of(userinput_split.begin(), userinput_split.end(),
                        [&haystack](const QString& s) { return haystack.contains(s); });
