@@ -1393,7 +1393,7 @@ ResultCode SVC::AcceptSession(Handle* out_server_session, Handle server_port_han
     return RESULT_SUCCESS;
 }
 
-static void CopyStringPart(char* out, const char* in, int offset, int max_length) {
+static void CopyStringPart(char* out, const char* in, size_t offset, size_t max_length) {
     size_t str_size = strlen(in);
     if (offset < str_size) {
         strncpy(out, in + offset, max_length - 1);

@@ -190,8 +190,9 @@ void CheatDialog::OnDeleteCheat() {
     if (newly_created) {
         newly_created = false;
     } else {
-        Core::System::GetInstance().CheatEngine().RemoveCheat(ui->tableCheats->currentRow());
-        Core::System::GetInstance().CheatEngine().SaveCheatFile();
+        auto& cheat_engine = Core::System::GetInstance().CheatEngine();
+        cheat_engine.RemoveCheat(ui->tableCheats->currentRow());
+        cheat_engine.SaveCheatFile();
     }
 
     LoadCheats();
