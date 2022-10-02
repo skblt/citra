@@ -244,7 +244,8 @@ void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> de
 
 void ConvertABGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
     for (u32 i = 0; i < dest.size(); i += 4) {
-        const u32 abgr = *reinterpret_cast<const u32*>(source.data() + i);
+        u32 abgr;
+        std::memcpy(&abgr, source.data() + i, sizeof(u32));
         const u32 rgba = Common::swap32(abgr);
         std::memcpy(dest.data() + i, &rgba, 4);
     }
