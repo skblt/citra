@@ -3,11 +3,11 @@
 // Refer to the license.txt file included.
 
 #pragma once
+
 #include <memory>
 #include "common/alignment.h"
 #include "common/assert.h"
 #include "video_core/rasterizer_cache/surface_params.h"
-#include "video_core/rasterizer_cache/utils.h"
 
 namespace VideoCore {
 
@@ -208,4 +208,4 @@ void SurfaceBase<S>::UnlinkAllWatcher() {
     watcher_count = 0;
 }
 
-} // namespace OpenGL
+} // namespace VideoCore

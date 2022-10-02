@@ -8,7 +8,6 @@
 #include <vulkan/vulkan_hash.hpp>
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/rasterizer_cache/surface_base.h"
-#include "video_core/rasterizer_cache/types.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
