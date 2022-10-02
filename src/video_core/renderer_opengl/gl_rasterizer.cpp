@@ -430,6 +430,8 @@ static GLenum GetCurrentPrimitiveMode() {
     default:
         UNREACHABLE();
     }
+
+    return GL_TRIANGLES;
 }
 
 bool RasterizerOpenGL::AccelerateDrawBatchInternal(bool is_indexed) {
