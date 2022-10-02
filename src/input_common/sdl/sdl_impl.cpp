@@ -17,7 +17,6 @@
 #include <numbers>
 #include <SDL.h>
 #include "common/logging/log.h"
-#include "common/math_util.h"
 #include "common/param_package.h"
 #include "common/threadsafe_queue.h"
 #include "core/frontend/input.h"
@@ -597,10 +596,9 @@ void SDLState::HandleGameControllerEvent(const SDL_Event& event) {
                                    event.csensor.data[2] / SDL_STANDARD_GRAVITY);
                 break;
             case SDL_SENSOR_GYRO:
-                using namespace std::numbers;
-                joystick->SetGyro(-event.csensor.data[0] * (180.0f / pi),
-                                  event.csensor.data[1] * (180.0f / pi),
-                                  -event.csensor.data[2] * (180.0f / pi));
+                joystick->SetGyro(-event.csensor.data[0] * (180.0f / std::numbers::pi),
+                                  event.csensor.data[1] * (180.0f / std::numbers::pi),
+                                  -event.csensor.data[2] * (180.0f / std::numbers::pi));
                 break;
             }
         }
@@ -1054,7 +1052,7 @@ public:
     }
 
     Common::ParamPackage GetNextInput() override {
-        SDL_Event event;
+        SDL_Event event{};
         while (state.event_queue.Pop(event)) {
             if (event.type != SDL_JOYAXISMOTION || std::abs(event.jaxis.value / 32767.0) < 0.5) {
                 continue;
