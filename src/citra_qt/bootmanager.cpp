@@ -9,7 +9,6 @@
 #include <QMessageBox>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
-#include <QOpenGLFunctions_4_3_Core>
 #include <QOpenGLExtraFunctions>
 #include <fmt/format.h>
 #include "citra_qt/bootmanager.h"
@@ -34,11 +33,13 @@ EmuThread::EmuThread(Frontend::GraphicsContext& core_context) : core_context(cor
 EmuThread::~EmuThread() = default;
 
 static GMainWindow* GetMainWindow() {
-    for (QWidget* w : qApp->topLevelWidgets()) {
+    const auto widgets = qApp->topLevelWidgets();
+    for (QWidget* w : widgets) {
         if (GMainWindow* main = qobject_cast<GMainWindow*>(w)) {
             return main;
         }
     }
+
     return nullptr;
 }
 
@@ -48,7 +49,8 @@ void EmuThread::run() {
 
     emit LoadProgress(VideoCore::LoadCallbackStage::Prepare, 0, 0);
 
-    Core::System::GetInstance().Renderer().Rasterizer()->LoadDiskResources(
+    Core::System& system = Core::System::GetInstance();
+    system.Renderer().Rasterizer()->LoadDiskResources(
         stop_run, [this](VideoCore::LoadCallbackStage stage, std::size_t value, std::size_t total) {
             emit LoadProgress(stage, value, total);
         });
@@ -58,18 +60,17 @@ void EmuThread::run() {
 
     core_context.MakeCurrent();
 
-    if (Core::System::GetInstance().frame_limiter.IsFrameAdvancing()) {
+    if (system.frame_limiter.IsFrameAdvancing()) {
         // Usually the loading screen is hidden after the first frame is drawn. In this case
         // we hide it immediately as we need to wait for user input to start the emulation.
         emit HideLoadingScreen();
-        Core::System::GetInstance().frame_limiter.WaitOnce();
+        system.frame_limiter.WaitOnce();
     }
 
     // Holds whether the cpu was running during the last iteration,
     // so that the DebugModeLeft signal can be emitted before the
     // next execution step.
     bool was_active = false;
-    Core::System& system = Core::System::GetInstance();
     while (!stop_run) {
         if (running) {
             if (!was_active)
@@ -119,8 +120,20 @@ public:
     /// Create the original context that should be shared from
     explicit OpenGLSharedContext(QSurface* surface) : surface(surface) {
         QSurfaceFormat format;
-        format.setVersion(4, 4);
-        format.setProfile(QSurfaceFormat::CoreProfile);
+
+        if (Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES) {
+            QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
+            format.setVersion(3, 2);
+        } else {
+            QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
+            format.setVersion(4, 4);
+            format.setProfile(QSurfaceFormat::CoreProfile);
+        }
+
+        if (Settings::values.renderer_debug) {
+            format.setOption(QSurfaceFormat::FormatOption::DebugContext);
+        }
+
         // TODO: expose a setting for buffer value (ie default/single/double/triple)
         format.setSwapBehavior(QSurfaceFormat::DefaultSwapBehavior);
         format.setSwapInterval(0);
@@ -629,14 +642,6 @@ bool GRenderWindow::InitializeOpenGL() {
     main_context = context;
     child->SetContext(
         std::make_unique<OpenGLSharedContext>(context->GetShareContext(), child->windowHandle()));
-
-    // Check for OpenGL 4.3 support
-    if (!QOpenGLContext::globalShareContext()->versionFunctions<QOpenGLFunctions_4_3_Core>()) {
-        QMessageBox::critical(this, tr("OpenGL 4.3 Unsupported"),
-                              tr("Your GPU may not support OpenGL 4.3, or you do not "
-                                 "have the latest graphics driver."));
-        return false;
-    }
 
     return true;
 }
