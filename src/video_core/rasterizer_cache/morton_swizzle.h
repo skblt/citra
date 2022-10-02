@@ -270,4 +270,4 @@ static constexpr std::array<MortonFunc, 18> SWIZZLE_TABLE = {
     MortonCopy<false, PixelFormat::D24S8> // 17
 };
 
-} // namespace OpenGL
+} // namespace VideoCore
