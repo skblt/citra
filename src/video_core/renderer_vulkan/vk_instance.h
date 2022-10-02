@@ -27,7 +27,7 @@ struct FormatTraits {
 /// The global Vulkan instance
 class Instance {
 public:
-    Instance(Frontend::EmuWindow& window);
+    Instance(Frontend::EmuWindow& window, bool enable_validation);
     ~Instance();
 
     /// Returns the FormatTraits struct for the provided pixel format

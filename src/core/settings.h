@@ -169,13 +169,15 @@ struct Values {
     u64 init_time;
 
     // Renderer
-    GraphicsAPI graphics_api = GraphicsAPI::Vulkan;
+    GraphicsAPI graphics_api;
+    bool renderer_debug;
     bool use_hw_renderer;
     bool use_hw_shader;
     bool separable_shader;
     bool use_disk_shader_cache;
     bool shaders_accurate_mul;
     bool use_shader_jit;
+    bool use_vsync_new;
     u16 resolution_factor;
     bool use_frame_limit_alternate;
     u16 frame_limit;
@@ -209,11 +211,10 @@ struct Values {
     bool filter_mode;
     std::string pp_shader_name;
 
+    // Custom textures
     bool dump_textures;
     bool custom_textures;
     bool preload_textures;
-
-    bool use_vsync_new;
 
     // Audio
     bool enable_dsp_lle;

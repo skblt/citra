@@ -7,17 +7,8 @@
 #include <regex>
 #include <string>
 #include <thread>
-
 // This needs to be included before getopt.h because the latter #defines symbols used by it
 #include "common/microprofile.h"
-
-#ifdef _WIN32
-// windows.h needs to be included before shellapi.h
-#include <windows.h>
-
-#include <shellapi.h>
-#endif
-
 #include "citra/config.h"
 #include "citra/emu_window/emu_window_sdl2.h"
 #include "citra/lodepng_image_interface.h"
@@ -25,20 +16,15 @@
 #include "common/detached_tasks.h"
 #include "common/file_util.h"
 #include "common/logging/backend.h"
-#include "common/logging/filter.h"
 #include "common/logging/log.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
-#include "common/string_util.h"
 #include "core/core.h"
 #include "core/dumping/backend.h"
-#include "core/file_sys/cia_container.h"
 #include "core/frontend/applets/default_applets.h"
 #include "core/frontend/framebuffer_layout.h"
-#include "core/gdbstub/gdbstub.h"
 #include "core/hle/service/am/am.h"
 #include "core/hle/service/cfg/cfg.h"
-#include "core/loader/loader.h"
 #include "core/movie.h"
 #include "core/settings.h"
 #include "network/network.h"
@@ -51,6 +37,10 @@
 #endif
 
 #ifdef _WIN32
+// windows.h needs to be included before shellapi.h
+#include <windows.h>
+#include <shellapi.h>
+
 extern "C" {
 // tells Nvidia drivers to use the dedicated GPU by default on laptops with switchable graphics
 __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
@@ -103,35 +93,35 @@ static void OnNetworkError(const Network::RoomMember::Error& error) {
         break;
     case Network::RoomMember::Error::CouldNotConnect:
         LOG_ERROR(Network, "Error: Could not connect");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::NameCollision:
         LOG_ERROR(
             Network,
             "You tried to use the same nickname as another user that is connected to the Room");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::MacCollision:
         LOG_ERROR(Network, "You tried to use the same MAC-Address as another user that is "
                            "connected to the Room");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::ConsoleIdCollision:
         LOG_ERROR(Network, "Your Console ID conflicted with someone else in the Room");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::WrongPassword:
         LOG_ERROR(Network, "Room replied with: Wrong password");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::WrongVersion:
         LOG_ERROR(Network,
                   "You are using a different version than the room you are trying to connect to");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::RoomIsFull:
         LOG_ERROR(Network, "The room is full");
-        exit(1);
+        std::exit(1);
         break;
     case Network::RoomMember::Error::HostKicked:
         LOG_ERROR(Network, "You have been kicked by the host");
@@ -139,6 +129,8 @@ static void OnNetworkError(const Network::RoomMember::Error& error) {
     case Network::RoomMember::Error::HostBanned:
         LOG_ERROR(Network, "You have been banned by the host");
         break;
+    default:
+        LOG_ERROR(Network, "Unknown network error {}", error);
     }
 }
 

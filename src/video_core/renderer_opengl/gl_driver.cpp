@@ -69,7 +69,7 @@ static void APIENTRY DebugHandler(GLenum source, GLenum type, GLuint id, GLenum 
                 id, message);
 }
 
-Driver::Driver(bool gles) : is_gles{gles} {
+Driver::Driver(bool gles, bool enable_debug) : is_gles{gles} {
 #ifndef ANDROID
     if (!gladLoadGL()) {
         return;
@@ -79,8 +79,10 @@ Driver::Driver(bool gles) : is_gles{gles} {
      * Qualcomm has some spammy info messages that are marked as errors but not important
      * https://developer.qualcomm.com/comment/11845
      */
-    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-    glDebugMessageCallback(DebugHandler, nullptr);
+    if (enable_debug) {
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        glDebugMessageCallback(DebugHandler, nullptr);
+    }
 #endif
 
     ReportDriverInfo();

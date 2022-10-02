@@ -21,7 +21,6 @@ namespace Settings {
 Values values = {};
 
 void Apply() {
-
     GDBStub::SetServerPort(values.gdbstub_port);
     GDBStub::ToggleServer(values.use_gdbstub);
 
@@ -108,16 +107,15 @@ void LogSettings() {
     LogSetting("Audio_OutputDevice", values.audio_device_id);
     LogSetting("Audio_InputDeviceType", values.mic_input_type);
     LogSetting("Audio_InputDevice", values.mic_input_device);
-    using namespace Service::CAM;
-    LogSetting("Camera_OuterRightName", values.camera_name[OuterRightCamera]);
-    LogSetting("Camera_OuterRightConfig", values.camera_config[OuterRightCamera]);
-    LogSetting("Camera_OuterRightFlip", values.camera_flip[OuterRightCamera]);
-    LogSetting("Camera_InnerName", values.camera_name[InnerCamera]);
-    LogSetting("Camera_InnerConfig", values.camera_config[InnerCamera]);
-    LogSetting("Camera_InnerFlip", values.camera_flip[InnerCamera]);
-    LogSetting("Camera_OuterLeftName", values.camera_name[OuterLeftCamera]);
-    LogSetting("Camera_OuterLeftConfig", values.camera_config[OuterLeftCamera]);
-    LogSetting("Camera_OuterLeftFlip", values.camera_flip[OuterLeftCamera]);
+    LogSetting("Camera_OuterRightName", values.camera_name[Service::CAM::OuterRightCamera]);
+    LogSetting("Camera_OuterRightConfig", values.camera_config[Service::CAM::OuterRightCamera]);
+    LogSetting("Camera_OuterRightFlip", values.camera_flip[Service::CAM::OuterRightCamera]);
+    LogSetting("Camera_InnerName", values.camera_name[Service::CAM::InnerCamera]);
+    LogSetting("Camera_InnerConfig", values.camera_config[Service::CAM::InnerCamera]);
+    LogSetting("Camera_InnerFlip", values.camera_flip[Service::CAM::InnerCamera]);
+    LogSetting("Camera_OuterLeftName", values.camera_name[Service::CAM::OuterLeftCamera]);
+    LogSetting("Camera_OuterLeftConfig", values.camera_config[Service::CAM::OuterLeftCamera]);
+    LogSetting("Camera_OuterLeftFlip", values.camera_flip[Service::CAM::OuterLeftCamera]);
     LogSetting("DataStorage_UseVirtualSd", values.use_virtual_sd);
     LogSetting("DataStorage_UseCustomStorage", values.use_custom_storage);
     if (values.use_custom_storage) {

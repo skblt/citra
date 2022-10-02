@@ -114,8 +114,21 @@
      <layout class="QVBoxLayout" name="verticalLayout_4">
       <item>
        <widget class="QCheckBox" name="toggle_cpu_jit">
+        <property name="toolTip">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enables the use of the ARM JIT compiler for emulating the 3DS CPUs. Don't disable unless for debugging purposes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
         <property name="text">
          <string>Enable CPU JIT</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="toggle_renderer_debug">
+        <property name="toolTip">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enables debug reporting in the currently selected graphics API. Causes measurable performance loss, don't enable unless for debugging purposes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+        <property name="text">
+         <string>Enable debug renderer</string>
         </property>
        </widget>
       </item>

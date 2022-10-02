@@ -16,7 +16,6 @@
 #include "citra_qt/util/spinbox.h"
 #include "common/color.h"
 #include "core/core.h"
-#include "core/hw/gpu.h"
 #include "core/memory.h"
 #include "video_core/pica_state.h"
 #include "video_core/regs_framebuffer.h"
@@ -34,12 +33,15 @@ void SurfacePicture::mousePressEvent(QMouseEvent* event) {
     if (!(event->buttons() & Qt::LeftButton))
         return;
 
-    if (pixmap() == nullptr)
+    const QPixmap pixmap = this->pixmap(Qt::ReturnByValue);
+    if (pixmap.isNull()) {
         return;
+    }
 
-    if (surface_widget)
-        surface_widget->Pick(event->x() * pixmap()->width() / width(),
-                             event->y() * pixmap()->height() / height());
+    if (surface_widget) {
+        surface_widget->Pick(event->x() * pixmap.width() / width(),
+                             event->y() * pixmap.height() / height());
+    }
 }
 
 void SurfacePicture::mouseMoveEvent(QMouseEvent* event) {
@@ -314,48 +316,48 @@ void GraphicsSurfaceWidget::Pick(int x, int y) {
         case Format::RGBA8: {
             auto value = Color::DecodeRGBA8(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2, Blue: %3, Alpha: %4")
-                .arg(QString::number(value.r(), 'f', 2))
-                .arg(QString::number(value.g(), 'f', 2))
-                .arg(QString::number(value.b(), 'f', 2))
-                .arg(QString::number(value.a(), 'f', 2));
+                .arg(QString::number(value.r(), 'f', 2),
+                     QString::number(value.g(), 'f', 2),
+                     QString::number(value.b(), 'f', 2),
+                     QString::number(value.a(), 'f', 2));
         }
         case Format::RGB8: {
             auto value = Color::DecodeRGB8(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2, Blue: %3")
-                .arg(QString::number(value.r(), 'f', 2))
-                .arg(QString::number(value.g(), 'f', 2))
-                .arg(QString::number(value.b(), 'f', 2));
+                .arg(QString::number(value.r(), 'f', 2),
+                     QString::number(value.g(), 'f', 2),
+                     QString::number(value.b(), 'f', 2));
         }
         case Format::RGB5A1: {
             auto value = Color::DecodeRGB5A1(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2, Blue: %3, Alpha: %4")
-                .arg(QString::number(value.r(), 'f', 2))
-                .arg(QString::number(value.g(), 'f', 2))
-                .arg(QString::number(value.b(), 'f', 2))
-                .arg(QString::number(value.a(), 'f', 2));
+                .arg(QString::number(value.r(), 'f', 2),
+                     QString::number(value.g(), 'f', 2),
+                     QString::number(value.b(), 'f', 2),
+                     QString::number(value.a(), 'f', 2));
         }
         case Format::RGB565: {
             auto value = Color::DecodeRGB565(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2, Blue: %3")
-                .arg(QString::number(value.r(), 'f', 2))
-                .arg(QString::number(value.g(), 'f', 2))
-                .arg(QString::number(value.b(), 'f', 2));
+                .arg(QString::number(value.r(), 'f', 2),
+                     QString::number(value.g(), 'f', 2),
+                     QString::number(value.b(), 'f', 2));
         }
         case Format::RGBA4: {
             auto value = Color::DecodeRGBA4(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2, Blue: %3, Alpha: %4")
-                .arg(QString::number(value.r(), 'f', 2))
-                .arg(QString::number(value.g(), 'f', 2))
-                .arg(QString::number(value.b(), 'f', 2))
-                .arg(QString::number(value.a(), 'f', 2));
+                .arg(QString::number(value.r(), 'f', 2),
+                     QString::number(value.g(), 'f', 2),
+                     QString::number(value.b(), 'f', 2),
+                     QString::number(value.a(), 'f', 2));
         }
         case Format::IA8:
-            return QStringLiteral("Index: %1, Alpha: %2").arg(pixel[0]).arg(pixel[1]);
+            return QStringLiteral("Index: %1, Alpha: %2").arg(pixel[0], pixel[1]);
         case Format::RG8: {
             auto value = Color::DecodeRG8(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2")
-                .arg(QString::number(value.r(), 'f', 2))
-                .arg(QString::number(value.g(), 'f', 2));
+                .arg(QString::number(value.r(), 'f', 2),
+                     QString::number(value.g(), 'f', 2));
         }
         case Format::I8:
             return QStringLiteral("Index: %1").arg(*pixel);
@@ -363,8 +365,7 @@ void GraphicsSurfaceWidget::Pick(int x, int y) {
             return QStringLiteral("Alpha: %1").arg(QString::number(*pixel / 255.0f, 'f', 2));
         case Format::IA4:
             return QStringLiteral("Index: %1, Alpha: %2")
-                .arg(*pixel & 0xF)
-                .arg((*pixel & 0xF0) >> 4);
+                .arg(*pixel & 0xF, (*pixel & 0xF0) >> 4);
         case Format::I4: {
             u8 i = (*pixel >> ((offset % 2) ? 4 : 0)) & 0xF;
             return QStringLiteral("Index: %1").arg(i);
@@ -390,8 +391,7 @@ void GraphicsSurfaceWidget::Pick(int x, int y) {
         case Format::X24S8: {
             auto values = Color::DecodeD24S8(pixel);
             return QStringLiteral("Depth: %1, Stencil: %2")
-                .arg(QString::number(values[0] / (float)0xFFFFFF, 'f', 4))
-                .arg(values[1]);
+                .arg(QString::number(values[0] / (float)0xFFFFFF, 'f', 4), values[1]);
         }
         case Format::Unknown:
             return QStringLiteral("Unknown format");
@@ -401,8 +401,8 @@ void GraphicsSurfaceWidget::Pick(int x, int y) {
     };
 
     QString nibbles;
-    for (unsigned i = 0; i < nibbles_per_pixel; i++) {
-        unsigned nibble_index = i;
+    for (u32 i = 0; i < nibbles_per_pixel; i++) {
+        u32 nibble_index = i;
         if (nibble_mode) {
             nibble_index += (offset % 2) ? 0 : 1;
         }
@@ -412,7 +412,7 @@ void GraphicsSurfaceWidget::Pick(int x, int y) {
     }
 
     surface_info_label->setText(
-        QStringLiteral("Raw: 0x%3\n(%4)").arg(nibbles).arg(GetText(surface_format, pixel)));
+        QStringLiteral("Raw: 0x%3\n(%4)").arg(nibbles, GetText(surface_format, pixel)));
     surface_info_label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 }
 
@@ -676,8 +676,8 @@ void GraphicsSurfaceWidget::SaveSurface() {
     }
 
     if (selected_filter == png_filter) {
-        const QPixmap* const pixmap = surface_picture_label->pixmap();
-        ASSERT_MSG(pixmap != nullptr, "No pixmap set");
+        const QPixmap pixmap = surface_picture_label->pixmap(Qt::ReturnByValue);
+        ASSERT_MSG(!pixmap.isNull(), "No pixmap set");
 
         QFile file{filename};
         if (!file.open(QIODevice::WriteOnly)) {
@@ -685,7 +685,7 @@ void GraphicsSurfaceWidget::SaveSurface() {
             return;
         }
 
-        if (!pixmap->save(&file, "PNG")) {
+        if (!pixmap.save(&file, "PNG")) {
             QMessageBox::warning(this, tr("Error"),
                                  tr("Failed to save surface data to file '%1'").arg(filename));
         }

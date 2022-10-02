@@ -8,8 +8,6 @@
 #include "citra_qt/debugger/console.h"
 #include "citra_qt/uisettings.h"
 #include "common/file_util.h"
-#include "common/logging/backend.h"
-#include "common/logging/filter.h"
 #include "common/logging/log.h"
 #include "core/core.h"
 #include "core/settings.h"
@@ -24,7 +22,10 @@ ConfigureDebug::ConfigureDebug(QWidget* parent)
         QString path = QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::LogDir));
         QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     });
-    ui->toggle_cpu_jit->setEnabled(!Core::System::GetInstance().IsPoweredOn());
+
+    const bool is_powered_on = Core::System::GetInstance().IsPoweredOn();
+    ui->toggle_cpu_jit->setEnabled(!is_powered_on);
+    ui->toggle_renderer_debug->setEnabled(!is_powered_on);
 }
 
 ConfigureDebug::~ConfigureDebug() = default;
@@ -37,6 +38,7 @@ void ConfigureDebug::SetConfiguration() {
     ui->toggle_console->setChecked(UISettings::values.show_console);
     ui->log_filter_edit->setText(QString::fromStdString(Settings::values.log_filter));
     ui->toggle_cpu_jit->setChecked(Settings::values.use_cpu_jit);
+    ui->toggle_renderer_debug->setChecked(Settings::values.renderer_debug);
 }
 
 void ConfigureDebug::ApplyConfiguration() {
@@ -49,6 +51,7 @@ void ConfigureDebug::ApplyConfiguration() {
     filter.ParseFilterString(Settings::values.log_filter);
     Log::SetGlobalFilter(filter);
     Settings::values.use_cpu_jit = ui->toggle_cpu_jit->isChecked();
+    Settings::values.renderer_debug = ui->toggle_renderer_debug->isChecked();
 }
 
 void ConfigureDebug::RetranslateUI() {
