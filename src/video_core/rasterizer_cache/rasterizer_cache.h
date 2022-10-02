@@ -504,12 +504,12 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
     u32 min_width = info.width >> max_level;
     u32 min_height = info.height >> max_level;
     if (min_width % 8 != 0 || min_height % 8 != 0) {
-        LOG_CRITICAL(Render_OpenGL, "Texture size ({}x{}) is not multiple of 8", min_width,
+        LOG_CRITICAL(HW_GPU, "Texture size ({}x{}) is not multiple of 8", min_width,
                      min_height);
         return nullptr;
     }
     if (info.width != (min_width << max_level) || info.height != (min_height << max_level)) {
-        LOG_CRITICAL(Render_OpenGL,
+        LOG_CRITICAL(HW_GPU,
                      "Texture size ({}x{}) does not support required mipmap level ({})",
                      params.width, params.height, max_level);
         return nullptr;
@@ -524,7 +524,7 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
         if (max_level >= 8) {
             // since PICA only supports texture size between 8 and 1024, there are at most eight
             // possible mipmap levels including the base.
-            LOG_CRITICAL(Render_OpenGL, "Unsupported mipmap level {}", max_level);
+            LOG_CRITICAL(HW_GPU, "Unsupported mipmap level {}", max_level);
             return nullptr;
         }
 
@@ -715,8 +715,8 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
     // Make sure that framebuffers don't overlap if both color and depth are being used
     if (using_color_fb && using_depth_fb &&
         boost::icl::length(color_vp_interval & depth_vp_interval)) {
-        LOG_CRITICAL(Render_OpenGL, "Color and depth framebuffer memory regions overlap; "
-                                    "overlapping framebuffers not supported!");
+        LOG_CRITICAL(HW_GPU, "Color and depth framebuffer memory regions overlap; "
+                             "overlapping framebuffers not supported!");
         using_depth_fb = false;
     }
 
@@ -887,8 +887,8 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
             // If the region was created entirely on the GPU,
             // assume it was a developer mistake and skip flushing.
             if (boost::icl::contains(dirty_regions, interval)) {
-                LOG_INFO(Render_OpenGL, "Region created fully on GPU and reinterpretation is "
-                                         "invalid. Skipping validation");
+                LOG_INFO(HW_GPU, "Region created fully on GPU and reinterpretation is "
+                                 "invalid. Skipping validation");
                 validate_regions.erase(interval);
                 continue;
             }
@@ -1022,7 +1022,7 @@ bool RasterizerCache<T>::NoUnimplementedReinterpretations(const Surface& surface
             Surface test_surface =
                 FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
             if (test_surface != nullptr) {
-                LOG_WARNING(Render_OpenGL, "Missing pixel_format reinterpreter: {} -> {}",
+                LOG_WARNING(HW_GPU, "Missing pixel_format reinterpreter: {} -> {}",
                             PixelFormatAsString(format),
                             PixelFormatAsString(surface->pixel_format));
                 implemented = false;
@@ -1038,7 +1038,7 @@ bool RasterizerCache<T>::IntervalHasInvalidPixelFormat(SurfaceParams& params, Su
     for (const auto& set : RangeFromInterval(surface_cache, interval)) {
         for (const auto& surface : set.second) {
             if (surface->pixel_format == PixelFormat::Invalid) {
-                LOG_DEBUG(Render_OpenGL, "Surface {:#x} found with invalid pixel format",
+                LOG_DEBUG(HW_GPU, "Surface {:#x} found with invalid pixel format",
                           surface->addr);
                 return true;
             }
