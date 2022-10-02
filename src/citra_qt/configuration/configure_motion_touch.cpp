@@ -205,7 +205,7 @@ void ConfigureMotionTouch::ConnectEvents() {
     connect(ui->touch_provider,
             static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this,
             [this]([[maybe_unused]] int index) { UpdateUiDisplay(); });
-    connect(ui->motion_controller_button, &QPushButton::clicked, this, [=]() {
+    connect(ui->motion_controller_button, &QPushButton::clicked, this, [this]() {
         if (QMessageBox::information(this, tr("Information"),
                                      tr("After pressing OK, press a button on the controller whose "
                                         "motion you want to track."),

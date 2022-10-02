@@ -83,7 +83,9 @@ u32 GSP_GPU::GetUnusedThreadId() const {
         if (!used_thread_ids[id])
             return id;
     }
-    ASSERT_MSG(false, "All GSP threads are in use");
+
+    UNREACHABLE_MSG("All GSP threads are in use");
+    return 0;
 }
 
 /// Gets a pointer to a thread command buffer in GSP shared memory

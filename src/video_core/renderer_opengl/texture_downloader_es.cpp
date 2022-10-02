@@ -6,7 +6,6 @@
 #include <vector>
 #include <fmt/chrono.h>
 #include "common/logging/log.h"
-#include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_texture_runtime.h"
 #include "video_core/renderer_opengl/texture_downloader_es.h"
@@ -73,7 +72,7 @@ void TextureDownloaderES::Test() {
         auto time = std::chrono::high_resolution_clock::now() - start;
         LOG_INFO(Render_OpenGL, "test took {}", std::chrono::duration<double, std::milli>(time));
 
-        int diff = 0;
+        T diff = 0;
         for (std::size_t idx = 0; idx < original_data.size(); ++idx)
             if (new_data[idx] - original_data[idx] != diff) {
                 diff = new_data[idx] - original_data[idx];
@@ -207,7 +206,7 @@ GLuint TextureDownloaderES::ConvertDepthToColor(GLuint level, GLenum& format, GL
 void TextureDownloaderES::GetTexImage(GLenum target, GLuint level, GLenum format, GLenum type,
                                       GLint height, GLint width, void* pixels) const {
     OpenGLState state = OpenGLState::GetCurState();
-    GLuint texture;
+    GLuint texture{};
     const GLuint old_read_buffer = state.draw.read_framebuffer;
     switch (target) {
     case GL_TEXTURE_2D:
