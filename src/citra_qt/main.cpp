@@ -11,7 +11,6 @@
 #include <QFutureWatcher>
 #include <QLabel>
 #include <QMessageBox>
-#include <QOpenGLFunctions_4_3_Core>
 #include <QSysInfo>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QtGui>
@@ -2033,7 +2032,7 @@ void GMainWindow::UpdateStatusBar() {
         message_label_used_for_movie = true;
         ui->action_Save_Movie->setEnabled(true);
     } else if (play_mode == Core::Movie::PlayMode::Playing) {
-        message_label->setText(tr("Playing %1 / %2").arg(current).arg(total));
+        message_label->setText(tr("Playing %1 / %2").arg(current, total));
         message_label->setVisible(true);
         message_label_used_for_movie = true;
         ui->action_Save_Movie->setEnabled(false);
