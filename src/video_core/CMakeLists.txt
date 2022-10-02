@@ -30,7 +30,6 @@ add_library(video_core STATIC
     rasterizer_cache/rasterizer_cache.cpp
     rasterizer_cache/rasterizer_cache.h
     rasterizer_cache/surface_base.h
-    rasterizer_cache/types.h
     rasterizer_cache/utils.cpp
     rasterizer_cache/utils.h
     rasterizer_cache/surface_params.cpp

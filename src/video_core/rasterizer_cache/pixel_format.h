@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #pragma once
+
 #include <string_view>
 #include "core/hw/gpu.h"
 #include "video_core/regs_framebuffer.h"
@@ -193,4 +194,4 @@ constexpr u32 GetBytesPerPixel(PixelFormat format) {
     return GetFormatBpp(format) / 8;
 }
 
-} // namespace OpenGL
+} // namespace VideoCore

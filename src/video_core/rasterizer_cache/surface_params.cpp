@@ -132,4 +132,4 @@ bool SurfaceParams::CanTexCopy(const SurfaceParams& texcopy_params) const {
     return FromInterval(texcopy_params.GetInterval()).GetInterval() == texcopy_params.GetInterval();
 }
 
-} // namespace OpenGL
+} // namespace VideoCore
