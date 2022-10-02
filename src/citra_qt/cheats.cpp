@@ -37,7 +37,7 @@ CheatDialog::CheatDialog(QWidget* parent)
     connect(ui->textNotes, &QPlainTextEdit::textChanged, this, &CheatDialog::OnTextEdited);
     connect(ui->textCode, &QPlainTextEdit::textChanged, this, &CheatDialog::OnTextEdited);
 
-    connect(ui->buttonSave, &QPushButton::clicked,
+    connect(ui->buttonSave, &QPushButton::clicked, this,
             [this] { SaveCheat(ui->tableCheats->currentRow()); });
     connect(ui->buttonDelete, &QPushButton::clicked, this, &CheatDialog::OnDeleteCheat);
 
