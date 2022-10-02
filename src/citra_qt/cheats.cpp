@@ -91,7 +91,7 @@ bool CheatDialog::SaveCheat(int row) {
     }
 
     // Check if the cheat lines are valid
-    auto code_lines = ui->textCode->toPlainText().split(QLatin1Char{'\n'}, QString::SkipEmptyParts);
+    auto code_lines = ui->textCode->toPlainText().split(QLatin1Char{'\n'}, Qt::SkipEmptyParts);
     for (int i = 0; i < code_lines.size(); ++i) {
         Cheats::GatewayCheat::CheatLine cheat_line(code_lines[i].toStdString());
         if (cheat_line.valid)
