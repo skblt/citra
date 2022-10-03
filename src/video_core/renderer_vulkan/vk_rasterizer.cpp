@@ -650,17 +650,24 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     };
 
     const auto BindSampler = [&](u32 binding, SamplerInfo& info,
-            const Pica::TexturingRegs::FullTextureConfig& texture) {
+            const Pica::TexturingRegs::TextureConfig& config) {
+        // TODO(GPUCode): Cubemaps don't contain any mipmaps for now, so sampling from them returns nothing
+        // Always sample from the base level until mipmaps for texture cubes are implemented
+        // NOTE: There are no Vulkan filter modes that directly correspond to OpenGL minification filters
+        // GL_LINEAR/GL_NEAREST so emulate them by setting
+        // minLod = 0, and maxLod = 0.25, and using minFilter = VK_FILTER_LINEAR or minFilter = VK_FILTER_NEAREST
+        const bool skip_mipmap =
+            config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
         info = SamplerInfo{
-            .mag_filter = texture.config.mag_filter,
-            .min_filter = texture.config.min_filter,
-            .mip_filter = texture.config.mip_filter,
-            .wrap_s = texture.config.wrap_s,
-            .wrap_t = texture.config.wrap_t,
-            .border_color = texture.config.border_color.raw,
-            .lod_min = texture.config.lod.min_level,
-            .lod_max = texture.config.lod.max_level,
-            .lod_bias = texture.config.lod.bias
+            .mag_filter = config.mag_filter,
+            .min_filter = config.min_filter,
+            .mip_filter = config.mip_filter,
+            .wrap_s = config.wrap_s,
+            .wrap_t = config.wrap_t,
+            .border_color = config.border_color.raw,
+            .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
+            .lod_max = skip_mipmap ? 0.25f : static_cast<float>(config.lod.max_level),
+            .lod_bias = static_cast<float>(config.lod.bias)
         };
 
         // Search the cache and bind the appropriate sampler
@@ -726,7 +733,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                         pipeline_cache.BindTexture(3, default_texture.image_view);
                     }
 
-                    BindSampler(3, texture_cube_sampler, texture);
+                    BindSampler(3, texture_cube_sampler, texture.config);
                     continue; // Texture unit 0 setup finished. Continue to next unit
                 }
                 default:
@@ -735,7 +742,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             }
 
             // Update sampler key
-            BindSampler(texture_index, texture_samplers[texture_index], texture);
+            BindSampler(texture_index, texture_samplers[texture_index], texture.config);
 
             auto surface = res_cache.GetTextureSurface(texture);
             if (surface != nullptr) {
@@ -1580,8 +1587,8 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
         .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
         .compareEnable = false,
         .compareOp = vk::CompareOp::eAlways,
-        .minLod = static_cast<float>(info.lod_min),
-        .maxLod = static_cast<float>(info.lod_max),
+        .minLod = info.lod_min,
+        .maxLod = info.lod_max,
         .borderColor = vk::BorderColor::eIntOpaqueBlack,
         .unnormalizedCoordinates = false
     };
