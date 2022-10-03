@@ -191,13 +191,14 @@ auto RasterizerCache<T>::FindMatch(const SurfaceCache& surface_cache, const Surf
                                                ? (params.res_scale == surface->res_scale)
                                                : (params.res_scale <= surface->res_scale);
             // validity will be checked in GetCopyableInterval
-            bool is_valid =
+            const bool is_valid =
                 True(find_flags & MatchFlags::Copy)
                     ? true
                     : surface->IsRegionValid(validate_interval.value_or(params.GetInterval()));
 
-            if (False(find_flags & MatchFlags::Invalid) && !is_valid)
+            if (False(find_flags & MatchFlags::Invalid) && !is_valid) {
                 continue;
+            }
 
             auto IsMatch_Helper = [&](auto check_type, auto match_fn) {
                 if (False(find_flags & check_type))
@@ -270,14 +271,19 @@ bool RasterizerCache<T>::BlitSurfaces(const Surface& src_surface, Common::Rectan
                                       const Surface& dst_surface, Common::Rectangle<u32> dst_rect) {
     MICROPROFILE_SCOPE(RasterizerCache_BlitSurface);
 
-    if (!CheckFormatsBlittable(src_surface->pixel_format, dst_surface->pixel_format)) [[unlikely]] {
+    if (!CheckFormatsBlittable(src_surface->pixel_format,
+                               dst_surface->pixel_format)) [[unlikely]] {
         return false;
     }
 
     dst_surface->InvalidateAllWatcher();
 
-    // Prefer texture copy over blit if possible
-    if (src_rect.GetWidth() == dst_rect.GetWidth() && src_rect.bottom < src_rect.top) {
+    // Prefer texture copy over blit if possible. This is possible when the following is true:
+    // 1. No scaling (the dimentions of src and dest rect are the same
+    // 2. No flipping (if the bottom value is bigger than the top this indicates texture flip
+    if (src_rect.GetWidth() == dst_rect.GetWidth() &&
+            src_rect.GetHeight() == dst_rect.GetHeight() &&
+            src_rect.bottom < src_rect.top) {
         const TextureCopy texture_copy = {
             .src_level = 0,
             .dst_level = 0,
@@ -354,7 +360,7 @@ void RasterizerCache<T>::CopySurface(const Surface& src_surface, const Surface& 
 template <class T>
 auto RasterizerCache<T>::GetSurface(const SurfaceParams& params, ScaleMatch match_res_scale,
                                     bool load_if_create) -> Surface {
-    if (params.addr == 0 || params.height * params.width == 0) {
+    if (params.addr == 0 || params.height * params.width == 0) [[unlikely]] {
         return nullptr;
     }
 
@@ -366,7 +372,7 @@ auto RasterizerCache<T>::GetSurface(const SurfaceParams& params, ScaleMatch matc
     Surface surface =
         FindMatch<MatchFlags::Exact | MatchFlags::Invalid>(surface_cache, params, match_res_scale);
 
-    if (surface == nullptr) {
+    if (!surface) {
         u16 target_res_scale = params.res_scale;
         if (match_res_scale != ScaleMatch::Exact) {
             // This surface may have a subrect of another surface with a higher res_scale, find
@@ -374,15 +380,16 @@ auto RasterizerCache<T>::GetSurface(const SurfaceParams& params, ScaleMatch matc
             SurfaceParams find_params = params;
             Surface expandable = FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(
                 surface_cache, find_params, match_res_scale);
-            if (expandable != nullptr && expandable->res_scale > target_res_scale) {
+            if (expandable && expandable->res_scale > target_res_scale) {
                 target_res_scale = expandable->res_scale;
             }
+
             // Keep res_scale when reinterpreting d24s8 -> rgba8
             if (params.pixel_format == PixelFormat::RGBA8) {
                 find_params.pixel_format = PixelFormat::D24S8;
                 expandable = FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(
                     surface_cache, find_params, match_res_scale);
-                if (expandable != nullptr && expandable->res_scale > target_res_scale) {
+                if (expandable && expandable->res_scale > target_res_scale) {
                     target_res_scale = expandable->res_scale;
                 }
             }
@@ -404,7 +411,7 @@ auto RasterizerCache<T>::GetSurface(const SurfaceParams& params, ScaleMatch matc
 template <class T>
 auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMatch match_res_scale,
                                            bool load_if_create) -> SurfaceRect_Tuple {
-    if (params.addr == 0 || params.height * params.width == 0) {
+    if (params.addr == 0 || params.height * params.width == 0) [[unlikely]] {
         return std::make_tuple(nullptr, Common::Rectangle<u32>{});
     }
 
@@ -416,10 +423,10 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
     // If that's the case create a new surface with
     // the dimensions of the lower res_scale surface
     // to suggest it should not be used again
-    if (surface == nullptr && match_res_scale != ScaleMatch::Ignore) {
+    if (!surface && match_res_scale != ScaleMatch::Ignore) {
         surface = FindMatch<MatchFlags::SubRect | MatchFlags::Invalid>(surface_cache, params,
                                                                        ScaleMatch::Ignore);
-        if (surface != nullptr) {
+        if (surface) {
             SurfaceParams new_params = *surface;
             new_params.res_scale = params.res_scale;
 
@@ -437,10 +444,10 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
     }
 
     // Check for a surface we can expand before creating a new one
-    if (surface == nullptr) {
+    if (!surface) {
         surface = FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(surface_cache, aligned_params,
                                                                       match_res_scale);
-        if (surface != nullptr) {
+        if (surface) {
             aligned_params.width = aligned_params.stride;
             aligned_params.UpdateParams();
 
@@ -466,7 +473,7 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
     }
 
     // No subrect found - create and return a new surface
-    if (surface == nullptr) {
+    if (!surface) {
         SurfaceParams new_params = aligned_params;
         // Can't have gaps in a surface
         new_params.width = aligned_params.stride;
@@ -488,7 +495,7 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::TexturingRegs::FullTextur
 
 template <class T>
 auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& info, u32 max_level) -> Surface {
-    if (info.physical_address == 0) {
+    if (info.physical_address == 0) [[unlikely]] {
         return nullptr;
     }
 
@@ -501,34 +508,34 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
     params.res_scale = /*texture_filterer->IsNull() ?*/ 1 /*: resolution_scale_factor*/;
     params.UpdateParams();
 
-    u32 min_width = info.width >> max_level;
-    u32 min_height = info.height >> max_level;
+    const u32 min_width = info.width >> max_level;
+    const u32 min_height = info.height >> max_level;
     if (min_width % 8 != 0 || min_height % 8 != 0) {
-        LOG_CRITICAL(HW_GPU, "Texture size ({}x{}) is not multiple of 8", min_width,
-                     min_height);
+        LOG_CRITICAL(HW_GPU, "Texture size ({}x{}) is not multiple of 8", min_width, min_height);
         return nullptr;
     }
+
     if (info.width != (min_width << max_level) || info.height != (min_height << max_level)) {
-        LOG_CRITICAL(HW_GPU,
-                     "Texture size ({}x{}) does not support required mipmap level ({})",
+        LOG_CRITICAL(HW_GPU, "Texture size ({}x{}) does not support required mipmap level ({})",
                      params.width, params.height, max_level);
         return nullptr;
     }
 
     auto surface = GetSurface(params, ScaleMatch::Ignore, true);
-    if (!surface)
+    if (!surface) {
         return nullptr;
+    }
 
     // Update mipmap if necessary
     if (max_level != 0) {
         if (max_level >= 8) {
-            // since PICA only supports texture size between 8 and 1024, there are at most eight
+            // Since PICA only supports texture size between 8 and 1024, there are at most eight
             // possible mipmap levels including the base.
             LOG_CRITICAL(HW_GPU, "Unsupported mipmap level {}", max_level);
             return nullptr;
         }
 
-        // Allocate more mipmap level if necessary
+        // Allocate more mipmap levels if necessary
         if (surface->max_level < max_level) {
             /*if (!texture_filterer->IsNull()) {
                 // TODO: proper mipmap support for custom textures
@@ -625,12 +632,9 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
             if (surface) {
                 watcher = surface->CreateWatcher();
             } else {
-                /**
-                 * Can occur when texture address is invalid. We mark the watcher with nullptr
-                 * in this case and the content of the face wouldn't get updated. These are
-                 * usually leftover setup in the texture unit and games are not supposed to draw
-                 * using them.
-                 */
+                 // Can occur when texture address is invalid. We mark the watcher with nullptr
+                 // in this case and the content of the face wouldn't get updated. These are usually
+                 // leftover setup in the texture unit and games are not supposed to draw using them.
                 watcher = nullptr;
             }
         }
@@ -678,11 +682,13 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
         texture_filterer->Reset(Settings::values.texture_filter_name,
                                 VideoCore::GetResolutionScaleFactor())*/false;
 
-    if (resolution_scale_changed || texture_filter_changed) {
+    if (resolution_scale_changed || texture_filter_changed) [[unlikely]] {
         resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
         FlushAll();
-        while (!surface_cache.empty())
+        while (!surface_cache.empty()) {
             UnregisterSurface(*surface_cache.begin()->second.begin());
+        }
+
         texture_cube_cache.clear();
     }
 
@@ -793,7 +799,7 @@ auto RasterizerCache<T>::GetTexCopySurface(const SurfaceParams& params) -> Surfa
     Surface match_surface = FindMatch<MatchFlags::TexCopy | MatchFlags::Invalid>(
         surface_cache, params, ScaleMatch::Ignore);
 
-    if (match_surface != nullptr) {
+    if (match_surface) {
         ValidateSurface(match_surface, params.addr, params.size);
 
         SurfaceParams match_subrect;
@@ -830,6 +836,7 @@ void RasterizerCache<T>::DuplicateSurface(const Surface& src_surface, const Surf
             regions += pair.first;
         }
     }
+
     for (const auto& interval : regions) {
         dirty_regions.set({interval, dest_surface});
     }
@@ -849,7 +856,8 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
     }
 
     auto validate_regions = surface->invalid_regions & validate_interval;
-    auto NotifyValidated = [&](SurfaceInterval interval) {
+
+    const auto NotifyValidated = [&](SurfaceInterval interval) {
         surface->invalid_regions.erase(interval);
         validate_regions.erase(interval);
     };
@@ -860,8 +868,8 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
             break;
         }
 
-        const auto interval = *it & validate_interval;
         // Look for a valid surface to copy from
+        const auto interval = *it & validate_interval;
         SurfaceParams params = surface->FromInterval(interval);
 
         Surface copy_surface =
@@ -954,13 +962,14 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
 
     surface->Download(download, staging);
 
-    MemoryRef dest_ptr = VideoCore::g_memory->GetPhysicalRef(flush_start);
-    if (!dest_ptr) [[unlikely]] {
-        return;
-    }
+    download_queue.push_back([this, surface, flush_start, flush_end, flush_info, mapped = staging.mapped]() {
+        MemoryRef dest_ptr = VideoCore::g_memory->GetPhysicalRef(flush_start);
+        if (!dest_ptr) [[unlikely]] {
+            return;
+        }
 
-    const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
-    download_queue.push_back([this, surface, download_dest, flush_start, flush_end, flush_info, mapped = staging.mapped]() {
+        const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
+
         if (surface->is_tiled) {
             std::vector<std::byte> temp_data(flush_info.width * flush_info.height * GetBytesPerPixel(flush_info.pixel_format));
             runtime.FormatConvert(*surface, false, mapped, temp_data);
@@ -1017,11 +1026,11 @@ bool RasterizerCache<T>::NoUnimplementedReinterpretations(const Surface& surface
     for (PixelFormat format : all_formats) {
         if (GetFormatBpp(format) == surface->GetFormatBpp()) {
             params.pixel_format = format;
-            // This could potentially be expensive,
-            // although experimentally it hasn't been too bad
+            // This could potentially be expensive, although experimentally it hasn't been too bad
             Surface test_surface =
                 FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
-            if (test_surface != nullptr) {
+
+            if (test_surface) {
                 LOG_WARNING(HW_GPU, "Missing pixel_format reinterpreter: {} -> {}",
                             PixelFormatAsString(format),
                             PixelFormatAsString(surface->pixel_format));
@@ -1029,6 +1038,7 @@ bool RasterizerCache<T>::NoUnimplementedReinterpretations(const Surface& surface
             }
         }
     }
+
     return implemented;
 }
 
@@ -1149,7 +1159,7 @@ void RasterizerCache<T>::FlushRegion(PAddr addr, u32 size, Surface flush_surface
     // before we issue the CPU to GPU flush and reduces scheduler slot switches in Vulkan
     if (!download_queue.empty()) {
         runtime.Finish();
-        for (auto& download_func : download_queue) {
+        for (const auto& download_func : download_queue) {
             download_func();
         }
 
@@ -1184,12 +1194,13 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, const Surface& r
 
     for (const auto& pair : RangeFromInterval(surface_cache, invalid_interval)) {
         for (const auto& cached_surface : pair.second) {
-            if (cached_surface == region_owner)
+            if (cached_surface == region_owner) {
                 continue;
+            }
 
             // If cpu is invalidating this region we want to remove it
             // to (likely) mark the memory pages as uncached
-            if (region_owner == nullptr && size <= 8) {
+            if (!region_owner && size <= 8) {
                 FlushRegion(cached_surface->addr, cached_surface->size, cached_surface);
                 remove_surfaces.emplace(cached_surface);
                 continue;
@@ -1234,7 +1245,6 @@ template <class T>
 auto RasterizerCache<T>::CreateSurface(SurfaceParams& params) -> Surface {
     Surface surface = std::make_shared<typename T::SurfaceType>(params, runtime);
     surface->invalid_regions.insert(surface->GetInterval());
-
     return surface;
 }
 
@@ -1245,6 +1255,7 @@ void RasterizerCache<T>::RegisterSurface(const Surface& surface) {
     if (surface->registered) {
         return;
     }
+
     surface->registered = true;
     surface_cache.add({surface->GetInterval(), SurfaceSet{surface}});
     rasterizer.UpdatePagesCachedCount(surface->addr, surface->size, 1);
@@ -1257,6 +1268,7 @@ void RasterizerCache<T>::UnregisterSurface(const Surface& surface) {
     if (!surface->registered) {
         return;
     }
+
     surface->registered = false;
     rasterizer.UpdatePagesCachedCount(surface->addr, surface->size, -1);
     surface_cache.subtract({surface->GetInterval(), SurfaceSet{surface}});

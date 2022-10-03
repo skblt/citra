@@ -26,17 +26,21 @@ public:
     /// Exits from any currently active renderpass instance
     void ExitRenderpass();
 
+    /// Creates the renderpass used when rendering to the swapchain
+    void CreatePresentRenderpass(vk::Format format);
+
     /// Returns the renderpass associated with the color-depth format pair
     [[nodiscard]] vk::RenderPass GetRenderpass(VideoCore::PixelFormat color, VideoCore::PixelFormat depth,
                                                bool is_clear) const;
-
     /// Returns the swapchain clear renderpass
     [[nodiscard]] vk::RenderPass GetPresentRenderpass() const {
         return present_renderpass;
     }
 
-    /// Creates the renderpass used when rendering to the swapchain
-    void CreatePresentRenderpass(vk::Format format);
+    /// Invalidates the currently active renderpass
+    void OnSlotSwitch() {
+        active_renderpass = VK_NULL_HANDLE;
+    }
 
 private:
     /// Creates a renderpass configured appropriately and stores it in cached_renderpasses
