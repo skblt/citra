@@ -35,9 +35,9 @@ struct SamplerInfo {
     TextureConfig::WrapMode wrap_s;
     TextureConfig::WrapMode wrap_t;
     u32 border_color = 0;
-    u32 lod_min = 0;
-    u32 lod_max = 0;
-    s32 lod_bias = 0;
+    float lod_min = 0;
+    float lod_max = 0;
+    float lod_bias = 0;
 
     // TODO(wwylele): remove this once mipmap for cube is implemented
     bool supress_mipmap_for_cube = false;
