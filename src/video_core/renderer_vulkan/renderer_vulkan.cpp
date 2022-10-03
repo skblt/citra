@@ -341,19 +341,18 @@ void RendererVulkan::BeginRendering() {
         .color = clear_color
     };
 
-    const auto& layout = render_window.GetFramebufferLayout();
     const vk::RenderPassBeginInfo begin_info = {
         .renderPass = renderpass_cache.GetPresentRenderpass(),
         .framebuffer = swapchain.GetFramebuffer(),
         .renderArea = vk::Rect2D{
             .offset = {0, 0},
-            .extent = {layout.width, layout.height}
+            .extent = swapchain.GetExtent()
         },
         .clearValueCount = 1,
         .pClearValues = &clear_value,
     };
 
-    command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
+    renderpass_cache.EnterRenderpass(begin_info);
 }
 
 void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& framebuffer,
@@ -756,7 +755,6 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
 
     command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
     command_buffer.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
-    command_buffer.endRenderPass();
 }
 
 void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_id_r,
@@ -993,8 +991,7 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
         }
     }
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.endRenderPass();
+    renderpass_cache.ExitRenderpass();
 }
 
 void RendererVulkan::SwapBuffers() {
@@ -1029,6 +1026,8 @@ void RendererVulkan::SwapBuffers() {
     command_buffer.setViewport(0, viewport);
     command_buffer.setScissor(0, scissor);
 
+    renderpass_cache.ExitRenderpass();
+
     for (auto& info : screen_infos) {
         auto alloc = info.display_texture ? info.display_texture : &info.texture.alloc;
         runtime.Transition(command_buffer, *alloc, vk::ImageLayout::eShaderReadOnlyOptimal, 0, alloc->levels);
@@ -1053,6 +1052,7 @@ void RendererVulkan::OnSlotSwitch() {
     }
 
     runtime.OnSlotSwitch(scheduler.GetCurrentSlotIndex());
+    renderpass_cache.OnSlotSwitch();
     rasterizer->pipeline_cache.MarkDirty();
 }
 

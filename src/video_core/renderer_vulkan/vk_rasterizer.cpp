@@ -680,6 +680,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         }
     };
 
+    renderpass_cache.ExitRenderpass();
+
     // Sync and bind the texture surfaces
     const auto pica_textures = regs.texturing.GetTextures();
     for (unsigned texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
@@ -867,8 +869,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             command_buffer.draw(vertices, 1, base_vertex, 0);
         }
     }
-
-    renderpass_cache.ExitRenderpass();
 
     vertex_batch.clear();
 
