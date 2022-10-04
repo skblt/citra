@@ -311,11 +311,15 @@ void TextureRuntime::BindFramebuffer(GLenum target, GLint level, GLenum textarge
     case VideoCore::SurfaceType::Color:
     case VideoCore::SurfaceType::Texture:
         glFramebufferTexture2D(target, GL_COLOR_ATTACHMENT0, textarget, texture.handle, level);
+        glFramebufferTexture2D(target, GL_DEPTH_STENCIL_ATTACHMENT, textarget, 0, 0);
         break;
     case VideoCore::SurfaceType::Depth:
+        glFramebufferTexture2D(target, GL_COLOR_ATTACHMENT0, textarget, 0, 0);
         glFramebufferTexture2D(target, GL_DEPTH_ATTACHMENT, textarget, texture.handle, level);
+        glFramebufferTexture2D(target, GL_STENCIL_ATTACHMENT, textarget, 0, 0);
         break;
     case VideoCore::SurfaceType::DepthStencil:
+        glFramebufferTexture2D(target, GL_COLOR_ATTACHMENT0, textarget, 0, 0);
         glFramebufferTexture2D(target, GL_DEPTH_STENCIL_ATTACHMENT, textarget, texture.handle, level);
         break;
     default:
