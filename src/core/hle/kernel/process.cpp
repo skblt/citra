@@ -265,7 +265,7 @@ ResultCode Process::HeapFree(VAddr target, u32 size) {
 
     // Free heaps block by block
     CASCADE_RESULT(auto backing_blocks, vm_manager.GetBackingBlocksForRange(target, size));
-    for (const auto [backing_memory, block_size] : backing_blocks) {
+    for (const auto& [backing_memory, block_size] : backing_blocks) {
         memory_region->Free(kernel.memory.GetFCRAMOffset(backing_memory.GetPtr()), block_size);
     }
 
@@ -396,7 +396,7 @@ ResultCode Process::Map(VAddr target, VAddr source, u32 size, VMAPermission perm
 
     CASCADE_RESULT(auto backing_blocks, vm_manager.GetBackingBlocksForRange(source, size));
     VAddr interval_target = target;
-    for (const auto [backing_memory, block_size] : backing_blocks) {
+    for (const auto& [backing_memory, block_size] : backing_blocks) {
         auto target_vma =
             vm_manager.MapBackingMemory(interval_target, backing_memory, block_size, target_state);
         ASSERT(target_vma.Succeeded());
