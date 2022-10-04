@@ -208,6 +208,8 @@ u32 ARM_Dynarmic::GetVFPSystemReg(VFPSystemRegister reg) const {
     default:
         UNREACHABLE_MSG("Unknown VFP system register: {}", reg);
     }
+
+    return 0;
 }
 
 void ARM_Dynarmic::SetVFPSystemReg(VFPSystemRegister reg, u32 value) {
