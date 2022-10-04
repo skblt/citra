@@ -278,9 +278,9 @@ bool RasterizerCache<T>::BlitSurfaces(const Surface& src_surface, Common::Rectan
 
     dst_surface->InvalidateAllWatcher();
 
-    // Prefer texture copy over blit if possible. This is possible when the following is true:
-    // 1. No scaling (the dimentions of src and dest rect are the same
-    // 2. No flipping (if the bottom value is bigger than the top this indicates texture flip
+    // Prefer texture copy over blit when possible. This can happen when the following is true:
+    // 1. No scaling (the dimentions of src and dest rect are the same)
+    // 2. No flipping (if the bottom value is bigger than the top this indicates texture flip)
     if (src_rect.GetWidth() == dst_rect.GetWidth() &&
             src_rect.GetHeight() == dst_rect.GetHeight() &&
             src_rect.bottom < src_rect.top) {
