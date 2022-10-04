@@ -243,7 +243,19 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
 }
 
 bool TextureRuntime::CopyTextures(Surface& source, Surface& dest, const VideoCore::TextureCopy& copy) {
-    return true;
+    // Emulate texture copy with blit for now
+    const VideoCore::TextureBlit blit = {
+        .src_level = copy.src_level,
+        .dst_level = copy.dst_level,
+        .src_layer = copy.src_layer,
+        .dst_layer = copy.dst_layer,
+        .src_rect = {copy.src_offset.x, copy.extent.height,
+                     copy.extent.width, copy.src_offset.x},
+        .dst_rect = {copy.dst_offset.x, copy.extent.height,
+                     copy.extent.width, copy.dst_offset.x}
+    };
+
+    return BlitTextures(source, dest, blit);
 }
 
 bool TextureRuntime::BlitTextures(Surface& source, Surface& dest, const VideoCore::TextureBlit& blit) {
