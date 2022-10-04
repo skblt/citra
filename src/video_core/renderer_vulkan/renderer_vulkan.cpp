@@ -153,35 +153,6 @@ struct ScreenRectVertex {
 
 constexpr u32 VERTEX_BUFFER_SIZE = sizeof(ScreenRectVertex) * 8192;
 
-/**
- * Defines a 1:1 pixel ortographic projection matrix with (0,0) on the top-left
- * corner and (width, height) on the lower-bottom.
- *
- * The projection part of the matrix is trivial, hence these operations are represented
- * by a 3x2 matrix.
- *
- * @param flipped Whether the frame should be flipped upside down.
- */
-static std::array<float, 3 * 2> MakeOrthographicMatrix(float width, float height, bool flipped) {
-
-    std::array<float, 3 * 2> matrix; // Laid out in column-major order
-
-    // Last matrix row is implicitly assumed to be [0, 0, 1].
-    if (flipped) {
-        // clang-format off
-        matrix[0] = 2.f / width; matrix[2] = 0.f;           matrix[4] = -1.f;
-        matrix[1] = 0.f;         matrix[3] = 2.f / height;  matrix[5] = -1.f;
-        // clang-format on
-    } else {
-        // clang-format off
-        matrix[0] = 2.f / width; matrix[2] = 0.f;           matrix[4] = -1.f;
-        matrix[1] = 0.f;         matrix[3] = -2.f / height; matrix[5] = 1.f;
-        // clang-format on
-    }
-
-    return matrix;
-}
-
 RendererVulkan::RendererVulkan(Frontend::EmuWindow& window)
     : RendererBase{window}, instance{window, Settings::values.renderer_debug}, scheduler{instance, *this},
       renderpass_cache{instance, scheduler}, runtime{instance, scheduler, renderpass_cache},
