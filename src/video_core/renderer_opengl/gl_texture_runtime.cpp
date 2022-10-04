@@ -68,6 +68,7 @@ const StagingBuffer& TextureRuntime::FindStaging(u32 size, bool upload) {
     // Attempt to find a free buffer that fits the requested data
     for (auto it = search.lower_bound({.size = size}); it != search.end(); it++) {
         if (!upload || it->IsFree()) {
+            it->mapped = std::span{it->mapped.data(), size};
             return *it;
         }
     }
@@ -132,6 +133,7 @@ void TextureRuntime::FormatConvert(const Surface& surface,  bool upload,
     } else if (format == VideoCore::PixelFormat::RGB8 && driver.IsOpenGLES()) {
         Pica::Texture::ConvertBGRToRGB(source, dest);
     } else {
+        ASSERT(dest.size() >= source.size());
         std::memcpy(dest.data(), source.data(), source.size());
     }
 }
@@ -311,18 +313,22 @@ void TextureRuntime::BindFramebuffer(GLenum target, GLint level, GLenum textarge
 
 Surface::Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
     : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, driver{runtime.GetDriver()} {
-    texture = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format, texture_type);
+    if (pixel_format != VideoCore::PixelFormat::Invalid) {
+        texture = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format, texture_type);
+    }
 }
 
 Surface::~Surface() {
-    const VideoCore::HostTextureTag tag = {
-        .format = pixel_format,
-        .width = GetScaledWidth(),
-        .height = GetScaledHeight(),
-        .layers = texture_type == VideoCore::TextureType::CubeMap ? 6u : 1u
-    };
+    if (pixel_format != VideoCore::PixelFormat::Invalid) {
+        const VideoCore::HostTextureTag tag = {
+            .format = pixel_format,
+            .width = GetScaledWidth(),
+            .height = GetScaledHeight(),
+            .layers = texture_type == VideoCore::TextureType::CubeMap ? 6u : 1u
+        };
 
-    runtime.texture_recycler.emplace(tag, std::move(texture));
+        runtime.texture_recycler.emplace(tag, std::move(texture));
+    }
 }
 
 MICROPROFILE_DEFINE(OpenGL_Upload, "OpenGLSurface", "Texture Upload", MP_RGB(128, 192, 64));

@@ -76,7 +76,7 @@ static std::string GetVertexInterfaceDeclaration(bool is_output, bool separable_
 
     const auto append_variable = [&](std::string_view var, int location) {
         if (separable_shader) {
-            out += fmt::format("layout (location={}) ", location);
+            out += fmt::format("layout(location = {}) ", location);
         }
         out += fmt::format("{}{};\n", is_output ? "out " : "in ", var);
     };
@@ -1240,7 +1240,7 @@ ShaderDecompiler::ProgramResult GenerateFragmentShader(const PicaFSConfig& confi
 in vec4 gl_FragCoord;
 #endif // CITRA_GLES
 
-out vec4 color;
+layout (location = 0) out vec4 color;
 
 uniform sampler2D tex0;
 uniform sampler2D tex1;

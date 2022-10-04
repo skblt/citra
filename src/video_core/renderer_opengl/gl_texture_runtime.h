@@ -22,7 +22,7 @@ struct FormatTuple {
 struct StagingBuffer {
     OGLBuffer buffer{};
     mutable OGLSync buffer_lock{};
-    std::span<std::byte> mapped{};
+    mutable std::span<std::byte> mapped{};
     u32 size{};
 
     bool operator<(const StagingBuffer& other) const {
