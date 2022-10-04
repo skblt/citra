@@ -122,10 +122,8 @@ public:
         QSurfaceFormat format;
 
         if (Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES) {
-            QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
             format.setVersion(3, 2);
         } else {
-            QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
             format.setVersion(4, 4);
             format.setProfile(QSurfaceFormat::CoreProfile);
         }
