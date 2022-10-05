@@ -161,3 +161,8 @@ if(ANDROID)
     add_subdirectory(libyuv)
     target_include_directories(yuv INTERFACE ./libyuv/include)
 endif()
+
+# VMA
+add_library(vma INTERFACE)
+target_include_directories(vma INTERFACE ./vma)
+

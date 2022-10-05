@@ -227,7 +227,7 @@ void ConvertBGRToRGB(std::span<const std::byte> source, std::span<std::byte> des
         u32 bgr{};
         std::memcpy(&bgr, source.data() + i, 3);
         const u32 rgb = Common::swap32(bgr << 8);
-        std::memcpy(dest.data(), &rgb, 3);
+        std::memcpy(dest.data() + i, &rgb, 3);
     }
 }
 
