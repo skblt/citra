@@ -24,6 +24,11 @@ public:
 
     void UpdateBackgroundColorButton(const QColor& color);
 
+private:
+    void DiscoverPhysicalDevices();
+    void SetPhysicalDeviceComboVisibility(int index);
+
+private:
     std::unique_ptr<Ui::ConfigureGraphics> ui;
     QColor bg_color;
 };
