@@ -38,7 +38,38 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
     }
 }
 
-Instance::Instance(Frontend::EmuWindow& window, bool enable_validation) {
+Instance::Instance() {
+    // Fetch instance independant function pointers
+    vk::DynamicLoader dl;
+    auto vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
+
+    const vk::ApplicationInfo application_info = {
+        .pApplicationName = "Citra",
+        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+        .pEngineName = "Citra Vulkan",
+        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+        .apiVersion = VK_API_VERSION_1_0
+    };
+
+    const vk::InstanceCreateInfo instance_info = {
+        .pApplicationInfo = &application_info
+    };
+
+    instance = vk::createInstance(instance_info);
+
+    // Load required function pointers for querying the physical device
+    VULKAN_HPP_DEFAULT_DISPATCHER.vkEnumeratePhysicalDevices =
+            PFN_vkEnumeratePhysicalDevices(vkGetInstanceProcAddr(instance, "vkEnumeratePhysicalDevices"));
+    VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceProperties =
+            PFN_vkGetPhysicalDeviceProperties(vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceProperties"));
+    VULKAN_HPP_DEFAULT_DISPATCHER.vkDestroyInstance =
+            PFN_vkDestroyInstance(vkGetInstanceProcAddr(instance, "vkDestroyInstance"));
+
+    physical_devices = instance.enumeratePhysicalDevices();
+}
+
+Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index, bool enable_validation) {
     auto window_info = window.GetWindowInfo();
 
     // Fetch instance independant function pointers
@@ -53,6 +84,7 @@ Instance::Instance(Frontend::EmuWindow& window, bool enable_validation) {
     const u32 available_version = vk::enumerateInstanceVersion();
     if (available_version < VK_API_VERSION_1_1) {
         LOG_CRITICAL(Render_Vulkan, "Vulkan 1.0 is not supported, 1.1 is required!");
+        return;
     }
 
     const vk::ApplicationInfo application_info = {
@@ -76,9 +108,16 @@ Instance::Instance(Frontend::EmuWindow& window, bool enable_validation) {
     instance = vk::createInstance(instance_info);
     surface = CreateSurface(instance, window);
 
-    // TODO: GPU select dialog
-    auto physical_devices = instance.enumeratePhysicalDevices();
-    physical_device = physical_devices[1];
+    // Pick physical device
+    physical_devices = instance.enumeratePhysicalDevices();
+    if (const u16 physical_device_count = static_cast<u16>(physical_devices.size());
+            physical_device_index >= physical_devices.size()) {
+        LOG_CRITICAL(Render_Vulkan, "Invalid physical device index {} provided when only {} devices exist",
+                     physical_device_index, physical_device_count);
+        UNREACHABLE();
+    }
+
+    physical_device = physical_devices[physical_device_index];
     device_properties = physical_device.getProperties();
 
     CreateDevice();
@@ -86,10 +125,12 @@ Instance::Instance(Frontend::EmuWindow& window, bool enable_validation) {
 }
 
 Instance::~Instance() {
-    device.waitIdle();
-    vmaDestroyAllocator(allocator);
-    device.destroy();
-    instance.destroySurfaceKHR(surface);
+    if (device) {
+        vmaDestroyAllocator(allocator);
+        device.destroy();
+        instance.destroySurfaceKHR(surface);
+    }
+
     instance.destroy();
 }
 

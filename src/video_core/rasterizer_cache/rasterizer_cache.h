@@ -1077,44 +1077,7 @@ bool RasterizerCache<T>::ValidateByReinterpretation(const Surface& surface, cons
             auto src_rect = reinterpret_surface->GetScaledSubRect(reinterpret_params);
             auto dest_rect = surface->GetScaledSubRect(reinterpret_params);
 
-            if (!texture_filterer->IsNull() && reinterpret_surface->res_scale == 1 &&
-                surface->res_scale == resolution_scale_factor) {
-                // The destination surface is either a framebuffer, or a filtered texture.
-                // Create an intermediate surface to convert to before blitting to the
-                // destination.
-                const u32 width = dest_rect.GetHeight() / resolution_scale_factor;
-                const u32 height = dest_rect.GetWidth() / resolution_scale_factor;
-                const Common::Rectangle<u32> tmp_rect{0, width, height, 0};
-
-                OGLTexture tmp_tex = AllocateSurfaceTexture(dst_format, height, width);
-                reinterpreter->Reinterpret(reinterpret_surface->texture, src_rect, tmp_tex,
-                                           tmp_rect);
-
-                if (!texture_filterer->Filter(tmp_tex, tmp_rect, surface->texture, dest_rect, type)) {
-                    const TextureBlit texture_blit = {
-                        .surface_type = type,
-                        .src_level = 0,
-                        .dst_level = 0,
-                        .src_layer = 0,
-                        .dst_layer = 0,
-                        .src_region = Region2D{
-                            .start = {0, 0},
-                            .end = {width, height}
-                        },
-                        .dst_region = Region2D{
-                            .start = {dest_rect.left, dest_rect.bottom},
-                            .end = {dest_rect.right, dest_rect.top}
-                        }
-                    };
-
-                    runtime.BlitTextures(tmp_tex, surface->texture, texture_blit);
-                }
-
-            } else {
-                reinterpreter->Reinterpret(reinterpret_surface->texture, src_rect, surface->texture,
-                                           dest_rect);
-            }
-
+            reinterpreter->Reinterpret(reinterpret_surface->texture, src_rect, surface->texture, dest_rect);
             return true;
         }
     }*/

@@ -5,7 +5,8 @@
 #pragma once
 
 #include <array>
-#include <unordered_map>
+#include <span>
+#include <vector>
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 
@@ -27,7 +28,8 @@ struct FormatTraits {
 /// The global Vulkan instance
 class Instance {
 public:
-    Instance(Frontend::EmuWindow& window, bool enable_validation);
+    Instance(); ///< Portable constructor used to query physical devices
+    Instance(Frontend::EmuWindow& window, u32 physical_device_index, bool enable_validation);
     ~Instance();
 
     /// Returns the FormatTraits struct for the provided pixel format
@@ -53,8 +55,14 @@ public:
         return device;
     }
 
+    /// Returns the VMA allocator handle
     VmaAllocator GetAllocator() const {
         return allocator;
+    }
+
+    /// Returns a list of the available physical devices
+    std::span<const vk::PhysicalDevice> GetPhysicalDevices() const {
+        return physical_devices;
     }
 
     /// Retrieve queue information
@@ -131,6 +139,7 @@ private:
     VmaAllocator allocator;
     vk::Queue present_queue;
     vk::Queue graphics_queue;
+    std::vector<vk::PhysicalDevice> physical_devices;
     std::array<FormatTraits, VideoCore::PIXEL_FORMAT_COUNT> format_table;
     u32 present_queue_family_index = 0;
     u32 graphics_queue_family_index = 0;

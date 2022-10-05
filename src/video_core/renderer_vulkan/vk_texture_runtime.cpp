@@ -661,10 +661,6 @@ bool Surface::NeedsConvert() const {
 }
 
 u32 Surface::GetInternalBytesPerPixel() const {
-    if (alloc.format == vk::Format::eD32SfloatS8Uint) {
-        return 8;
-    }
-
     return vk::blockSize(alloc.format);
 }
 
