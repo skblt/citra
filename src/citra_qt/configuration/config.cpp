@@ -481,6 +481,7 @@ void Config::ReadRendererValues() {
     Settings::values.graphics_api = static_cast<Settings::GraphicsAPI>(
         ReadSetting(QStringLiteral("graphics_api"), static_cast<u32>(Settings::GraphicsAPI::OpenGL))
                 .toUInt());
+    Settings::values.physical_device = ReadSetting(QStringLiteral("physical_device"), 0).toUInt();
     Settings::values.renderer_debug = ReadSetting(QStringLiteral("renderer_debug"), false).toBool();
     Settings::values.use_hw_renderer =
         ReadSetting(QStringLiteral("use_hw_renderer"), true).toBool();
@@ -997,6 +998,7 @@ void Config::SaveRendererValues() {
 
     WriteSetting(QStringLiteral("graphics_api"), static_cast<u32>(Settings::values.graphics_api),
                  static_cast<u32>(Settings::GraphicsAPI::OpenGL));
+    WriteSetting(QStringLiteral("physical_device"), Settings::values.physical_device, 0);
     WriteSetting(QStringLiteral("renderer_debug"), Settings::values.renderer_debug, false);
     WriteSetting(QStringLiteral("use_hw_renderer"), Settings::values.use_hw_renderer, true);
     WriteSetting(QStringLiteral("use_hw_shader"), Settings::values.use_hw_shader, true);

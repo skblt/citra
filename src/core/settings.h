@@ -170,6 +170,7 @@ struct Values {
 
     // Renderer
     GraphicsAPI graphics_api;
+    u16 physical_device;
     bool renderer_debug;
     bool use_hw_renderer;
     bool use_hw_shader;
