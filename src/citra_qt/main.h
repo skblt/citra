@@ -9,6 +9,7 @@
 #include <QMainWindow>
 #include <QTimer>
 #include <QTranslator>
+#include <QPushButton>
 #include "citra_qt/compatibility_list.h"
 #include "citra_qt/hotkeys.h"
 #include "common/announce_multiplayer_room.h"
@@ -234,6 +235,7 @@ private:
     void InstallCIA(QStringList filepaths);
     void HideMouseCursor();
     void ShowMouseCursor();
+    void UpdateAPIIndicator(bool override);
 
     std::unique_ptr<Ui::MainWindow> ui;
 
@@ -248,6 +250,7 @@ private:
     QLabel* emu_speed_label = nullptr;
     QLabel* game_fps_label = nullptr;
     QLabel* emu_frametime_label = nullptr;
+    QPushButton* graphics_api_button = nullptr;
     QTimer status_bar_update_timer;
     bool message_label_used_for_movie = false;
 
