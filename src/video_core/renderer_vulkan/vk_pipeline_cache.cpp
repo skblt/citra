@@ -8,8 +8,8 @@
 #include "common/file_util.h"
 #include "common/logging/log.h"
 #include "video_core/renderer_vulkan/pica_to_vk.h"
-#include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
 
@@ -22,51 +22,26 @@ struct Bindings {
 
 constexpr u32 RASTERIZER_SET_COUNT = 4;
 constexpr static std::array RASTERIZER_SETS = {
-    Bindings{
-        // Utility set
-        .bindings = {
-            vk::DescriptorType::eUniformBuffer,
-            vk::DescriptorType::eUniformBuffer,
-            vk::DescriptorType::eUniformTexelBuffer,
-            vk::DescriptorType::eUniformTexelBuffer,
-            vk::DescriptorType::eUniformTexelBuffer
-        },
-        .binding_count = 5
-    },
-    Bindings{
-        // Texture set
-        .bindings = {
-            vk::DescriptorType::eSampledImage,
-            vk::DescriptorType::eSampledImage,
-            vk::DescriptorType::eSampledImage,
-            vk::DescriptorType::eSampledImage
-        },
-        .binding_count = 4
-    },
-    Bindings{
-        // Sampler set
-        .bindings = {
-            vk::DescriptorType::eSampler,
-            vk::DescriptorType::eSampler,
-            vk::DescriptorType::eSampler,
-            vk::DescriptorType::eSampler
-        },
-        .binding_count = 4
-    },
-    Bindings {
-        // Shadow set
-        .bindings = {
-            vk::DescriptorType::eStorageImage,
-            vk::DescriptorType::eStorageImage,
-            vk::DescriptorType::eStorageImage,
-            vk::DescriptorType::eStorageImage,
-            vk::DescriptorType::eStorageImage,
-            vk::DescriptorType::eStorageImage,
-            vk::DescriptorType::eStorageImage
-        },
-        .binding_count = 7
-    }
-};
+    Bindings{// Utility set
+             .bindings = {vk::DescriptorType::eUniformBuffer, vk::DescriptorType::eUniformBuffer,
+                          vk::DescriptorType::eUniformTexelBuffer,
+                          vk::DescriptorType::eUniformTexelBuffer,
+                          vk::DescriptorType::eUniformTexelBuffer},
+             .binding_count = 5},
+    Bindings{// Texture set
+             .bindings = {vk::DescriptorType::eSampledImage, vk::DescriptorType::eSampledImage,
+                          vk::DescriptorType::eSampledImage, vk::DescriptorType::eSampledImage},
+             .binding_count = 4},
+    Bindings{// Sampler set
+             .bindings = {vk::DescriptorType::eSampler, vk::DescriptorType::eSampler,
+                          vk::DescriptorType::eSampler, vk::DescriptorType::eSampler},
+             .binding_count = 4},
+    Bindings{// Shadow set
+             .bindings = {vk::DescriptorType::eStorageImage, vk::DescriptorType::eStorageImage,
+                          vk::DescriptorType::eStorageImage, vk::DescriptorType::eStorageImage,
+                          vk::DescriptorType::eStorageImage, vk::DescriptorType::eStorageImage,
+                          vk::DescriptorType::eStorageImage},
+             .binding_count = 7}};
 
 constexpr vk::ShaderStageFlags ToVkStageFlags(vk::DescriptorType type) {
     vk::ShaderStageFlags flags;
@@ -79,10 +54,8 @@ constexpr vk::ShaderStageFlags ToVkStageFlags(vk::DescriptorType type) {
         break;
     case vk::DescriptorType::eUniformBuffer:
     case vk::DescriptorType::eUniformBufferDynamic:
-        flags = vk::ShaderStageFlagBits::eFragment |
-                vk::ShaderStageFlagBits::eVertex |
-                vk::ShaderStageFlagBits::eGeometry |
-                vk::ShaderStageFlagBits::eCompute;
+        flags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex |
+                vk::ShaderStageFlagBits::eGeometry | vk::ShaderStageFlagBits::eCompute;
         break;
     default:
         LOG_ERROR(Render_Vulkan, "Unknown descriptor type!");
@@ -109,10 +82,14 @@ vk::Format ToVkAttributeFormat(VertexAttribute attrib) {
     switch (attrib.type) {
     case AttribType::Float:
         switch (attrib.size) {
-        case 1: return vk::Format::eR32Sfloat;
-        case 2: return vk::Format::eR32G32Sfloat;
-        case 3: return vk::Format::eR32G32B32Sfloat;
-        case 4: return vk::Format::eR32G32B32A32Sfloat;
+        case 1:
+            return vk::Format::eR32Sfloat;
+        case 2:
+            return vk::Format::eR32G32Sfloat;
+        case 3:
+            return vk::Format::eR32G32B32Sfloat;
+        case 4:
+            return vk::Format::eR32G32B32A32Sfloat;
         }
     default:
         LOG_CRITICAL(Render_Vulkan, "Unimplemented vertex attribute format!");
@@ -124,9 +101,12 @@ vk::Format ToVkAttributeFormat(VertexAttribute attrib) {
 
 vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
     switch (index) {
-    case 0: return vk::ShaderStageFlagBits::eVertex;
-    case 1: return vk::ShaderStageFlagBits::eFragment;
-    case 2: return vk::ShaderStageFlagBits::eGeometry;
+    case 0:
+        return vk::ShaderStageFlagBits::eVertex;
+    case 1:
+        return vk::ShaderStageFlagBits::eFragment;
+    case 2:
+        return vk::ShaderStageFlagBits::eGeometry;
     default:
         LOG_CRITICAL(Render_Vulkan, "Invalid shader stage index!");
         UNREACHABLE();
@@ -135,7 +115,8 @@ vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
     return vk::ShaderStageFlagBits::eVertex;
 }
 
-PipelineCache::PipelineCache(const Instance& instance, TaskScheduler& scheduler, RenderpassCache& renderpass_cache)
+PipelineCache::PipelineCache(const Instance& instance, TaskScheduler& scheduler,
+                             RenderpassCache& renderpass_cache)
     : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache} {
     descriptor_dirty.fill(true);
 
@@ -185,9 +166,10 @@ void PipelineCache::BindPipeline(const PipelineInfo& info) {
         shader_hash = Common::HashCombine(shader_hash, shader_hashes[i]);
     }
 
-    const u64 info_hash_size = instance.IsExtendedDynamicStateSupported() ?
-            offsetof(PipelineInfo, rasterization) :
-            offsetof(PipelineInfo, depth_stencil) + offsetof(DepthStencilState, stencil_reference);
+    const u64 info_hash_size = instance.IsExtendedDynamicStateSupported()
+                                   ? offsetof(PipelineInfo, rasterization)
+                                   : offsetof(PipelineInfo, depth_stencil) +
+                                         offsetof(DepthStencilState, stencil_reference);
 
     u64 info_hash = Common::ComputeHash64(&info, info_hash_size);
     u64 pipeline_hash = Common::HashCombine(shader_hash, info_hash);
@@ -206,10 +188,12 @@ void PipelineCache::BindPipeline(const PipelineInfo& info) {
     BindDescriptorSets();
 }
 
-bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs, Pica::Shader::ShaderSetup& setup) {
+bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
+                                                Pica::Shader::ShaderSetup& setup) {
     const PicaVSConfig config{regs.vs, setup};
-    auto [handle, result] = programmable_vertex_shaders.Get(config, setup, vk::ShaderStageFlagBits::eVertex,
-                                                            instance.GetDevice(), ShaderOptimization::Debug);
+    auto [handle, result] =
+        programmable_vertex_shaders.Get(config, setup, vk::ShaderStageFlagBits::eVertex,
+                                        instance.GetDevice(), ShaderOptimization::Debug);
     if (!handle) {
         return false;
     }
@@ -247,48 +231,33 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
 
 void PipelineCache::BindTexture(u32 binding, vk::ImageView image_view) {
     const vk::DescriptorImageInfo image_info = {
-        .imageView = image_view,
-        .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-    };
+        .imageView = image_view, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
 
     SetBinding(1, binding, DescriptorData{image_info});
 }
 
 void PipelineCache::BindStorageImage(u32 binding, vk::ImageView image_view) {
-    const vk::DescriptorImageInfo image_info = {
-        .imageView = image_view,
-        .imageLayout = vk::ImageLayout::eGeneral
-    };
+    const vk::DescriptorImageInfo image_info = {.imageView = image_view,
+                                                .imageLayout = vk::ImageLayout::eGeneral};
 
     SetBinding(3, binding, DescriptorData{image_info});
 }
 
 void PipelineCache::BindBuffer(u32 binding, vk::Buffer buffer, u32 offset, u32 size) {
     const DescriptorData data = {
-        .buffer_info = vk::DescriptorBufferInfo{
-            .buffer = buffer,
-            .offset = offset,
-            .range = size
-        }
-    };
+        .buffer_info = vk::DescriptorBufferInfo{.buffer = buffer, .offset = offset, .range = size}};
 
     SetBinding(0, binding, data);
 }
 
 void PipelineCache::BindTexelBuffer(u32 binding, vk::BufferView buffer_view) {
-    const DescriptorData data = {
-        .buffer_view = buffer_view
-    };
+    const DescriptorData data = {.buffer_view = buffer_view};
 
     SetBinding(0, binding, data);
 }
 
 void PipelineCache::BindSampler(u32 binding, vk::Sampler sampler) {
-    const DescriptorData data = {
-        .image_info = vk::DescriptorImageInfo{
-            .sampler = sampler
-        }
-    };
+    const DescriptorData data = {.image_info = vk::DescriptorImageInfo{.sampler = sampler}};
 
     SetBinding(2, binding, data);
 }
@@ -311,7 +280,8 @@ void PipelineCache::MarkDirty() {
 void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
     if (instance.IsExtendedDynamicStateSupported()) {
         vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        command_buffer.setPrimitiveTopologyEXT(PicaToVK::PrimitiveTopology(info.rasterization.topology));
+        command_buffer.setPrimitiveTopologyEXT(
+            PicaToVK::PrimitiveTopology(info.rasterization.topology));
     }
 }
 
@@ -331,27 +301,22 @@ void PipelineCache::BuildLayout() {
         const auto& set = RASTERIZER_SETS[i];
         for (u32 j = 0; j < set.binding_count; j++) {
             vk::DescriptorType type = set.bindings[j];
-            set_bindings[j] = vk::DescriptorSetLayoutBinding{
-                .binding = j,
-                .descriptorType = type,
-                .descriptorCount = 1,
-                .stageFlags = ToVkStageFlags(type)
-            };
+            set_bindings[j] = vk::DescriptorSetLayoutBinding{.binding = j,
+                                                             .descriptorType = type,
+                                                             .descriptorCount = 1,
+                                                             .stageFlags = ToVkStageFlags(type)};
 
-            update_entries[j] = vk::DescriptorUpdateTemplateEntry{
-                .dstBinding = j,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType  = type,
-                .offset = j * sizeof(DescriptorData),
-                .stride = 0
-            };
+            update_entries[j] =
+                vk::DescriptorUpdateTemplateEntry{.dstBinding = j,
+                                                  .dstArrayElement = 0,
+                                                  .descriptorCount = 1,
+                                                  .descriptorType = type,
+                                                  .offset = j * sizeof(DescriptorData),
+                                                  .stride = 0};
         }
 
-        const vk::DescriptorSetLayoutCreateInfo layout_info = {
-            .bindingCount = set.binding_count,
-            .pBindings = set_bindings.data()
-        };
+        const vk::DescriptorSetLayoutCreateInfo layout_info = {.bindingCount = set.binding_count,
+                                                               .pBindings = set_bindings.data()};
 
         // Create descriptor set layout
         descriptor_set_layouts[i] = device.createDescriptorSetLayout(layout_info);
@@ -360,19 +325,16 @@ void PipelineCache::BuildLayout() {
             .descriptorUpdateEntryCount = set.binding_count,
             .pDescriptorUpdateEntries = update_entries.data(),
             .templateType = vk::DescriptorUpdateTemplateType::eDescriptorSet,
-            .descriptorSetLayout = descriptor_set_layouts[i]
-        };
+            .descriptorSetLayout = descriptor_set_layouts[i]};
 
         // Create descriptor set update template
         update_templates[i] = device.createDescriptorUpdateTemplate(template_info);
     }
 
-    const vk::PipelineLayoutCreateInfo layout_info = {
-        .setLayoutCount = RASTERIZER_SET_COUNT,
-        .pSetLayouts = descriptor_set_layouts.data(),
-        .pushConstantRangeCount = 0,
-        .pPushConstantRanges = nullptr
-    };
+    const vk::PipelineLayoutCreateInfo layout_info = {.setLayoutCount = RASTERIZER_SET_COUNT,
+                                                      .pSetLayouts = descriptor_set_layouts.data(),
+                                                      .pushConstantRangeCount = 0,
+                                                      .pPushConstantRanges = nullptr};
 
     layout = device.createPipelineLayout(layout_info);
 }
@@ -389,16 +351,14 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         }
 
         shader_stages[shader_count++] = vk::PipelineShaderStageCreateInfo{
-            .stage = ToVkShaderStage(i),
-            .module = shader,
-            .pName = "main"
-        };
+            .stage = ToVkShaderStage(i), .module = shader, .pName = "main"};
     }
 
     /**
-     * Vulkan doesn't intuitively support fixed attributes. To avoid duplicating the data and increasing
-     * data upload, when the fixed flag is true, we specify VK_VERTEX_INPUT_RATE_INSTANCE as the input rate.
-     * Since one instance is all we render, the shader will always read the single attribute.
+     * Vulkan doesn't intuitively support fixed attributes. To avoid duplicating the data and
+     * increasing data upload, when the fixed flag is true, we specify VK_VERTEX_INPUT_RATE_INSTANCE
+     * as the input rate. Since one instance is all we render, the shader will always read the
+     * single attribute.
      */
     std::array<vk::VertexInputBindingDescription, MAX_VERTEX_BINDINGS> bindings;
     for (u32 i = 0; i < info.vertex_layout.binding_count; i++) {
@@ -407,33 +367,28 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
             .binding = binding.binding,
             .stride = binding.stride,
             .inputRate = binding.fixed.Value() ? vk::VertexInputRate::eInstance
-                                               : vk::VertexInputRate::eVertex
-        };
+                                               : vk::VertexInputRate::eVertex};
     }
 
     // Populate vertex attribute structures
     std::array<vk::VertexInputAttributeDescription, MAX_VERTEX_ATTRIBUTES> attributes;
     for (u32 i = 0; i < info.vertex_layout.attribute_count; i++) {
         const auto& attr = info.vertex_layout.attributes[i];
-        attributes[i] = vk::VertexInputAttributeDescription{
-            .location = attr.location,
-            .binding = attr.binding,
-            .format = ToVkAttributeFormat(attr),
-            .offset = attr.offset
-        };
+        attributes[i] = vk::VertexInputAttributeDescription{.location = attr.location,
+                                                            .binding = attr.binding,
+                                                            .format = ToVkAttributeFormat(attr),
+                                                            .offset = attr.offset};
     }
 
     const vk::PipelineVertexInputStateCreateInfo vertex_input_info = {
         .vertexBindingDescriptionCount = info.vertex_layout.binding_count,
         .pVertexBindingDescriptions = bindings.data(),
         .vertexAttributeDescriptionCount = info.vertex_layout.attribute_count,
-        .pVertexAttributeDescriptions = attributes.data()
-    };
+        .pVertexAttributeDescriptions = attributes.data()};
 
     const vk::PipelineInputAssemblyStateCreateInfo input_assembly = {
         .topology = PicaToVK::PrimitiveTopology(info.rasterization.topology),
-        .primitiveRestartEnable = false
-    };
+        .primitiveRestartEnable = false};
 
     const vk::PipelineRasterizationStateCreateInfo raster_state = {
         .depthClampEnable = false,
@@ -441,13 +396,10 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .cullMode = PicaToVK::CullMode(info.rasterization.cull_mode),
         .frontFace = PicaToVK::FrontFace(info.rasterization.cull_mode),
         .depthBiasEnable = false,
-        .lineWidth = 1.0f
-    };
+        .lineWidth = 1.0f};
 
     const vk::PipelineMultisampleStateCreateInfo multisampling = {
-        .rasterizationSamples  = vk::SampleCountFlagBits::e1,
-        .sampleShadingEnable = false
-    };
+        .rasterizationSamples = vk::SampleCountFlagBits::e1, .sampleShadingEnable = false};
 
     const vk::PipelineColorBlendAttachmentState colorblend_attachment = {
         .blendEnable = info.blending.blend_enable.Value(),
@@ -458,34 +410,22 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .dstAlphaBlendFactor = PicaToVK::BlendFunc(info.blending.dst_alpha_blend_factor),
         .alphaBlendOp = PicaToVK::BlendEquation(info.blending.alpha_blend_eq),
         .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA
-    };
+                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
 
     const vk::PipelineColorBlendStateCreateInfo color_blending = {
         .logicOpEnable = info.blending.logic_op_enable.Value(),
         .logicOp = PicaToVK::LogicOp(info.blending.logic_op),
         .attachmentCount = 1,
         .pAttachments = &colorblend_attachment,
-        .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f}
-    };
+        .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f}};
 
     const vk::Viewport viewport = {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = 1.0f,
-        .height = 1.0f,
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f
-    };
+        .x = 0.0f, .y = 0.0f, .width = 1.0f, .height = 1.0f, .minDepth = 0.0f, .maxDepth = 1.0f};
 
-    const vk::Rect2D scissor = {
-        .offset = {0, 0},
-        .extent = {1, 1}
-    };
+    const vk::Rect2D scissor = {.offset = {0, 0}, .extent = {1, 1}};
 
-    vk::PipelineViewportDepthClipControlCreateInfoEXT depth_clip_control = {
-        .negativeOneToOne = true
-    };
+    vk::PipelineViewportDepthClipControlCreateInfoEXT depth_clip_control = {.negativeOneToOne =
+                                                                                true};
 
     const vk::PipelineViewportStateCreateInfo viewport_info = {
         .pNext = &depth_clip_control,
@@ -515,17 +455,14 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
     };
 
     const vk::PipelineDynamicStateCreateInfo dynamic_info = {
-        .dynamicStateCount =
-            extended_dynamic_states ? static_cast<u32>(dynamic_states.size()) : 6u,
-        .pDynamicStates = dynamic_states.data()
-    };
+        .dynamicStateCount = extended_dynamic_states ? static_cast<u32>(dynamic_states.size()) : 6u,
+        .pDynamicStates = dynamic_states.data()};
 
     const vk::StencilOpState stencil_op_state = {
         .failOp = PicaToVK::StencilOp(info.depth_stencil.stencil_fail_op),
         .passOp = PicaToVK::StencilOp(info.depth_stencil.stencil_pass_op),
         .depthFailOp = PicaToVK::StencilOp(info.depth_stencil.stencil_depth_fail_op),
-        .compareOp = PicaToVK::CompareFunc(info.depth_stencil.stencil_compare_op)
-    };
+        .compareOp = PicaToVK::CompareFunc(info.depth_stencil.stencil_compare_op)};
 
     const vk::PipelineDepthStencilStateCreateInfo depth_info = {
         .depthTestEnable = static_cast<u32>(info.depth_stencil.depth_test_enable.Value()),
@@ -534,8 +471,7 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .depthBoundsTestEnable = false,
         .stencilTestEnable = static_cast<u32>(info.depth_stencil.stencil_test_enable.Value()),
         .front = stencil_op_state,
-        .back = stencil_op_state
-    };
+        .back = stencil_op_state};
 
     const vk::GraphicsPipelineCreateInfo pipeline_info = {
         .stageCount = shader_count,
@@ -549,16 +485,15 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .pColorBlendState = &color_blending,
         .pDynamicState = &dynamic_info,
         .layout = layout,
-        .renderPass = renderpass_cache.GetRenderpass(info.color_attachment,
-                                                     info.depth_attachment, false)
-    };
+        .renderPass =
+            renderpass_cache.GetRenderpass(info.color_attachment, info.depth_attachment, false)};
 
     if (const auto result = device.createGraphicsPipeline(pipeline_cache, pipeline_info);
-            result.result == vk::Result::eSuccess) {
+        result.result == vk::Result::eSuccess) {
         return result.value;
     } else {
-       LOG_CRITICAL(Render_Vulkan, "Graphics pipeline creation failed!");
-       UNREACHABLE();
+        LOG_CRITICAL(Render_Vulkan, "Graphics pipeline creation failed!");
+        UNREACHABLE();
     }
 
     return VK_NULL_HANDLE;
@@ -573,8 +508,7 @@ void PipelineCache::BindDescriptorSets() {
             const vk::DescriptorSetAllocateInfo alloc_info = {
                 .descriptorPool = scheduler.GetDescriptorPool(),
                 .descriptorSetCount = 1,
-                .pSetLayouts = &descriptor_set_layouts[i]
-            };
+                .pSetLayouts = &descriptor_set_layouts[i]};
 
             vk::DescriptorSet set = device.allocateDescriptorSets(alloc_info)[0];
             device.updateDescriptorSetWithTemplate(set, update_templates[i], update_data[i][0]);
@@ -586,8 +520,8 @@ void PipelineCache::BindDescriptorSets() {
 
     // Bind the descriptor sets
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, RASTERIZER_SET_COUNT,
-                                      descriptor_sets.data(), 0, nullptr);
+    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0,
+                                      RASTERIZER_SET_COUNT, descriptor_sets.data(), 0, nullptr);
 }
 
 void PipelineCache::LoadDiskCache() {
@@ -596,10 +530,7 @@ void PipelineCache::LoadDiskCache() {
     }
 
     const std::string cache_file_path = GetPipelineCacheDir() + DIR_SEP "pipelines.bin";
-    vk::PipelineCacheCreateInfo cache_info = {
-        .initialDataSize = 0,
-        .pInitialData = nullptr
-    };
+    vk::PipelineCacheCreateInfo cache_info = {.initialDataSize = 0, .pInitialData = nullptr};
 
     FileUtil::IOFile cache_file{cache_file_path, "r"};
     if (cache_file.IsOpen()) {
@@ -664,16 +595,18 @@ bool PipelineCache::IsCacheValid(const u8* data, u32 size) const {
     }
 
     if (u32 vendor_id = instance.GetVendorID(); header.vendorID != vendor_id) {
-        LOG_ERROR(Render_Vulkan,
-                  "Pipeline cache failed validation: Incorrect vendor ID (file: {:#X}, device: {:#X})",
-                   header.vendorID, vendor_id);
+        LOG_ERROR(
+            Render_Vulkan,
+            "Pipeline cache failed validation: Incorrect vendor ID (file: {:#X}, device: {:#X})",
+            header.vendorID, vendor_id);
         return false;
     }
 
     if (u32 device_id = instance.GetDeviceID(); header.deviceID != device_id) {
-        LOG_ERROR(Render_Vulkan,
-                  "Pipeline cache failed validation: Incorrect device ID (file: {:#X}, device: {:#X})",
-                  header.deviceID, device_id);
+        LOG_ERROR(
+            Render_Vulkan,
+            "Pipeline cache failed validation: Incorrect device ID (file: {:#X}, device: {:#X})",
+            header.deviceID, device_id);
         return false;
     }
 

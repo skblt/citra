@@ -98,11 +98,10 @@ void ConfigureCamera::ConnectEvents() {
         }
     });
     connect(ui->camera_file, &QLineEdit::textChanged, this, [this] { StopPreviewing(); });
-    connect(ui->system_camera,
-            qOverload<int>(&QComboBox::currentIndexChanged), this,
+    connect(ui->system_camera, qOverload<int>(&QComboBox::currentIndexChanged), this,
             [this] { StopPreviewing(); });
-    connect(ui->camera_flip, qOverload<int>(&QComboBox::currentIndexChanged),
-            this, [this] { StopPreviewing(); });
+    connect(ui->camera_flip, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this] { StopPreviewing(); });
 }
 
 void ConfigureCamera::UpdateCameraMode() {

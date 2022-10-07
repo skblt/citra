@@ -146,7 +146,9 @@ static void InitializeLogging() {
 #endif
 }
 
-GMainWindow::GMainWindow() : ui{std::make_unique<Ui::MainWindow>()}, config{std::make_unique<Config>()}, emu_thread{nullptr} {
+GMainWindow::GMainWindow()
+    : ui{std::make_unique<Ui::MainWindow>()}, config{std::make_unique<Config>()}, emu_thread{
+                                                                                      nullptr} {
     InitializeLogging();
     Debugger::ToggleConsole();
     Settings::LogSettings();
@@ -2112,27 +2114,20 @@ void GMainWindow::ShowMouseCursor() {
 }
 
 void GMainWindow::UpdateAPIIndicator(bool override) {
-    static std::array graphics_apis = {
-        QStringLiteral("OPENGL"),
-        QStringLiteral("OPENGLES"),
-        QStringLiteral("VULKAN")
-    };
+    static std::array graphics_apis = {QStringLiteral("OPENGL"), QStringLiteral("OPENGLES"),
+                                       QStringLiteral("VULKAN")};
 
-    static std::array graphics_api_colors = {
-        QStringLiteral("#00ccdd"),
-        QStringLiteral("#ba2a8d"),
-        QStringLiteral("#91242a")
-    };
+    static std::array graphics_api_colors = {QStringLiteral("#00ccdd"), QStringLiteral("#ba2a8d"),
+                                             QStringLiteral("#91242a")};
 
     u32 api_index = static_cast<u32>(Settings::values.graphics_api);
     if (override) {
         api_index = (api_index + 1) % graphics_apis.size();
-        Settings::values.graphics_api =
-                static_cast<Settings::GraphicsAPI>(api_index);
+        Settings::values.graphics_api = static_cast<Settings::GraphicsAPI>(api_index);
     }
 
-    const QString style_sheet =
-            QStringLiteral("QPushButton { font-weight: bold; color: %0; }").arg(graphics_api_colors[api_index]);
+    const QString style_sheet = QStringLiteral("QPushButton { font-weight: bold; color: %0; }")
+                                    .arg(graphics_api_colors[api_index]);
 
     graphics_api_button->setText(graphics_apis[api_index]);
     graphics_api_button->setStyleSheet(style_sheet);

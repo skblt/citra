@@ -3,16 +3,16 @@
 // Refer to the license.txt file included.
 
 // Include the vulkan platform specific header
-#if defined(ANDROID) || defined (__ANDROID__)
-    #define VK_USE_PLATFORM_ANDROID_KHR
+#if defined(ANDROID) || defined(__ANDROID__)
+#define VK_USE_PLATFORM_ANDROID_KHR
 #elif defined(_WIN32)
-    #define VK_USE_PLATFORM_WIN32_KHR
+#define VK_USE_PLATFORM_WIN32_KHR
 #elif defined(__APPLE__)
-    #define VK_USE_PLATFORM_MACOS_MVK
-    #define VK_USE_PLATFORM_METAL_EXT
+#define VK_USE_PLATFORM_MACOS_MVK
+#define VK_USE_PLATFORM_METAL_EXT
 #else
-    #define VK_USE_PLATFORM_WAYLAND_KHR
-    #define VK_USE_PLATFORM_XLIB_KHR
+#define VK_USE_PLATFORM_WAYLAND_KHR
+#define VK_USE_PLATFORM_XLIB_KHR
 #endif
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
@@ -33,9 +33,7 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& e
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
     if (window_info.type == Frontend::WindowSystemType::Windows) {
         const vk::Win32SurfaceCreateInfoKHR win32_ci = {
-            .hinstance = nullptr,
-            .hwnd = static_cast<HWND>(window_info.render_surface)
-        };
+            .hinstance = nullptr, .hwnd = static_cast<HWND>(window_info.render_surface)};
 
         if (instance.createWin32SurfaceKHR(&win32_ci, nullptr, &surface) != vk::Result::eSuccess) {
             LOG_CRITICAL(Render_Vulkan, "Failed to initialize Win32 surface");
@@ -46,8 +44,7 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& e
     if (window_info.type == Frontend::WindowSystemType::X11) {
         const vk::XlibSurfaceCreateInfoKHR xlib_ci = {
             .dpy = static_cast<Display*>(window_info.display_connection),
-            .window = reinterpret_cast<Window>(window_info.render_surface)
-        };
+            .window = reinterpret_cast<Window>(window_info.render_surface)};
 
         if (instance.createXlibSurfaceKHR(&xlib_ci, nullptr, &surface) != vk::Result::eSuccess) {
             LOG_ERROR(Render_Vulkan, "Failed to initialize Xlib surface");
@@ -58,10 +55,10 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& e
     if (window_info.type == Frontend::WindowSystemType::Wayland) {
         const vk::WaylandSurfaceCreateInfoKHR wayland_ci = {
             .display = static_cast<wl_display*>(window_info.display_connection),
-            .surface = static_cast<wl_surface*>(window_info.render_surface)
-        };
+            .surface = static_cast<wl_surface*>(window_info.render_surface)};
 
-        if (instance.createWaylandSurfaceKHR(&wayland_ci, nullptr, &surface) != vk::Result::eSuccess) {
+        if (instance.createWaylandSurfaceKHR(&wayland_ci, nullptr, &surface) !=
+            vk::Result::eSuccess) {
             LOG_ERROR(Render_Vulkan, "Failed to initialize Wayland surface");
             UNREACHABLE();
         }
@@ -75,7 +72,8 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& e
     return surface;
 }
 
-std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window_type, bool enable_debug_utils) {
+std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window_type,
+                                               bool enable_debug_utils) {
     const auto properties = vk::enumerateInstanceExtensionProperties();
     if (properties.empty()) {
         LOG_ERROR(Render_Vulkan, "Failed to query extension properties");

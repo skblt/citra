@@ -35,7 +35,7 @@ imageStore(color, tex_coord, vec4(components) / (exp2(8.0) - 1.0));
 }
 
 void D24S8toRGBA8::Reinterpret(const Surface& source, VideoCore::Rect2D src_rect,
-                                     const Surface& dest, VideoCore::Rect2D dst_rect) {
+                               const Surface& dest, VideoCore::Rect2D dst_rect) {
     OpenGLState prev_state = OpenGLState::GetCurState();
     SCOPE_EXIT({ prev_state.Apply(); });
 
@@ -46,8 +46,8 @@ void D24S8toRGBA8::Reinterpret(const Surface& source, VideoCore::Rect2D src_rect
     if (use_texture_view) {
         temp_tex.Create();
         glActiveTexture(GL_TEXTURE1);
-        glTextureView(temp_tex.handle, GL_TEXTURE_2D, source.texture.handle, GL_DEPTH24_STENCIL8, 0, 1,
-                      0, 1);
+        glTextureView(temp_tex.handle, GL_TEXTURE_2D, source.texture.handle, GL_DEPTH24_STENCIL8, 0,
+                      1, 0, 1);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     } else {
@@ -70,8 +70,8 @@ void D24S8toRGBA8::Reinterpret(const Surface& source, VideoCore::Rect2D src_rect
 
     glActiveTexture(GL_TEXTURE1);
     if (!use_texture_view) {
-        glCopyImageSubData(source.texture.handle, GL_TEXTURE_2D, 0, src_rect.left, src_rect.bottom, 0,
-                           temp_tex.handle, GL_TEXTURE_2D, 0, src_rect.left, src_rect.bottom, 0,
+        glCopyImageSubData(source.texture.handle, GL_TEXTURE_2D, 0, src_rect.left, src_rect.bottom,
+                           0, temp_tex.handle, GL_TEXTURE_2D, 0, src_rect.left, src_rect.bottom, 0,
                            src_rect.GetWidth(), src_rect.GetHeight(), 1);
     }
     glTexParameteri(GL_TEXTURE_2D, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_STENCIL_INDEX);
@@ -154,8 +154,7 @@ void RGBA4toRGB5A1::Reinterpret(const Surface& source, VideoCore::Rect2D src_rec
 
     glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                            dest.texture.handle, 0);
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
-                           0);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
 
     glUniform2i(dst_size_loc, dst_rect.GetWidth(), dst_rect.GetHeight());
     glUniform2i(src_size_loc, src_rect.GetWidth(), src_rect.GetHeight());

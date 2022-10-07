@@ -4,8 +4,8 @@
 
 #pragma once
 #include <algorithm>
-#include <unordered_map>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 #include <boost/range/iterator_range.hpp>
 #include "common/alignment.h"
@@ -14,8 +14,8 @@
 #include "video_core/pica_state.h"
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/rasterizer_cache/surface_base.h"
-#include "video_core/rasterizer_cache/utils.h"
 #include "video_core/rasterizer_cache/surface_params.h"
+#include "video_core/rasterizer_cache/utils.h"
 #include "video_core/texture/texture_decode.h"
 #include "video_core/video_core.h"
 
@@ -54,16 +54,18 @@ public:
 private:
     /// Declare rasterizer interval types
     using SurfaceSet = std::set<Surface>;
-    using SurfaceMap =
-        boost::icl::interval_map<PAddr, Surface, boost::icl::partial_absorber, std::less,
-                                 boost::icl::inplace_plus, boost::icl::inter_section, SurfaceInterval>;
-    using SurfaceCache =
-        boost::icl::interval_map<PAddr, SurfaceSet, boost::icl::partial_absorber, std::less,
-                                 boost::icl::inplace_plus, boost::icl::inter_section, SurfaceInterval>;
+    using SurfaceMap = boost::icl::interval_map<PAddr, Surface, boost::icl::partial_absorber,
+                                                std::less, boost::icl::inplace_plus,
+                                                boost::icl::inter_section, SurfaceInterval>;
+    using SurfaceCache = boost::icl::interval_map<PAddr, SurfaceSet, boost::icl::partial_absorber,
+                                                  std::less, boost::icl::inplace_plus,
+                                                  boost::icl::inter_section, SurfaceInterval>;
 
-    static_assert(std::is_same<SurfaceRegions::interval_type, typename SurfaceCache::interval_type>() &&
-                  std::is_same<typename SurfaceMap::interval_type, typename SurfaceCache::interval_type>(),
-                  "Incorrect interval types");
+    static_assert(
+        std::is_same<SurfaceRegions::interval_type, typename SurfaceCache::interval_type>() &&
+            std::is_same<typename SurfaceMap::interval_type,
+                         typename SurfaceCache::interval_type>(),
+        "Incorrect interval types");
 
     using SurfaceRect_Tuple = std::tuple<Surface, Common::Rectangle<u32>>;
     using SurfaceSurfaceRect_Tuple = std::tuple<Surface, Surface, Common::Rectangle<u32>>;
@@ -170,7 +172,8 @@ private:
 };
 
 template <class T>
-RasterizerCache<T>::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer, TextureRuntime& runtime)
+RasterizerCache<T>::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer,
+                                    TextureRuntime& runtime)
     : rasterizer{rasterizer}, runtime{runtime} {
     resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
 }
@@ -249,7 +252,7 @@ auto RasterizerCache<T>::FindMatch(const SurfaceCache& surface_cache, const Surf
             IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::Copy>{}, [&] {
                 ASSERT(validate_interval);
                 auto copy_interval =
-                        surface->GetCopyableInterval(params.FromInterval(*validate_interval));
+                    surface->GetCopyableInterval(params.FromInterval(*validate_interval));
                 bool matched = boost::icl::length(copy_interval & *validate_interval) != 0 &&
                                surface->CanCopy(params, copy_interval);
                 return std::make_pair(matched, copy_interval);
@@ -271,8 +274,7 @@ bool RasterizerCache<T>::BlitSurfaces(const Surface& src_surface, Common::Rectan
                                       const Surface& dst_surface, Common::Rectangle<u32> dst_rect) {
     MICROPROFILE_SCOPE(RasterizerCache_BlitSurface);
 
-    if (!CheckFormatsBlittable(src_surface->pixel_format,
-                               dst_surface->pixel_format)) [[unlikely]] {
+    if (!CheckFormatsBlittable(src_surface->pixel_format, dst_surface->pixel_format)) [[unlikely]] {
         return false;
     }
 
@@ -282,28 +284,23 @@ bool RasterizerCache<T>::BlitSurfaces(const Surface& src_surface, Common::Rectan
     // 1. No scaling (the dimentions of src and dest rect are the same)
     // 2. No flipping (if the bottom value is bigger than the top this indicates texture flip)
     if (src_rect.GetWidth() == dst_rect.GetWidth() &&
-            src_rect.GetHeight() == dst_rect.GetHeight() &&
-            src_rect.bottom < src_rect.top) {
-        const TextureCopy texture_copy = {
-            .src_level = 0,
-            .dst_level = 0,
-            .src_layer = 0,
-            .dst_layer = 0,
-            .src_offset = {src_rect.left, src_rect.bottom},
-            .dst_offset = {dst_rect.left, dst_rect.bottom},
-            .extent = {src_rect.GetWidth(), src_rect.GetHeight()}
-        };
+        src_rect.GetHeight() == dst_rect.GetHeight() && src_rect.bottom < src_rect.top) {
+        const TextureCopy texture_copy = {.src_level = 0,
+                                          .dst_level = 0,
+                                          .src_layer = 0,
+                                          .dst_layer = 0,
+                                          .src_offset = {src_rect.left, src_rect.bottom},
+                                          .dst_offset = {dst_rect.left, dst_rect.bottom},
+                                          .extent = {src_rect.GetWidth(), src_rect.GetHeight()}};
 
         return runtime.CopyTextures(*src_surface, *dst_surface, texture_copy);
     } else {
-        const TextureBlit texture_blit = {
-            .src_level = 0,
-            .dst_level = 0,
-            .src_layer = 0,
-            .dst_layer = 0,
-            .src_rect = src_rect,
-            .dst_rect = dst_rect
-        };
+        const TextureBlit texture_blit = {.src_level = 0,
+                                          .dst_level = 0,
+                                          .src_layer = 0,
+                                          .dst_layer = 0,
+                                          .src_rect = src_rect,
+                                          .dst_rect = dst_rect};
 
         return runtime.BlitTextures(*src_surface, *dst_surface, texture_blit);
     }
@@ -332,23 +329,20 @@ void RasterizerCache<T>::CopySurface(const Surface& src_surface, const Surface& 
         const ClearValue clear_value =
             MakeClearValue(dst_surface->type, dst_surface->pixel_format, fill_buffer.data());
         const TextureClear clear_rect = {
-            .texture_level = 0,
-            .texture_rect = dst_surface->GetScaledSubRect(subrect_params)
-        };
+            .texture_level = 0, .texture_rect = dst_surface->GetScaledSubRect(subrect_params)};
 
         runtime.ClearTexture(*dst_surface, clear_rect, clear_value);
         return;
     }
 
     if (src_surface->CanSubRect(subrect_params)) {
-        const TextureBlit texture_blit = {
-            .src_level = 0,
-            .dst_level = 0,
-            .src_layer = 0,
-            .dst_layer = 0,
-            .src_rect = src_surface->GetScaledSubRect(subrect_params),
-            .dst_rect = dst_surface->GetScaledSubRect(subrect_params)
-        };
+        const TextureBlit texture_blit = {.src_level = 0,
+                                          .dst_level = 0,
+                                          .src_layer = 0,
+                                          .dst_layer = 0,
+                                          .src_rect = src_surface->GetScaledSubRect(subrect_params),
+                                          .dst_rect =
+                                              dst_surface->GetScaledSubRect(subrect_params)};
 
         runtime.BlitTextures(*src_surface, *dst_surface, texture_blit);
         return;
@@ -488,13 +482,15 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
 }
 
 template <class T>
-auto RasterizerCache<T>::GetTextureSurface(const Pica::TexturingRegs::FullTextureConfig& config) -> Surface {
+auto RasterizerCache<T>::GetTextureSurface(const Pica::TexturingRegs::FullTextureConfig& config)
+    -> Surface {
     const auto info = Pica::Texture::TextureInfo::FromPicaRegister(config.config, config.format);
     return GetTextureSurface(info, config.config.lod.max_level);
 }
 
 template <class T>
-auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& info, u32 max_level) -> Surface {
+auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& info, u32 max_level)
+    -> Surface {
     if (info.physical_address == 0) [[unlikely]] {
         return nullptr;
     }
@@ -572,15 +568,13 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
                     ValidateSurface(level_surface, level_surface->addr, level_surface->size);
                 }
 
-                if (/*texture_filterer->IsNull()*/true) {
-                    const TextureBlit texture_blit = {
-                        .src_level = 0,
-                        .dst_level = level,
-                        .src_layer = 0,
-                        .dst_layer = 0,
-                        .src_rect = level_surface->GetScaledRect(),
-                        .dst_rect = surface_params.GetScaledRect()
-                    };
+                if (/*texture_filterer->IsNull()*/ true) {
+                    const TextureBlit texture_blit = {.src_level = 0,
+                                                      .dst_level = level,
+                                                      .src_layer = 0,
+                                                      .dst_layer = 0,
+                                                      .src_rect = level_surface->GetScaledRect(),
+                                                      .dst_rect = surface_params.GetScaledRect()};
 
                     runtime.BlitTextures(*level_surface, *surface, texture_blit);
                 }
@@ -597,15 +591,13 @@ template <class T>
 auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> const Surface& {
     auto [it, new_surface] = texture_cube_cache.try_emplace(config);
     if (new_surface) {
-        SurfaceParams cube_params = {
-            .addr = config.px,
-            .width = config.width,
-            .height = config.width,
-            .stride = config.width,
-            .texture_type = TextureType::CubeMap,
-            .pixel_format = PixelFormatFromTextureFormat(config.format),
-            .type = SurfaceType::Texture
-        };
+        SurfaceParams cube_params = {.addr = config.px,
+                                     .width = config.width,
+                                     .height = config.width,
+                                     .stride = config.width,
+                                     .texture_type = TextureType::CubeMap,
+                                     .pixel_format = PixelFormatFromTextureFormat(config.format),
+                                     .type = SurfaceType::Texture};
 
         it->second = CreateSurface(cube_params);
     }
@@ -614,8 +606,7 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
 
     // Update surface watchers
     auto& watchers = cube->level_watchers;
-    const std::array addresses = {config.px, config.nx, config.py,
-                                  config.ny, config.pz, config.nz};
+    const std::array addresses = {config.px, config.nx, config.py, config.ny, config.pz, config.nz};
 
     for (std::size_t i = 0; i < addresses.size(); i++) {
         auto& watcher = watchers[i];
@@ -632,9 +623,9 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
             if (surface) {
                 watcher = surface->CreateWatcher();
             } else {
-                 // Can occur when texture address is invalid. We mark the watcher with nullptr
-                 // in this case and the content of the face wouldn't get updated. These are usually
-                 // leftover setup in the texture unit and games are not supposed to draw using them.
+                // Can occur when texture address is invalid. We mark the watcher with nullptr
+                // in this case and the content of the face wouldn't get updated. These are usually
+                // leftover setup in the texture unit and games are not supposed to draw using them.
                 watcher = nullptr;
             }
         }
@@ -650,14 +641,12 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
                 ValidateSurface(face, face->addr, face->size);
             }
 
-            const TextureBlit texture_blit = {
-                .src_level = 0,
-                .dst_level = 0,
-                .src_layer = 0,
-                .dst_layer = static_cast<u32>(i),
-                .src_rect = face->GetScaledRect(),
-                .dst_rect = Rect2D{0, scaled_size, scaled_size, 0}
-            };
+            const TextureBlit texture_blit = {.src_level = 0,
+                                              .dst_level = 0,
+                                              .src_layer = 0,
+                                              .dst_layer = static_cast<u32>(i),
+                                              .src_rect = face->GetScaledRect(),
+                                              .dst_rect = Rect2D{0, scaled_size, scaled_size, 0}};
 
             runtime.BlitTextures(*face, *cube, texture_blit);
             watcher->Validate();
@@ -670,7 +659,7 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
 template <class T>
 auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb,
                                                 const Common::Rectangle<s32>& viewport_rect)
-                                                -> SurfaceSurfaceRect_Tuple {
+    -> SurfaceSurfaceRect_Tuple {
     const auto& regs = Pica::g_state.regs;
     const auto& config = regs.framebuffer.framebuffer;
 
@@ -680,7 +669,8 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
     const bool texture_filter_changed =
         /*VideoCore::g_texture_filter_update_requested.exchange(false) &&
         texture_filterer->Reset(Settings::values.texture_filter_name,
-                                VideoCore::GetResolutionScaleFactor())*/false;
+                                VideoCore::GetResolutionScaleFactor())*/
+        false;
 
     if (resolution_scale_changed || texture_filter_changed) [[unlikely]] {
         resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
@@ -918,7 +908,7 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
     MICROPROFILE_SCOPE(RasterizerCache_SurfaceLoad);
 
     const auto& staging = runtime.FindStaging(
-                load_info.width * load_info.height * surface->GetInternalBytesPerPixel(), true);
+        load_info.width * load_info.height * surface->GetInternalBytesPerPixel(), true);
     MemoryRef source_ptr = VideoCore::g_memory->GetPhysicalRef(load_info.addr);
     if (!source_ptr) [[unlikely]] {
         return;
@@ -926,19 +916,18 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
 
     const auto upload_data = source_ptr.GetWriteBytes(load_info.end - load_info.addr);
     if (surface->is_tiled) {
-        std::vector<std::byte> unswizzled_data(load_info.width * load_info.height * GetBytesPerPixel(load_info.pixel_format));
+        std::vector<std::byte> unswizzled_data(load_info.width * load_info.height *
+                                               GetBytesPerPixel(load_info.pixel_format));
         UnswizzleTexture(load_info, load_info.addr, load_info.end, upload_data, unswizzled_data);
         runtime.FormatConvert(*surface, true, unswizzled_data, staging.mapped);
     } else {
         runtime.FormatConvert(*surface, true, upload_data, staging.mapped);
     }
 
-    const BufferTextureCopy upload = {
-        .buffer_offset = 0,
-        .buffer_size = staging.size,
-        .texture_rect = surface->GetSubRect(load_info),
-        .texture_level = 0
-    };
+    const BufferTextureCopy upload = {.buffer_offset = 0,
+                                      .buffer_size = staging.size,
+                                      .texture_rect = surface->GetSubRect(load_info),
+                                      .texture_level = 0};
 
     surface->Upload(upload, staging);
 }
@@ -952,32 +941,32 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
     ASSERT(flush_start >= surface->addr && flush_end <= surface->end);
 
     const auto& staging = runtime.FindStaging(
-                flush_info.width * flush_info.height * surface->GetInternalBytesPerPixel(), false);
-    const BufferTextureCopy download = {
-        .buffer_offset = 0,
-        .buffer_size = staging.size,
-        .texture_rect = surface->GetSubRect(flush_info),
-        .texture_level = 0
-    };
+        flush_info.width * flush_info.height * surface->GetInternalBytesPerPixel(), false);
+    const BufferTextureCopy download = {.buffer_offset = 0,
+                                        .buffer_size = staging.size,
+                                        .texture_rect = surface->GetSubRect(flush_info),
+                                        .texture_level = 0};
 
     surface->Download(download, staging);
 
-    download_queue.push_back([this, surface, flush_start, flush_end, flush_info, mapped = staging.mapped]() {
-        MemoryRef dest_ptr = VideoCore::g_memory->GetPhysicalRef(flush_start);
-        if (!dest_ptr) [[unlikely]] {
-            return;
-        }
+    download_queue.push_back(
+        [this, surface, flush_start, flush_end, flush_info, mapped = staging.mapped]() {
+            MemoryRef dest_ptr = VideoCore::g_memory->GetPhysicalRef(flush_start);
+            if (!dest_ptr) [[unlikely]] {
+                return;
+            }
 
-        const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
+            const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
 
-        if (surface->is_tiled) {
-            std::vector<std::byte> temp_data(flush_info.width * flush_info.height * GetBytesPerPixel(flush_info.pixel_format));
-            runtime.FormatConvert(*surface, false, mapped, temp_data);
-            SwizzleTexture(flush_info, flush_start, flush_end, temp_data, download_dest);
-        } else {
-            runtime.FormatConvert(*surface, false, mapped, download_dest);
-        }
-    });
+            if (surface->is_tiled) {
+                std::vector<std::byte> temp_data(flush_info.width * flush_info.height *
+                                                 GetBytesPerPixel(flush_info.pixel_format));
+                runtime.FormatConvert(*surface, false, mapped, temp_data);
+                SwizzleTexture(flush_info, flush_start, flush_end, temp_data, download_dest);
+            } else {
+                runtime.FormatConvert(*surface, false, mapped, download_dest);
+            }
+        });
 }
 
 template <class T>
@@ -992,7 +981,8 @@ void RasterizerCache<T>::DownloadFillSurface(const Surface& surface, SurfaceInte
     }
 
     const u32 start_offset = flush_start - surface->addr;
-    const u32 download_size = std::clamp(flush_end - flush_start, 0u, static_cast<u32>(dest_ptr.GetSize()));
+    const u32 download_size =
+        std::clamp(flush_end - flush_start, 0u, static_cast<u32>(dest_ptr.GetSize()));
     const u32 coarse_start_offset = start_offset - (start_offset % surface->fill_size);
     const u32 backup_bytes = start_offset % surface->fill_size;
 
@@ -1012,7 +1002,8 @@ void RasterizerCache<T>::DownloadFillSurface(const Surface& surface, SurfaceInte
 }
 
 template <class T>
-bool RasterizerCache<T>::NoUnimplementedReinterpretations(const Surface& surface, SurfaceParams& params,
+bool RasterizerCache<T>::NoUnimplementedReinterpretations(const Surface& surface,
+                                                          SurfaceParams& params,
                                                           SurfaceInterval interval) {
     static constexpr std::array all_formats = {
         PixelFormat::RGBA8, PixelFormat::RGB8,   PixelFormat::RGB5A1, PixelFormat::RGB565,
@@ -1043,13 +1034,13 @@ bool RasterizerCache<T>::NoUnimplementedReinterpretations(const Surface& surface
 }
 
 template <class T>
-bool RasterizerCache<T>::IntervalHasInvalidPixelFormat(SurfaceParams& params, SurfaceInterval interval) {
+bool RasterizerCache<T>::IntervalHasInvalidPixelFormat(SurfaceParams& params,
+                                                       SurfaceInterval interval) {
     params.pixel_format = PixelFormat::Invalid;
     for (const auto& set : RangeFromInterval(surface_cache, interval)) {
         for (const auto& surface : set.second) {
             if (surface->pixel_format == PixelFormat::Invalid) {
-                LOG_DEBUG(HW_GPU, "Surface {:#x} found with invalid pixel format",
-                          surface->addr);
+                LOG_DEBUG(HW_GPU, "Surface {:#x} found with invalid pixel format", surface->addr);
                 return true;
             }
         }

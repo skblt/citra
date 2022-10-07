@@ -12,6 +12,7 @@ class OpenGLState;
 
 class TextureDownloaderES {
     static constexpr u16 MAX_SIZE = 1024;
+
 public:
     TextureDownloaderES(bool enable_depth_stencil);
 
@@ -22,16 +23,16 @@ public:
      * Depth texture download assumes that the texture's format tuple matches what is found
      * OpenGL::depth_format_tuples
      */
-    void GetTexImage(GLenum target, GLuint level, GLenum format, const GLenum type,
-                     GLint height, GLint width, void* pixels) const;
+    void GetTexImage(GLenum target, GLuint level, GLenum format, const GLenum type, GLint height,
+                     GLint width, void* pixels) const;
 
 private:
     /**
      * OpenGL ES does not support glReadBuffer for depth/stencil formats.
      * This gets around it by converting to a Red surface before downloading
      */
-    GLuint ConvertDepthToColor(GLuint level, GLenum& format, GLenum& type,
-                               GLint height, GLint width) const;
+    GLuint ConvertDepthToColor(GLuint level, GLenum& format, GLenum& type, GLint height,
+                               GLint width) const;
 
     /// Self tests for the texture downloader
     void Test();

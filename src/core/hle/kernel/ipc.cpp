@@ -140,8 +140,8 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
 
             VAddr page_start = Common::AlignDown(source_address, Memory::CITRA_PAGE_SIZE);
             u32 page_offset = source_address - page_start;
-            u32 num_pages =
-                Common::AlignUp(page_offset + size, Memory::CITRA_PAGE_SIZE) >> Memory::CITRA_PAGE_BITS;
+            u32 num_pages = Common::AlignUp(page_offset + size, Memory::CITRA_PAGE_SIZE) >>
+                            Memory::CITRA_PAGE_BITS;
 
             // Skip when the size is zero and num_pages == 0
             if (size == 0) {
@@ -180,8 +180,9 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
                        next_vma.meminfo_state == MemoryState::Reserved);
 
                 // Unmap the buffer and guard pages from the source process
-                ResultCode result = src_process->vm_manager.UnmapRange(
-                    page_start - Memory::CITRA_PAGE_SIZE, (num_pages + 2) * Memory::CITRA_PAGE_SIZE);
+                ResultCode result =
+                    src_process->vm_manager.UnmapRange(page_start - Memory::CITRA_PAGE_SIZE,
+                                                       (num_pages + 2) * Memory::CITRA_PAGE_SIZE);
                 ASSERT(result == RESULT_SUCCESS);
 
                 mapped_buffer_context.erase(found);

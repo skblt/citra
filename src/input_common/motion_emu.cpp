@@ -5,9 +5,9 @@
 #include <algorithm>
 #include <chrono>
 #include <mutex>
+#include <numbers>
 #include <thread>
 #include <tuple>
-#include <numbers>
 #include "common/math_util.h"
 #include "common/quaternion.h"
 #include "common/thread.h"

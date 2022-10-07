@@ -25,7 +25,8 @@ GLuint LoadShader(const char* source, GLenum type) {
 #if defined(GL_EXT_clip_cull_distance)
 #extension GL_EXT_clip_cull_distance : enable
 #endif
-)" : "#version 430 core\n";
+)"
+                                     : "#version 430 core\n";
 
     const char* debug_type;
     switch (type) {

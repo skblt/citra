@@ -430,7 +430,6 @@ public:
      */
     std::string ReadCString(VAddr vaddr, std::size_t max_length);
 
-
     /**
      * Reads a contiguous block of bytes from a specified process' address space.
      *

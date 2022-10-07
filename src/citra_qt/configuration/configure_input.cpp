@@ -207,7 +207,7 @@ ConfigureInput::ConfigureInput(QWidget* parent)
         connect(button_map[button_id], &QPushButton::customContextMenuRequested, this,
                 [this, button_id](const QPoint& menu_location) {
                     QMenu context_menu;
-                    context_menu.addAction(tr("Clear"),  this, [&] {
+                    context_menu.addAction(tr("Clear"), this, [&] {
                         buttons_param[button_id].Clear();
                         button_map[button_id]->setText(tr("[not set]"));
                         ApplyConfiguration();
@@ -230,19 +230,21 @@ ConfigureInput::ConfigureInput(QWidget* parent)
                 continue;
             analog_map_buttons[analog_id][sub_button_id]->setContextMenuPolicy(
                 Qt::CustomContextMenu);
-            connect(analog_map_buttons[analog_id][sub_button_id], &QPushButton::clicked, this, [this, analog_id, sub_button_id]() {
-                HandleClick(
-                    analog_map_buttons[analog_id][sub_button_id],
-                    [this, analog_id, sub_button_id](const Common::ParamPackage& params) {
-                        SetAnalogButton(params, analogs_param[analog_id],
-                                        analog_sub_buttons[sub_button_id]);
-                        ApplyConfiguration();
-                        Settings::SaveProfile(ui->profile->currentIndex());
-                    },
-                    InputCommon::Polling::DeviceType::Button);
-            });
+            connect(analog_map_buttons[analog_id][sub_button_id], &QPushButton::clicked, this,
+                    [this, analog_id, sub_button_id]() {
+                        HandleClick(
+                            analog_map_buttons[analog_id][sub_button_id],
+                            [this, analog_id, sub_button_id](const Common::ParamPackage& params) {
+                                SetAnalogButton(params, analogs_param[analog_id],
+                                                analog_sub_buttons[sub_button_id]);
+                                ApplyConfiguration();
+                                Settings::SaveProfile(ui->profile->currentIndex());
+                            },
+                            InputCommon::Polling::DeviceType::Button);
+                    });
             connect(analog_map_buttons[analog_id][sub_button_id],
-                    &QPushButton::customContextMenuRequested, this, [this, analog_id, sub_button_id](const QPoint& menu_location) {
+                    &QPushButton::customContextMenuRequested, this,
+                    [this, analog_id, sub_button_id](const QPoint& menu_location) {
                         QMenu context_menu;
                         context_menu.addAction(tr("Clear"), this, [&] {
                             analogs_param[analog_id].Erase(analog_sub_buttons[sub_button_id]);
@@ -280,21 +282,23 @@ ConfigureInput::ConfigureInput(QWidget* parent)
                     InputCommon::Polling::DeviceType::Analog);
             }
         });
-        connect(analog_map_deadzone_and_modifier_slider[analog_id], &QSlider::valueChanged, this, [this, analog_id] {
-            const int slider_value = analog_map_deadzone_and_modifier_slider[analog_id]->value();
-            const auto engine = analogs_param[analog_id].Get("engine", "");
-            if (engine == "sdl" || engine == "gcpad") {
-                analog_map_deadzone_and_modifier_slider_label[analog_id]->setText(
-                    tr("Deadzone: %1%").arg(slider_value));
-                analogs_param[analog_id].Set("deadzone", slider_value / 100.0f);
-            } else {
-                analog_map_deadzone_and_modifier_slider_label[analog_id]->setText(
-                    tr("Modifier Scale: %1%").arg(slider_value));
-                analogs_param[analog_id].Set("modifier_scale", slider_value / 100.0f);
-            }
-            ApplyConfiguration();
-            Settings::SaveProfile(ui->profile->currentIndex());
-        });
+        connect(analog_map_deadzone_and_modifier_slider[analog_id], &QSlider::valueChanged, this,
+                [this, analog_id] {
+                    const int slider_value =
+                        analog_map_deadzone_and_modifier_slider[analog_id]->value();
+                    const auto engine = analogs_param[analog_id].Get("engine", "");
+                    if (engine == "sdl" || engine == "gcpad") {
+                        analog_map_deadzone_and_modifier_slider_label[analog_id]->setText(
+                            tr("Deadzone: %1%").arg(slider_value));
+                        analogs_param[analog_id].Set("deadzone", slider_value / 100.0f);
+                    } else {
+                        analog_map_deadzone_and_modifier_slider_label[analog_id]->setText(
+                            tr("Modifier Scale: %1%").arg(slider_value));
+                        analogs_param[analog_id].Set("modifier_scale", slider_value / 100.0f);
+                    }
+                    ApplyConfiguration();
+                    Settings::SaveProfile(ui->profile->currentIndex());
+                });
     }
 
     // The Circle Mod button is common for both the sticks, so update the modifier settings
@@ -356,13 +360,12 @@ ConfigureInput::ConfigureInput(QWidget* parent)
     connect(ui->buttonDelete, &QPushButton::clicked, this, &ConfigureInput::DeleteProfile);
     connect(ui->buttonRename, &QPushButton::clicked, this, &ConfigureInput::RenameProfile);
 
-    connect(ui->profile, qOverload<int>(&QComboBox::currentIndexChanged), this,
-            [this](int i) {
-                ApplyConfiguration();
-                Settings::SaveProfile(Settings::values.current_input_profile_index);
-                Settings::LoadProfile(i);
-                LoadConfiguration();
-            });
+    connect(ui->profile, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int i) {
+        ApplyConfiguration();
+        Settings::SaveProfile(Settings::values.current_input_profile_index);
+        Settings::LoadProfile(i);
+        LoadConfiguration();
+    });
 
     timeout_timer->setSingleShot(true);
     connect(timeout_timer.get(), &QTimer::timeout, this, [this]() { SetPollingResult({}, true); });

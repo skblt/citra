@@ -3,14 +3,14 @@
 // Refer to the license.txt file included.
 
 #pragma once
-#include <span>
 #include <set>
+#include <span>
 #include <vulkan/vulkan_hash.hpp>
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/rasterizer_cache/surface_base.h"
-#include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_format_reinterpreter.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
 
 namespace Vulkan {
@@ -47,6 +47,7 @@ class Surface;
  */
 class TextureRuntime {
     friend class Surface;
+
 public:
     TextureRuntime(const Instance& instance, TaskScheduler& scheduler,
                    RenderpassCache& renderpass_cache);
@@ -66,13 +67,12 @@ public:
     void Recycle(const VideoCore::HostTextureTag tag, ImageAlloc&& alloc);
 
     /// Performs required format convertions on the staging data
-    void FormatConvert(const Surface& surface, bool upload,
-                       std::span<std::byte> source, std::span<std::byte> dest);
+    void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
+                       std::span<std::byte> dest);
 
     /// Transitions the mip level range of the surface to new_layout
-    void Transition(vk::CommandBuffer command_buffer, ImageAlloc& alloc,
-                    vk::ImageLayout new_layout, u32 level, u32 level_count,
-                    u32 layer = 0, u32 layer_count = 1);
+    void Transition(vk::CommandBuffer command_buffer, ImageAlloc& alloc, vk::ImageLayout new_layout,
+                    u32 level, u32 level_count, u32 layer = 0, u32 layer_count = 1);
 
     /// Fills the rectangle of the texture with the clear value provided
     bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
@@ -89,7 +89,7 @@ public:
 
     /// Returns all source formats that support reinterpretation to the dest format
     [[nodiscard]] const ReinterpreterList& GetPossibleReinterpretations(
-            VideoCore::PixelFormat dest_format) const;
+        VideoCore::PixelFormat dest_format) const;
 
     /// Performs operations that need to be done on every scheduler slot switch
     void OnSlotSwitch(u32 new_slot);
@@ -120,6 +120,7 @@ private:
 class Surface : public VideoCore::SurfaceBase<Surface> {
     friend class TextureRuntime;
     friend class RasterizerVulkan;
+
 public:
     Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
     ~Surface() override;
