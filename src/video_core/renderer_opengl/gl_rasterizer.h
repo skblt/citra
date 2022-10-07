@@ -9,10 +9,10 @@
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/regs_lighting.h"
 #include "video_core/regs_texturing.h"
-#include "video_core/renderer_opengl/gl_texture_runtime.h"
 #include "video_core/renderer_opengl/gl_shader_manager.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_stream_buffer.h"
+#include "video_core/renderer_opengl/gl_texture_runtime.h"
 #include "video_core/shader/shader.h"
 
 namespace Frontend {

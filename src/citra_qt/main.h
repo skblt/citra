@@ -7,9 +7,9 @@
 #include <array>
 #include <memory>
 #include <QMainWindow>
+#include <QPushButton>
 #include <QTimer>
 #include <QTranslator>
-#include <QPushButton>
 #include "citra_qt/compatibility_list.h"
 #include "citra_qt/hotkeys.h"
 #include "common/announce_multiplayer_room.h"

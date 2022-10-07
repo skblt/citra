@@ -39,8 +39,8 @@ static bool IsVendorIntel() {
 #endif
 
 RasterizerOpenGL::RasterizerOpenGL(Frontend::EmuWindow& emu_window, Driver& driver)
-    : driver{driver}, runtime{driver}, res_cache{*this, runtime},
-      is_amd(IsVendorAmd()), vertex_buffer(GL_ARRAY_BUFFER, VERTEX_BUFFER_SIZE, is_amd),
+    : driver{driver}, runtime{driver}, res_cache{*this, runtime}, is_amd(IsVendorAmd()),
+      vertex_buffer(GL_ARRAY_BUFFER, VERTEX_BUFFER_SIZE, is_amd),
       uniform_buffer(GL_UNIFORM_BUFFER, UNIFORM_BUFFER_SIZE, false),
       index_buffer(GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE, false),
       texture_buffer(GL_TEXTURE_BUFFER, TEXTURE_BUFFER_SIZE, false),
@@ -687,8 +687,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                         .pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ),
                         .nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ),
                         .width = texture.config.width,
-                        .format = texture.format
-                    };
+                        .format = texture.format};
 
                     state.texture_cube_unit.texture_cube =
                         res_cache.GetTextureCube(config)->texture.handle;
@@ -729,8 +728,9 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
     // Making a copy to sample from eliminates this issue and seems to be fairly cheap.
     OGLTexture temp_tex;
     if (need_duplicate_texture) {
-        temp_tex = runtime.Allocate(color_surface->GetScaledWidth(), color_surface->GetScaledHeight(),
-                                    color_surface->pixel_format, color_surface->texture_type);
+        temp_tex =
+            runtime.Allocate(color_surface->GetScaledWidth(), color_surface->GetScaledHeight(),
+                             color_surface->pixel_format, color_surface->texture_type);
 
         temp_tex.CopyFrom(color_surface->texture, GL_TEXTURE_2D, color_surface->max_level + 1,
                           color_surface->GetScaledWidth(), color_surface->GetScaledHeight());
@@ -1383,14 +1383,14 @@ bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransfe
     dst_params.UpdateParams();
 
     auto [src_surface, src_rect] =
-            res_cache.GetSurfaceSubRect(src_params, VideoCore::ScaleMatch::Ignore, true);
+        res_cache.GetSurfaceSubRect(src_params, VideoCore::ScaleMatch::Ignore, true);
     if (src_surface == nullptr)
         return false;
 
     dst_params.res_scale = src_surface->res_scale;
 
     auto [dst_surface, dst_rect] =
-            res_cache.GetSurfaceSubRect(dst_params, VideoCore::ScaleMatch::Upscale, false);
+        res_cache.GetSurfaceSubRect(dst_params, VideoCore::ScaleMatch::Upscale, false);
     if (dst_surface == nullptr) {
         return false;
     }

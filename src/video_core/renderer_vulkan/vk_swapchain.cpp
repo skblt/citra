@@ -5,9 +5,9 @@
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <algorithm>
 #include "common/logging/log.h"
-#include "video_core/renderer_vulkan/vk_swapchain.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
+#include "video_core/renderer_vulkan/vk_swapchain.h"
 
 namespace Vulkan {
 
@@ -44,7 +44,7 @@ void Swapchain::Create(u32 width, u32 height, bool vsync_enabled) {
     const bool exclusive = queue_family_indices[0] == queue_family_indices[1];
     const u32 queue_family_indices_count = exclusive ? 1u : 2u;
     const vk::SharingMode sharing_mode =
-            exclusive ? vk::SharingMode::eExclusive : vk::SharingMode::eConcurrent;
+        exclusive ? vk::SharingMode::eExclusive : vk::SharingMode::eConcurrent;
     const vk::SwapchainCreateInfoKHR swapchain_info = {
         .surface = surface,
         .minImageCount = image_count,
@@ -55,12 +55,11 @@ void Swapchain::Create(u32 width, u32 height, bool vsync_enabled) {
         .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
         .imageSharingMode = sharing_mode,
         .queueFamilyIndexCount = queue_family_indices_count,
-        .pQueueFamilyIndices   = queue_family_indices.data(),
+        .pQueueFamilyIndices = queue_family_indices.data(),
         .preTransform = transform,
         .presentMode = present_mode,
         .clipped = true,
-        .oldSwapchain = swapchain
-    };
+        .oldSwapchain = swapchain};
 
     vk::Device device = instance.GetDevice();
     vk::SwapchainKHR new_swapchain = device.createSwapchainKHR(swapchain_info);
@@ -87,34 +86,25 @@ void Swapchain::Create(u32 width, u32 height, bool vsync_enabled) {
             .image = image,
             .viewType = vk::ImageViewType::e2D,
             .format = surface_format.format,
-            .subresourceRange = {
-                .aspectMask = vk::ImageAspectFlagBits::eColor,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1
-            }
-        };
+            .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
+                                 .baseMipLevel = 0,
+                                 .levelCount = 1,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = 1}};
 
         vk::ImageView image_view = device.createImageView(view_info);
         const std::array attachments{image_view};
 
-        const vk::FramebufferCreateInfo framebuffer_info = {
-            .renderPass = present_renderpass,
-            .attachmentCount = 1,
-            .pAttachments = attachments.data(),
-            .width = extent.width,
-            .height = extent.height,
-            .layers = 1
-        };
+        const vk::FramebufferCreateInfo framebuffer_info = {.renderPass = present_renderpass,
+                                                            .attachmentCount = 1,
+                                                            .pAttachments = attachments.data(),
+                                                            .width = extent.width,
+                                                            .height = extent.height,
+                                                            .layers = 1};
 
         vk::Framebuffer framebuffer = device.createFramebuffer(framebuffer_info);
 
-        return Image{
-            .image = image,
-            .image_view = image_view,
-            .framebuffer = framebuffer
-        };
+        return Image{.image = image, .image_view = image_view, .framebuffer = framebuffer};
     });
 }
 
@@ -141,13 +131,11 @@ void Swapchain::AcquireNextImage(vk::Semaphore signal_acquired) {
 }
 
 void Swapchain::Present(vk::Semaphore wait_for_present) {
-    const vk::PresentInfoKHR present_info = {
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &wait_for_present,
-        .swapchainCount = 1,
-        .pSwapchains = &swapchain,
-        .pImageIndices = &current_image
-    };
+    const vk::PresentInfoKHR present_info = {.waitSemaphoreCount = 1,
+                                             .pWaitSemaphores = &wait_for_present,
+                                             .swapchainCount = 1,
+                                             .pSwapchains = &swapchain,
+                                             .pImageIndices = &current_image};
 
     vk::Queue present_queue = instance.GetPresentQueue();
     vk::Result result = present_queue.presentKHR(present_info);
@@ -181,7 +169,7 @@ void Swapchain::Configure(u32 width, u32 height) {
     } else {
         auto it = std::ranges::find_if(formats, [](vk::SurfaceFormatKHR format) -> bool {
             return format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear &&
-                format.format == vk::Format::eB8G8R8A8Unorm;
+                   format.format == vk::Format::eB8G8R8A8Unorm;
         });
 
         if (it == formats.end()) {
@@ -196,9 +184,8 @@ void Swapchain::Configure(u32 width, u32 height) {
 
     // FIFO is guaranteed by the Vulkan standard to be available
     present_mode = vk::PresentModeKHR::eFifo;
-    auto iter = std::ranges::find_if(modes, [](vk::PresentModeKHR mode) {
-        return vk::PresentModeKHR::eMailbox == mode;
-    });
+    auto iter = std::ranges::find_if(
+        modes, [](vk::PresentModeKHR mode) { return vk::PresentModeKHR::eMailbox == mode; });
 
     // Prefer Mailbox if present for lowest latency
     if (iter != modes.end()) {
@@ -210,10 +197,10 @@ void Swapchain::Configure(u32 width, u32 height) {
     extent = capabilities.currentExtent;
 
     if (capabilities.currentExtent.width == std::numeric_limits<u32>::max()) {
-        extent.width = std::clamp(width, capabilities.minImageExtent.width,
-                                          capabilities.maxImageExtent.width);
+        extent.width =
+            std::clamp(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
         extent.height = std::clamp(height, capabilities.minImageExtent.height,
-                                           capabilities.maxImageExtent.height);
+                                   capabilities.maxImageExtent.height);
     }
 
     // Select number of images in swap chain, we prefer one buffer in the background to work on

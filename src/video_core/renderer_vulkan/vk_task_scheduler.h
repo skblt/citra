@@ -4,11 +4,11 @@
 
 #pragma once
 
-#include <memory>
 #include <array>
 #include <functional>
-#include "common/common_types.h"
+#include <memory>
 #include "common/common_funcs.h"
+#include "common/common_types.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 
 namespace Vulkan {
@@ -19,7 +19,7 @@ class RendererVulkan;
 
 enum class SubmitMode : u8 {
     SwapchainSynced = 1 << 0, ///< Synchronizes command buffer execution with the swapchain
-    Flush = 1 << 1, ///< Causes a GPU command flush, useful for texture downloads
+    Flush = 1 << 1,           ///< Causes a GPU command flush, useful for texture downloads
     Shutdown = 1 << 2 ///< Submits all current commands without starting a new command buffer
 };
 
@@ -102,4 +102,4 @@ private:
     u32 current_command = 0;
 };
 
-}  // namespace Vulkan
+} // namespace Vulkan

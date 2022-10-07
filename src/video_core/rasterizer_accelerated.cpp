@@ -4,8 +4,8 @@
 
 #include <limits>
 #include "core/memory.h"
-#include "video_core/video_core.h"
 #include "video_core/rasterizer_accelerated.h"
+#include "video_core/video_core.h"
 
 namespace VideoCore {
 
@@ -53,21 +53,18 @@ void RasterizerAccelerated::UpdatePagesCachedCount(PAddr addr, u32 size, int del
 
             cache_bytes += Memory::CITRA_PAGE_SIZE;
         } else if (cache_bytes > 0) {
-            VideoCore::g_memory->RasterizerMarkRegionCached(cache_start_addr, cache_bytes,
-                                                            true);
+            VideoCore::g_memory->RasterizerMarkRegionCached(cache_start_addr, cache_bytes, true);
 
             cache_bytes = 0;
         }
     }
 
     if (uncache_bytes > 0) {
-        VideoCore::g_memory->RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes,
-                                                        false);
+        VideoCore::g_memory->RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes, false);
     }
 
     if (cache_bytes > 0) {
-        VideoCore::g_memory->RasterizerMarkRegionCached(cache_start_addr, cache_bytes,
-                                                        true);
+        VideoCore::g_memory->RasterizerMarkRegionCached(cache_start_addr, cache_bytes, true);
     }
 }
 
@@ -98,8 +95,7 @@ void RasterizerAccelerated::ClearAll(bool flush) {
     }
 
     if (uncache_bytes > 0) {
-        VideoCore::g_memory->RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes,
-                                                        false);
+        VideoCore::g_memory->RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes, false);
     }
 
     cached_pages = {};

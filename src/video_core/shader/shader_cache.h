@@ -5,8 +5,8 @@
 #pragma once
 
 #include <optional>
-#include <unordered_map>
 #include <tuple>
+#include <unordered_map>
 #include "video_core/shader/shader.h"
 
 namespace Pica::Shader {
@@ -15,7 +15,7 @@ template <typename ShaderType>
 using ShaderCacheResult = std::pair<ShaderType, std::optional<std::string>>;
 
 template <typename KeyType, typename ShaderType, auto ModuleCompiler,
-          std::string(*CodeGenerator)(const KeyType&)>
+          std::string (*CodeGenerator)(const KeyType&)>
 class ShaderCache {
 public:
     ShaderCache() {}
@@ -52,14 +52,16 @@ public:
  * different config values from the same shader program.
  */
 template <typename KeyType, typename ShaderType, auto ModuleCompiler,
-          std::optional<std::string>(*CodeGenerator)(const Pica::Shader::ShaderSetup&, const KeyType&)>
+          std::optional<std::string> (*CodeGenerator)(const Pica::Shader::ShaderSetup&,
+                                                      const KeyType&)>
 class ShaderDoubleCache {
 public:
     ShaderDoubleCache() = default;
     ~ShaderDoubleCache() = default;
 
     template <typename... Args>
-    auto Get(const KeyType& key, const Pica::Shader::ShaderSetup& setup, Args&&... args) -> ShaderCacheResult<ShaderType> {
+    auto Get(const KeyType& key, const Pica::Shader::ShaderSetup& setup, Args&&... args)
+        -> ShaderCacheResult<ShaderType> {
         if (auto map_iter = shader_map.find(key); map_iter == shader_map.end()) {
             auto code = CodeGenerator(setup, key);
             if (!code) {

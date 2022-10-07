@@ -14,11 +14,7 @@
 
 namespace Settings {
 
-enum class GraphicsAPI {
-    OpenGL = 0,
-    OpenGLES = 1,
-    Vulkan = 2
-};
+enum class GraphicsAPI { OpenGL = 0, OpenGLES = 1, Vulkan = 2 };
 
 enum class InitClock {
     SystemTime = 0,

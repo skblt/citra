@@ -6,8 +6,8 @@
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
-#include "video_core/renderer_vulkan/vk_task_scheduler.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_task_scheduler.h"
 
 namespace Vulkan {
 
@@ -16,8 +16,7 @@ TaskScheduler::TaskScheduler(const Instance& instance, RendererVulkan& renderer)
     vk::Device device = instance.GetDevice();
     const vk::CommandPoolCreateInfo command_pool_info = {
         .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-        .queueFamilyIndex = instance.GetGraphicsQueueFamilyIndex()
-    };
+        .queueFamilyIndex = instance.GetGraphicsQueueFamilyIndex()};
 
     command_pool = device.createCommandPool(command_pool_info);
 
@@ -25,11 +24,8 @@ TaskScheduler::TaskScheduler(const Instance& instance, RendererVulkan& renderer)
     if (instance.IsTimelineSemaphoreSupported()) {
         const vk::StructureChain timeline_info = {
             vk::SemaphoreCreateInfo{},
-            vk::SemaphoreTypeCreateInfo{
-                .semaphoreType = vk::SemaphoreType::eTimeline,
-                .initialValue = 0
-            }
-        };
+            vk::SemaphoreTypeCreateInfo{.semaphoreType = vk::SemaphoreType::eTimeline,
+                                        .initialValue = 0}};
 
         timeline = device.createSemaphore(timeline_info.get());
     }
@@ -40,22 +36,19 @@ TaskScheduler::TaskScheduler(const Instance& instance, RendererVulkan& renderer)
         vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 2048},
         vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 512},
         vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 2048},
-        vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 1024}
-    };
+        vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 1024}};
 
     const vk::DescriptorPoolCreateInfo descriptor_pool_info = {
         .maxSets = 2048,
         .poolSizeCount = static_cast<u32>(pool_sizes.size()),
-        .pPoolSizes = pool_sizes.data()
-    };
+        .pPoolSizes = pool_sizes.data()};
 
     persistent_descriptor_pool = device.createDescriptorPool(descriptor_pool_info);
 
-    const vk::CommandBufferAllocateInfo buffer_info = {
-        .commandPool = command_pool,
-        .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = 2 * SCHEDULER_COMMAND_COUNT
-    };
+    const vk::CommandBufferAllocateInfo buffer_info = {.commandPool = command_pool,
+                                                       .level = vk::CommandBufferLevel::ePrimary,
+                                                       .commandBufferCount =
+                                                           2 * SCHEDULER_COMMAND_COUNT};
 
     const auto command_buffers = device.allocateCommandBuffers(buffer_info);
     for (std::size_t i = 0; i < commands.size(); i++) {
@@ -70,8 +63,7 @@ TaskScheduler::TaskScheduler(const Instance& instance, RendererVulkan& renderer)
     }
 
     const vk::CommandBufferBeginInfo begin_info = {
-        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
-    };
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
 
     // Begin first command
     auto& command = commands[current_command];
@@ -106,13 +98,11 @@ void TaskScheduler::Synchronize(u32 slot) {
     if (command.fence_counter > completed_counter) {
         if (instance.IsTimelineSemaphoreSupported()) {
             const vk::SemaphoreWaitInfo wait_info = {
-                .semaphoreCount = 1,
-                .pSemaphores = &timeline,
-                .pValues = &command.fence_counter
-            };
+                .semaphoreCount = 1, .pSemaphores = &timeline, .pValues = &command.fence_counter};
 
             if (device.waitSemaphores(wait_info, UINT64_MAX) != vk::Result::eSuccess) {
-                LOG_ERROR(Render_Vulkan, "Waiting for fence counter {} failed!", command.fence_counter);
+                LOG_ERROR(Render_Vulkan, "Waiting for fence counter {} failed!",
+                          command.fence_counter);
                 UNREACHABLE();
             }
 
@@ -161,8 +151,7 @@ void TaskScheduler::Submit(SubmitMode mode) {
             .waitSemaphoreValueCount = wait_semaphore_count,
             .pWaitSemaphoreValues = wait_values.data(),
             .signalSemaphoreValueCount = signal_semaphore_count,
-            .pSignalSemaphoreValues = signal_values.data()
-        };
+            .pSignalSemaphoreValues = signal_values.data()};
 
         const std::array<vk::PipelineStageFlags, 2> wait_stage_masks = {
             vk::PipelineStageFlagBits::eAllCommands,
@@ -187,7 +176,7 @@ void TaskScheduler::Submit(SubmitMode mode) {
         const u32 signal_semaphore_count = swapchain_sync ? 1u : 0u;
         const u32 wait_semaphore_count = swapchain_sync ? 1u : 0u;
         const vk::PipelineStageFlags wait_stage_masks =
-                vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
         const vk::SubmitInfo submit_info = {
             .waitSemaphoreCount = wait_semaphore_count,
@@ -228,8 +217,7 @@ vk::CommandBuffer TaskScheduler::GetUploadCommandBuffer() {
     auto& command = commands[current_command];
     if (!command.use_upload_buffer) {
         const vk::CommandBufferBeginInfo begin_info = {
-            .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
-        };
+            .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
 
         command.upload_command_buffer.begin(begin_info);
         command.use_upload_buffer = true;
@@ -246,8 +234,7 @@ void TaskScheduler::SwitchSlot() {
     Synchronize(current_command);
 
     const vk::CommandBufferBeginInfo begin_info = {
-        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
-    };
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
 
     // Begin the next command buffer.
     command.render_command_buffer.begin(begin_info);
@@ -255,4 +242,4 @@ void TaskScheduler::SwitchSlot() {
     command.use_upload_buffer = false;
 }
 
-}  // namespace Vulkan
+} // namespace Vulkan

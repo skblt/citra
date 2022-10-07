@@ -92,7 +92,8 @@ void ConfigureGraphics::ApplyConfiguration() {
     Settings::values.use_shader_jit = ui->toggle_shader_jit->isChecked();
     Settings::values.use_disk_shader_cache = ui->toggle_disk_shader_cache->isChecked();
     Settings::values.use_vsync_new = ui->toggle_vsync_new->isChecked();
-    Settings::values.graphics_api = static_cast<Settings::GraphicsAPI>(ui->graphics_api_combo->currentIndex());
+    Settings::values.graphics_api =
+        static_cast<Settings::GraphicsAPI>(ui->graphics_api_combo->currentIndex());
     Settings::values.physical_device = static_cast<u16>(ui->physical_device_combo->currentIndex());
 }
 

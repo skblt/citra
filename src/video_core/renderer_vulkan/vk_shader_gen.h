@@ -203,8 +203,8 @@ std::string GenerateTrivialVertexShader();
  * Generates the GLSL vertex shader program source code for the given VS program
  * @returns String of the shader source code; boost::none on failure
  */
-std::optional<std::string> GenerateVertexShader(
-    const Pica::Shader::ShaderSetup& setup, const PicaVSConfig& config);
+std::optional<std::string> GenerateVertexShader(const Pica::Shader::ShaderSetup& setup,
+                                                const PicaVSConfig& config);
 
 /**
  * Generates the GLSL fixed geometry shader program source code for non-GS PICA pipeline

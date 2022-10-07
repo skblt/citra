@@ -3,13 +3,13 @@
 // Refer to the license.txt file included.
 
 #pragma once
-#include <span>
 #include <set>
+#include <span>
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
-#include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
 #include "video_core/renderer_opengl/texture_downloader_es.h"
+#include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
 
 namespace OpenGL {
 
@@ -59,6 +59,7 @@ class Surface;
  */
 class TextureRuntime {
     friend class Surface;
+
 public:
     TextureRuntime(Driver& driver);
     ~TextureRuntime() = default;
@@ -72,8 +73,8 @@ public:
     void Finish() const {}
 
     /// Performs required format convertions on the staging data
-    void FormatConvert(const Surface& surface, bool upload,
-                       std::span<std::byte> source, std::span<std::byte> dest);
+    void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
+                       std::span<std::byte> dest);
 
     /// Allocates an OpenGL texture with the specified dimentions and format
     OGLTexture Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
@@ -94,12 +95,12 @@ public:
 
     /// Returns all source formats that support reinterpretation to the dest format
     [[nodiscard]] const ReinterpreterList& GetPossibleReinterpretations(
-            VideoCore::PixelFormat dest_format) const;
+        VideoCore::PixelFormat dest_format) const;
 
 private:
     /// Returns the framebuffer used for texture downloads
-    void BindFramebuffer(GLenum target, GLint level, GLenum textarget,
-                         VideoCore::SurfaceType type, OGLTexture& texture) const;
+    void BindFramebuffer(GLenum target, GLint level, GLenum textarget, VideoCore::SurfaceType type,
+                         OGLTexture& texture) const;
 
     /// Returns the OpenGL driver class
     const Driver& GetDriver() const {

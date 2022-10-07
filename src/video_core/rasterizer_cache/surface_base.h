@@ -46,6 +46,7 @@ public:
 template <class S>
 class SurfaceBase : public SurfaceParams, public std::enable_shared_from_this<S> {
     using Watcher = SurfaceWatcher<S>;
+
 public:
     SurfaceBase(SurfaceParams& params) : SurfaceParams{params} {}
     virtual ~SurfaceBase() = default;
@@ -53,7 +54,8 @@ public:
     /// Returns true when this surface can be used to fill the fill_interval of dest_surface
     bool CanFill(const SurfaceParams& dest_surface, SurfaceInterval fill_interval) const;
 
-    /// Returns true when copy_interval of dest_surface can be validated by copying from this surface
+    /// Returns true when copy_interval of dest_surface can be validated by copying from this
+    /// surface
     bool CanCopy(const SurfaceParams& dest_surface, SurfaceInterval copy_interval) const;
 
     /// Returns the region of the biggest valid rectange within interval
@@ -93,7 +95,8 @@ public:
 };
 
 template <class S>
-bool SurfaceBase<S>::CanFill(const SurfaceParams& dest_surface, SurfaceInterval fill_interval) const {
+bool SurfaceBase<S>::CanFill(const SurfaceParams& dest_surface,
+                             SurfaceInterval fill_interval) const {
     if (type == SurfaceType::Fill && IsRegionValid(fill_interval) &&
         boost::icl::first(fill_interval) >= addr &&
         boost::icl::last_next(fill_interval) <= end && // dest_surface is within our fill range
@@ -123,7 +126,7 @@ bool SurfaceBase<S>::CanFill(const SurfaceParams& dest_surface, SurfaceInterval 
 
 template <class S>
 bool SurfaceBase<S>::CanCopy(const SurfaceParams& dest_surface,
-                            SurfaceInterval copy_interval) const {
+                             SurfaceInterval copy_interval) const {
     SurfaceParams subrect_params = dest_surface.FromInterval(copy_interval);
     ASSERT(subrect_params.GetInterval() == copy_interval);
     if (CanSubRect(subrect_params))
@@ -139,13 +142,15 @@ template <class S>
 SurfaceInterval SurfaceBase<S>::GetCopyableInterval(const SurfaceParams& params) const {
     SurfaceInterval result{};
     const u32 tile_align = params.BytesInPixels(params.is_tiled ? 8 * 8 : 1);
-    const auto valid_regions = SurfaceRegions{params.GetInterval() & GetInterval()} - invalid_regions;
+    const auto valid_regions =
+        SurfaceRegions{params.GetInterval() & GetInterval()} - invalid_regions;
 
     for (auto& valid_interval : valid_regions) {
         const SurfaceInterval aligned_interval{
-            params.addr + Common::AlignUp(boost::icl::first(valid_interval) - params.addr, tile_align),
-            params.addr + Common::AlignDown(boost::icl::last_next(valid_interval) - params.addr, tile_align)
-        };
+            params.addr +
+                Common::AlignUp(boost::icl::first(valid_interval) - params.addr, tile_align),
+            params.addr +
+                Common::AlignDown(boost::icl::last_next(valid_interval) - params.addr, tile_align)};
 
         if (params.BytesInPixels(tile_align) > boost::icl::length(valid_interval) ||
             boost::icl::length(aligned_interval) == 0) {
@@ -155,8 +160,10 @@ SurfaceInterval SurfaceBase<S>::GetCopyableInterval(const SurfaceParams& params)
         // Get the rectangle within aligned_interval
         const u32 stride_bytes = params.BytesInPixels(params.stride) * (params.is_tiled ? 8 : 1);
         SurfaceInterval rect_interval{
-            params.addr + Common::AlignUp(boost::icl::first(aligned_interval) - params.addr, stride_bytes),
-            params.addr + Common::AlignDown(boost::icl::last_next(aligned_interval) - params.addr, stride_bytes),
+            params.addr +
+                Common::AlignUp(boost::icl::first(aligned_interval) - params.addr, stride_bytes),
+            params.addr + Common::AlignDown(boost::icl::last_next(aligned_interval) - params.addr,
+                                            stride_bytes),
         };
 
         if (boost::icl::first(rect_interval) > boost::icl::last_next(rect_interval)) {

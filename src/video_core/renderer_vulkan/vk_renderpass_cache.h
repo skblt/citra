@@ -30,8 +30,8 @@ public:
     void CreatePresentRenderpass(vk::Format format);
 
     /// Returns the renderpass associated with the color-depth format pair
-    [[nodiscard]] vk::RenderPass GetRenderpass(VideoCore::PixelFormat color, VideoCore::PixelFormat depth,
-                                               bool is_clear) const;
+    [[nodiscard]] vk::RenderPass GetRenderpass(VideoCore::PixelFormat color,
+                                               VideoCore::PixelFormat depth, bool is_clear) const;
     /// Returns the swapchain clear renderpass
     [[nodiscard]] vk::RenderPass GetPresentRenderpass() const {
         return present_renderpass;
@@ -44,8 +44,9 @@ public:
 
 private:
     /// Creates a renderpass configured appropriately and stores it in cached_renderpasses
-    vk::RenderPass CreateRenderPass(vk::Format color, vk::Format depth, vk::AttachmentLoadOp load_op,
-                                    vk::ImageLayout initial_layout, vk::ImageLayout final_layout) const;
+    vk::RenderPass CreateRenderPass(vk::Format color, vk::Format depth,
+                                    vk::AttachmentLoadOp load_op, vk::ImageLayout initial_layout,
+                                    vk::ImageLayout final_layout) const;
 
 private:
     const Instance& instance;
@@ -53,7 +54,7 @@ private:
 
     vk::RenderPass active_renderpass = VK_NULL_HANDLE;
     vk::RenderPass present_renderpass{};
-    vk::RenderPass cached_renderpasses[MAX_COLOR_FORMATS+1][MAX_DEPTH_FORMATS+1][2];
+    vk::RenderPass cached_renderpasses[MAX_COLOR_FORMATS + 1][MAX_DEPTH_FORMATS + 1][2];
 };
 
 } // namespace Vulkan

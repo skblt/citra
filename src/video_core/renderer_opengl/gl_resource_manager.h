@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <utility>
 #include <string_view>
+#include <utility>
 #include <vector>
 #include <glad/glad.h>
 #include "common/common_types.h"

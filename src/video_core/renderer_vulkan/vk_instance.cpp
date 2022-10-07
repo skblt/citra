@@ -6,8 +6,8 @@
 #include <span>
 #include "common/assert.h"
 #include "core/frontend/emu_window.h"
-#include "video_core/renderer_vulkan/vk_platform.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_platform.h"
 
 namespace Vulkan {
 
@@ -41,30 +41,27 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
 Instance::Instance() {
     // Fetch instance independant function pointers
     vk::DynamicLoader dl;
-    auto vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+    auto vkGetInstanceProcAddr =
+        dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
-    const vk::ApplicationInfo application_info = {
-        .pApplicationName = "Citra",
-        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-        .pEngineName = "Citra Vulkan",
-        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-        .apiVersion = VK_API_VERSION_1_0
-    };
+    const vk::ApplicationInfo application_info = {.pApplicationName = "Citra",
+                                                  .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+                                                  .pEngineName = "Citra Vulkan",
+                                                  .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+                                                  .apiVersion = VK_API_VERSION_1_0};
 
-    const vk::InstanceCreateInfo instance_info = {
-        .pApplicationInfo = &application_info
-    };
+    const vk::InstanceCreateInfo instance_info = {.pApplicationInfo = &application_info};
 
     instance = vk::createInstance(instance_info);
 
     // Load required function pointers for querying the physical device
-    VULKAN_HPP_DEFAULT_DISPATCHER.vkEnumeratePhysicalDevices =
-            PFN_vkEnumeratePhysicalDevices(vkGetInstanceProcAddr(instance, "vkEnumeratePhysicalDevices"));
-    VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceProperties =
-            PFN_vkGetPhysicalDeviceProperties(vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceProperties"));
+    VULKAN_HPP_DEFAULT_DISPATCHER.vkEnumeratePhysicalDevices = PFN_vkEnumeratePhysicalDevices(
+        vkGetInstanceProcAddr(instance, "vkEnumeratePhysicalDevices"));
+    VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceProperties = PFN_vkGetPhysicalDeviceProperties(
+        vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceProperties"));
     VULKAN_HPP_DEFAULT_DISPATCHER.vkDestroyInstance =
-            PFN_vkDestroyInstance(vkGetInstanceProcAddr(instance, "vkDestroyInstance"));
+        PFN_vkDestroyInstance(vkGetInstanceProcAddr(instance, "vkDestroyInstance"));
 
     physical_devices = instance.enumeratePhysicalDevices();
 }
@@ -74,7 +71,8 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index, bool 
 
     // Fetch instance independant function pointers
     vk::DynamicLoader dl;
-    auto vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+    auto vkGetInstanceProcAddr =
+        dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
     // Enable the instance extensions the backend uses
@@ -87,23 +85,20 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index, bool 
         return;
     }
 
-    const vk::ApplicationInfo application_info = {
-        .pApplicationName = "Citra",
-        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-        .pEngineName = "Citra Vulkan",
-        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-        .apiVersion = available_version
-    };
+    const vk::ApplicationInfo application_info = {.pApplicationName = "Citra",
+                                                  .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+                                                  .pEngineName = "Citra Vulkan",
+                                                  .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+                                                  .apiVersion = available_version};
 
     const std::array layers = {"VK_LAYER_KHRONOS_validation"};
     const u32 layer_count = enable_validation ? 1u : 0u;
-    const vk::InstanceCreateInfo instance_info = {
-        .pApplicationInfo = &application_info,
-        .enabledLayerCount = layer_count,
-        .ppEnabledLayerNames = layers.data(),
-        .enabledExtensionCount = static_cast<u32>(extensions.size()),
-        .ppEnabledExtensionNames = extensions.data()
-    };
+    const vk::InstanceCreateInfo instance_info = {.pApplicationInfo = &application_info,
+                                                  .enabledLayerCount = layer_count,
+                                                  .ppEnabledLayerNames = layers.data(),
+                                                  .enabledExtensionCount =
+                                                      static_cast<u32>(extensions.size()),
+                                                  .ppEnabledExtensionNames = extensions.data()};
 
     instance = vk::createInstance(instance_info);
     surface = CreateSurface(instance, window);
@@ -111,8 +106,9 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index, bool 
     // Pick physical device
     physical_devices = instance.enumeratePhysicalDevices();
     if (const u16 physical_device_count = static_cast<u16>(physical_devices.size());
-            physical_device_index >= physical_devices.size()) {
-        LOG_CRITICAL(Render_Vulkan, "Invalid physical device index {} provided when only {} devices exist",
+        physical_device_index >= physical_devices.size()) {
+        LOG_CRITICAL(Render_Vulkan,
+                     "Invalid physical device index {} provided when only {} devices exist",
                      physical_device_index, physical_device_count);
         UNREACHABLE();
     }
@@ -145,59 +141,48 @@ FormatTraits Instance::GetTraits(VideoCore::PixelFormat pixel_format) const {
 
 void Instance::CreateFormatTable() {
     constexpr std::array pixel_formats = {
-        VideoCore::PixelFormat::RGBA8,
-        VideoCore::PixelFormat::RGB8,
-        VideoCore::PixelFormat::RGB5A1,
-        VideoCore::PixelFormat::RGB565,
-        VideoCore::PixelFormat::RGBA4,
-        VideoCore::PixelFormat::IA8,
-        VideoCore::PixelFormat::RG8,
-        VideoCore::PixelFormat::I8,
-        VideoCore::PixelFormat::A8,
-        VideoCore::PixelFormat::IA4,
-        VideoCore::PixelFormat::I4,
-        VideoCore::PixelFormat::A4,
-        VideoCore::PixelFormat::ETC1,
-        VideoCore::PixelFormat::ETC1A4,
-        VideoCore::PixelFormat::D16,
-        VideoCore::PixelFormat::D24,
-        VideoCore::PixelFormat::D24S8
-    };
+        VideoCore::PixelFormat::RGBA8,  VideoCore::PixelFormat::RGB8,
+        VideoCore::PixelFormat::RGB5A1, VideoCore::PixelFormat::RGB565,
+        VideoCore::PixelFormat::RGBA4,  VideoCore::PixelFormat::IA8,
+        VideoCore::PixelFormat::RG8,    VideoCore::PixelFormat::I8,
+        VideoCore::PixelFormat::A8,     VideoCore::PixelFormat::IA4,
+        VideoCore::PixelFormat::I4,     VideoCore::PixelFormat::A4,
+        VideoCore::PixelFormat::ETC1,   VideoCore::PixelFormat::ETC1A4,
+        VideoCore::PixelFormat::D16,    VideoCore::PixelFormat::D24,
+        VideoCore::PixelFormat::D24S8};
 
     const vk::FormatFeatureFlags storage_usage = vk::FormatFeatureFlagBits::eStorageImage;
-    const vk::FormatFeatureFlags blit_usage = vk::FormatFeatureFlagBits::eSampledImage |
-                vk::FormatFeatureFlagBits::eTransferDst |
-                vk::FormatFeatureFlagBits::eTransferSrc |
-                vk::FormatFeatureFlagBits::eBlitSrc |
-                vk::FormatFeatureFlagBits::eBlitDst;
+    const vk::FormatFeatureFlags blit_usage =
+        vk::FormatFeatureFlagBits::eSampledImage | vk::FormatFeatureFlagBits::eTransferDst |
+        vk::FormatFeatureFlagBits::eTransferSrc | vk::FormatFeatureFlagBits::eBlitSrc |
+        vk::FormatFeatureFlagBits::eBlitDst;
 
     for (const auto& pixel_format : pixel_formats) {
         const vk::Format format = ToVkFormat(pixel_format);
         const vk::FormatProperties properties = physical_device.getFormatProperties(format);
         const vk::ImageAspectFlags aspect = GetImageAspect(format);
 
-        const vk::FormatFeatureFlagBits attachment_usage = (aspect & vk::ImageAspectFlagBits::eDepth) ?
-                    vk::FormatFeatureFlagBits::eDepthStencilAttachment :
-                    vk::FormatFeatureFlagBits::eColorAttachment;
+        const vk::FormatFeatureFlagBits attachment_usage =
+            (aspect & vk::ImageAspectFlagBits::eDepth)
+                ? vk::FormatFeatureFlagBits::eDepthStencilAttachment
+                : vk::FormatFeatureFlagBits::eColorAttachment;
 
-        const bool supports_blit =
-                (properties.optimalTilingFeatures & blit_usage) == blit_usage;
+        const bool supports_blit = (properties.optimalTilingFeatures & blit_usage) == blit_usage;
         const bool supports_attachment =
-                (properties.optimalTilingFeatures & attachment_usage) == attachment_usage;
+            (properties.optimalTilingFeatures & attachment_usage) == attachment_usage;
         const bool supports_storage =
-                (properties.optimalTilingFeatures & storage_usage) == storage_usage;
+            (properties.optimalTilingFeatures & storage_usage) == storage_usage;
 
         // Find the most inclusive usage flags for this format
         vk::ImageUsageFlags best_usage;
         if (supports_blit) {
-            best_usage |= vk::ImageUsageFlagBits::eSampled |
-                    vk::ImageUsageFlagBits::eTransferDst |
-                    vk::ImageUsageFlagBits::eTransferSrc;
+            best_usage |= vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst |
+                          vk::ImageUsageFlagBits::eTransferSrc;
         }
         if (supports_attachment) {
-            best_usage |= (aspect & vk::ImageAspectFlagBits::eDepth) ?
-                        vk::ImageUsageFlagBits::eDepthStencilAttachment :
-                        vk::ImageUsageFlagBits::eColorAttachment;
+            best_usage |= (aspect & vk::ImageAspectFlagBits::eDepth)
+                              ? vk::ImageUsageFlagBits::eDepthStencilAttachment
+                              : vk::ImageUsageFlagBits::eColorAttachment;
         }
         if (supports_storage) {
             best_usage |= vk::ImageUsageFlagBits::eStorage;
@@ -219,26 +204,26 @@ void Instance::CreateFormatTable() {
         }
 
         const u32 index = static_cast<u32>(pixel_format);
-        format_table[index] = FormatTraits{
-            .blit_support = supports_blit,
-            .attachment_support = supports_attachment,
-            .storage_support = supports_storage,
-            .usage = best_usage,
-            .native = format,
-            .fallback = fallback
-        };
+        format_table[index] = FormatTraits{.blit_support = supports_blit,
+                                           .attachment_support = supports_attachment,
+                                           .storage_support = supports_storage,
+                                           .usage = best_usage,
+                                           .native = format,
+                                           .fallback = fallback};
     }
 }
 
 bool Instance::CreateDevice() {
-    auto feature_chain = physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
-                                                      vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-                                                      vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>();
+    auto feature_chain =
+        physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
+                                     vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+                                     vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>();
 
     // Not having geometry shaders will cause issues with accelerated rendering.
     const vk::PhysicalDeviceFeatures available = feature_chain.get().features;
     if (!available.geometryShader) {
-        LOG_WARNING(Render_Vulkan, "Geometry shaders not availabe! Accelerated rendering not possible!");
+        LOG_WARNING(Render_Vulkan,
+                    "Geometry shaders not availabe! Accelerated rendering not possible!");
     }
 
     auto extension_list = physical_device.enumerateDeviceExtensionProperties();
@@ -252,9 +237,9 @@ bool Instance::CreateDevice() {
     u32 enabled_extension_count = 0;
 
     auto AddExtension = [&](std::string_view name) -> bool {
-        auto result = std::find_if(extension_list.begin(), extension_list.end(), [&](const auto& prop) {
-            return name.compare(prop.extensionName.data());
-        });
+        auto result =
+            std::find_if(extension_list.begin(), extension_list.end(),
+                         [&](const auto& prop) { return name.compare(prop.extensionName.data()); });
 
         if (result != extension_list.end()) {
             LOG_INFO(Render_Vulkan, "Enabling extension: {}", name);
@@ -311,17 +296,12 @@ bool Instance::CreateDevice() {
     static constexpr float queue_priorities[] = {1.0f};
 
     const std::array queue_infos = {
-        vk::DeviceQueueCreateInfo{
-            .queueFamilyIndex = graphics_queue_family_index,
-            .queueCount = 1,
-            .pQueuePriorities = queue_priorities
-        },
-        vk::DeviceQueueCreateInfo{
-            .queueFamilyIndex = present_queue_family_index,
-            .queueCount = 1,
-            .pQueuePriorities = queue_priorities
-        }
-    };
+        vk::DeviceQueueCreateInfo{.queueFamilyIndex = graphics_queue_family_index,
+                                  .queueCount = 1,
+                                  .pQueuePriorities = queue_priorities},
+        vk::DeviceQueueCreateInfo{.queueFamilyIndex = present_queue_family_index,
+                                  .queueCount = 1,
+                                  .pQueuePriorities = queue_priorities}};
 
     const u32 queue_count = graphics_queue_family_index != present_queue_family_index ? 2u : 1u;
     const vk::StructureChain device_chain = {
@@ -332,25 +312,19 @@ bool Instance::CreateDevice() {
             .ppEnabledExtensionNames = enabled_extensions.data(),
         },
         vk::PhysicalDeviceFeatures2{
-            .features = {
-                .robustBufferAccess = available.robustBufferAccess,
-                .geometryShader = available.geometryShader,
-                .dualSrcBlend = available.dualSrcBlend,
-                .logicOp = available.logicOp,
-                .depthClamp = available.depthClamp,
-                .largePoints = available.largePoints,
-                .samplerAnisotropy = available.samplerAnisotropy,
-                .fragmentStoresAndAtomics = available.fragmentStoresAndAtomics,
-                .shaderStorageImageMultisample = available.shaderStorageImageMultisample,
-                .shaderClipDistance = available.shaderClipDistance
-            }
-        },
-        vk::PhysicalDeviceDepthClipControlFeaturesEXT{
-            .depthClipControl = true
-        },
+            .features = {.robustBufferAccess = available.robustBufferAccess,
+                         .geometryShader = available.geometryShader,
+                         .dualSrcBlend = available.dualSrcBlend,
+                         .logicOp = available.logicOp,
+                         .depthClamp = available.depthClamp,
+                         .largePoints = available.largePoints,
+                         .samplerAnisotropy = available.samplerAnisotropy,
+                         .fragmentStoresAndAtomics = available.fragmentStoresAndAtomics,
+                         .shaderStorageImageMultisample = available.shaderStorageImageMultisample,
+                         .shaderClipDistance = available.shaderClipDistance}},
+        vk::PhysicalDeviceDepthClipControlFeaturesEXT{.depthClipControl = true},
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
-        feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>()
-    };
+        feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>()};
 
     // Create logical device
     device = physical_device.createDevice(device_chain.get());
@@ -367,16 +341,13 @@ bool Instance::CreateDevice() {
 void Instance::CreateAllocator() {
     const VmaVulkanFunctions functions = {
         .vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr,
-        .vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr
-    };
+        .vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr};
 
-    const VmaAllocatorCreateInfo allocator_info = {
-        .physicalDevice = physical_device,
-        .device = device,
-        .pVulkanFunctions = &functions,
-        .instance = instance,
-        .vulkanApiVersion = VK_API_VERSION_1_1
-    };
+    const VmaAllocatorCreateInfo allocator_info = {.physicalDevice = physical_device,
+                                                   .device = device,
+                                                   .pVulkanFunctions = &functions,
+                                                   .instance = instance,
+                                                   .vulkanApiVersion = VK_API_VERSION_1_1};
 
     if (VkResult result = vmaCreateAllocator(&allocator_info, &allocator); result != VK_SUCCESS) {
         LOG_CRITICAL(Render_Vulkan, "Failed to initialize VMA with error {}", result);

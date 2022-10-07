@@ -4,12 +4,13 @@
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include "video_core/renderer_vulkan/vk_format_reinterpreter.h"
-#include "video_core/renderer_vulkan/vk_texture_runtime.h"
 #include "video_core/renderer_vulkan/vk_shader.h"
+#include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
 namespace Vulkan {
 
-D24S8toRGBA8::D24S8toRGBA8(const Instance& instance, TaskScheduler& scheduler, TextureRuntime& runtime)
+D24S8toRGBA8::D24S8toRGBA8(const Instance& instance, TaskScheduler& scheduler,
+                           TextureRuntime& runtime)
     : FormatReinterpreterBase{instance, scheduler, runtime}, device{instance.GetDevice()} {
     constexpr std::string_view cs_source = R"(
 #version 450 core
@@ -35,70 +36,54 @@ void main() {
 }
 
 )";
-    compute_shader = Compile(cs_source, vk::ShaderStageFlagBits::eCompute,
-                             device, ShaderOptimization::High);
+    compute_shader =
+        Compile(cs_source, vk::ShaderStageFlagBits::eCompute, device, ShaderOptimization::High);
 
     const std::array compute_layout_bindings = {
-        vk::DescriptorSetLayoutBinding{
-            .binding = 0,
-            .descriptorType = vk::DescriptorType::eSampledImage,
-            .descriptorCount = 1,
-            .stageFlags = vk::ShaderStageFlagBits::eCompute
-        },
-        vk::DescriptorSetLayoutBinding{
-            .binding = 1,
-            .descriptorType = vk::DescriptorType::eSampledImage,
-            .descriptorCount = 1,
-            .stageFlags = vk::ShaderStageFlagBits::eCompute
-        },
-        vk::DescriptorSetLayoutBinding{
-            .binding = 2,
-            .descriptorType = vk::DescriptorType::eStorageImage,
-            .descriptorCount = 1,
-            .stageFlags = vk::ShaderStageFlagBits::eCompute
-        }
-    };
+        vk::DescriptorSetLayoutBinding{.binding = 0,
+                                       .descriptorType = vk::DescriptorType::eSampledImage,
+                                       .descriptorCount = 1,
+                                       .stageFlags = vk::ShaderStageFlagBits::eCompute},
+        vk::DescriptorSetLayoutBinding{.binding = 1,
+                                       .descriptorType = vk::DescriptorType::eSampledImage,
+                                       .descriptorCount = 1,
+                                       .stageFlags = vk::ShaderStageFlagBits::eCompute},
+        vk::DescriptorSetLayoutBinding{.binding = 2,
+                                       .descriptorType = vk::DescriptorType::eStorageImage,
+                                       .descriptorCount = 1,
+                                       .stageFlags = vk::ShaderStageFlagBits::eCompute}};
 
     const vk::DescriptorSetLayoutCreateInfo compute_layout_info = {
         .bindingCount = static_cast<u32>(compute_layout_bindings.size()),
-        .pBindings = compute_layout_bindings.data()
-    };
+        .pBindings = compute_layout_bindings.data()};
 
     descriptor_layout = device.createDescriptorSetLayout(compute_layout_info);
 
     const std::array update_template_entries = {
-        vk::DescriptorUpdateTemplateEntry{
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType  = vk::DescriptorType::eSampledImage,
-            .offset = 0,
-            .stride = sizeof(vk::DescriptorImageInfo)
-        },
-        vk::DescriptorUpdateTemplateEntry{
-            .dstBinding = 1,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = vk::DescriptorType::eSampledImage,
-            .offset = sizeof(vk::DescriptorImageInfo),
-            .stride = 0
-        },
-        vk::DescriptorUpdateTemplateEntry{
-            .dstBinding = 2,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = vk::DescriptorType::eStorageImage,
-            .offset = 2 * sizeof(vk::DescriptorImageInfo),
-            .stride = 0
-        }
-    };
+        vk::DescriptorUpdateTemplateEntry{.dstBinding = 0,
+                                          .dstArrayElement = 0,
+                                          .descriptorCount = 1,
+                                          .descriptorType = vk::DescriptorType::eSampledImage,
+                                          .offset = 0,
+                                          .stride = sizeof(vk::DescriptorImageInfo)},
+        vk::DescriptorUpdateTemplateEntry{.dstBinding = 1,
+                                          .dstArrayElement = 0,
+                                          .descriptorCount = 1,
+                                          .descriptorType = vk::DescriptorType::eSampledImage,
+                                          .offset = sizeof(vk::DescriptorImageInfo),
+                                          .stride = 0},
+        vk::DescriptorUpdateTemplateEntry{.dstBinding = 2,
+                                          .dstArrayElement = 0,
+                                          .descriptorCount = 1,
+                                          .descriptorType = vk::DescriptorType::eStorageImage,
+                                          .offset = 2 * sizeof(vk::DescriptorImageInfo),
+                                          .stride = 0}};
 
     const vk::DescriptorUpdateTemplateCreateInfo template_info = {
         .descriptorUpdateEntryCount = static_cast<u32>(update_template_entries.size()),
         .pDescriptorUpdateEntries = update_template_entries.data(),
         .templateType = vk::DescriptorUpdateTemplateType::eDescriptorSet,
-        .descriptorSetLayout = descriptor_layout
-    };
+        .descriptorSetLayout = descriptor_layout};
 
     update_template = device.createDescriptorUpdateTemplate(template_info);
 
@@ -108,40 +93,32 @@ void main() {
         .size = sizeof(Common::Vec2i),
     };
 
-    const vk::PipelineLayoutCreateInfo layout_info = {
-        .setLayoutCount = 1,
-        .pSetLayouts = &descriptor_layout,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &push_range
-    };
+    const vk::PipelineLayoutCreateInfo layout_info = {.setLayoutCount = 1,
+                                                      .pSetLayouts = &descriptor_layout,
+                                                      .pushConstantRangeCount = 1,
+                                                      .pPushConstantRanges = &push_range};
 
     compute_pipeline_layout = device.createPipelineLayout(layout_info);
 
-    const vk::DescriptorSetAllocateInfo alloc_info = {
-        .descriptorPool = scheduler.GetPersistentDescriptorPool(),
-        .descriptorSetCount = 1,
-        .pSetLayouts = &descriptor_layout
-    };
+    const vk::DescriptorSetAllocateInfo alloc_info = {.descriptorPool =
+                                                          scheduler.GetPersistentDescriptorPool(),
+                                                      .descriptorSetCount = 1,
+                                                      .pSetLayouts = &descriptor_layout};
 
     descriptor_set = device.allocateDescriptorSets(alloc_info)[0];
 
     const vk::PipelineShaderStageCreateInfo compute_stage = {
-        .stage = vk::ShaderStageFlagBits::eCompute,
-        .module = compute_shader,
-        .pName = "main"
-    };
+        .stage = vk::ShaderStageFlagBits::eCompute, .module = compute_shader, .pName = "main"};
 
-    const vk::ComputePipelineCreateInfo compute_info = {
-        .stage = compute_stage,
-        .layout = compute_pipeline_layout
-    };
+    const vk::ComputePipelineCreateInfo compute_info = {.stage = compute_stage,
+                                                        .layout = compute_pipeline_layout};
 
     if (const auto result = device.createComputePipeline({}, compute_info);
-            result.result == vk::Result::eSuccess) {
+        result.result == vk::Result::eSuccess) {
         compute_pipeline = result.value;
     } else {
-       LOG_CRITICAL(Render_Vulkan, "D24S8 compute pipeline creation failed!");
-       UNREACHABLE();
+        LOG_CRITICAL(Render_Vulkan, "D24S8 compute pipeline creation failed!");
+        UNREACHABLE();
     }
 }
 
@@ -153,37 +130,30 @@ D24S8toRGBA8::~D24S8toRGBA8() {
     device.destroyShaderModule(compute_shader);
 }
 
-void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect,
-                               Surface& dest, VideoCore::Rect2D dst_rect) {
+void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surface& dest,
+                               VideoCore::Rect2D dst_rect) {
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     runtime.Transition(command_buffer, source.alloc, vk::ImageLayout::eDepthStencilReadOnlyOptimal,
                        0, source.alloc.levels);
     runtime.Transition(command_buffer, dest.alloc, vk::ImageLayout::eGeneral, 0, dest.alloc.levels);
 
     const std::array textures = {
-        vk::DescriptorImageInfo{
-            .imageView = source.GetDepthView(),
-            .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal
-        },
-        vk::DescriptorImageInfo{
-            .imageView = source.GetStencilView(),
-            .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal
-        },
-        vk::DescriptorImageInfo{
-            .imageView = dest.GetImageView(),
-            .imageLayout = vk::ImageLayout::eGeneral
-        }
-    };
+        vk::DescriptorImageInfo{.imageView = source.GetDepthView(),
+                                .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal},
+        vk::DescriptorImageInfo{.imageView = source.GetStencilView(),
+                                .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal},
+        vk::DescriptorImageInfo{.imageView = dest.GetImageView(),
+                                .imageLayout = vk::ImageLayout::eGeneral}};
 
     device.updateDescriptorSetWithTemplate(descriptor_set, update_template, textures[0]);
-    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout,
-                                      0, 1, &descriptor_set, 0, nullptr);
+    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout, 0,
+                                      1, &descriptor_set, 0, nullptr);
 
     command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
 
     const auto src_offset = Common::MakeVec(src_rect.left, src_rect.bottom);
-    command_buffer.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute,
-                                 0, sizeof(Common::Vec2i), src_offset.AsArray());
+    command_buffer.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
+                                 sizeof(Common::Vec2i), src_offset.AsArray());
 
     command_buffer.dispatch(src_rect.GetWidth() / 32, src_rect.GetHeight() / 32, 1);
 }

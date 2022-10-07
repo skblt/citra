@@ -71,7 +71,6 @@ void ConvertBGRToRGB(std::span<const std::byte> source, std::span<std::byte> des
  */
 void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest);
 
-
 /**
  * Converts pixel data encoded in ABGR format to RGBA
  *

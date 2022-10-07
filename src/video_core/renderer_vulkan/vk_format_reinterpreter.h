@@ -16,13 +16,14 @@ class TextureRuntime;
 
 class FormatReinterpreterBase {
 public:
-    FormatReinterpreterBase(const Instance& instance, TaskScheduler& scheduler, TextureRuntime& runtime)
+    FormatReinterpreterBase(const Instance& instance, TaskScheduler& scheduler,
+                            TextureRuntime& runtime)
         : instance{instance}, scheduler{scheduler}, runtime{runtime} {}
     virtual ~FormatReinterpreterBase() = default;
 
     virtual VideoCore::PixelFormat GetSourceFormat() const = 0;
-    virtual void Reinterpret(Surface& source, VideoCore::Rect2D src_rect,
-                             Surface& dest, VideoCore::Rect2D dst_rect) = 0;
+    virtual void Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surface& dest,
+                             VideoCore::Rect2D dst_rect) = 0;
 
 protected:
     const Instance& instance;
@@ -41,8 +42,8 @@ public:
         return VideoCore::PixelFormat::D24S8;
     }
 
-    void Reinterpret(Surface& source, VideoCore::Rect2D src_rect,
-                     Surface& dest, VideoCore::Rect2D dst_rect) override;
+    void Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surface& dest,
+                     VideoCore::Rect2D dst_rect) override;
 
 private:
     vk::Device device;

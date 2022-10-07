@@ -140,12 +140,11 @@ void main() {
 }
 )";
 
-
 /// Vertex structure that the drawn screen rectangles are composed of.
 struct ScreenRectVertex {
     ScreenRectVertex() = default;
-    ScreenRectVertex(float x, float y, float u, float v) :
-        position{Common::MakeVec(x, y)}, tex_coord{Common::MakeVec(u, v)} {}
+    ScreenRectVertex(float x, float y, float u, float v)
+        : position{Common::MakeVec(x, y)}, tex_coord{Common::MakeVec(u, v)} {}
 
     Common::Vec2f position;
     Common::Vec2f tex_coord;
@@ -183,11 +182,12 @@ static std::array<float, 3 * 2> MakeOrthographicMatrix(float width, float height
 }
 
 RendererVulkan::RendererVulkan(Frontend::EmuWindow& window)
-    : RendererBase{window}, instance{window, Settings::values.physical_device, Settings::values.renderer_debug},
-      scheduler{instance, *this},
-      renderpass_cache{instance, scheduler}, runtime{instance, scheduler, renderpass_cache},
-      swapchain{instance, renderpass_cache},
-      vertex_buffer{instance, scheduler, VERTEX_BUFFER_SIZE, vk::BufferUsageFlagBits::eVertexBuffer, {}} {
+    : RendererBase{window}, instance{window, Settings::values.physical_device,
+                                     Settings::values.renderer_debug},
+      scheduler{instance, *this}, renderpass_cache{instance, scheduler},
+      runtime{instance, scheduler, renderpass_cache}, swapchain{instance, renderpass_cache},
+      vertex_buffer{
+          instance, scheduler, VERTEX_BUFFER_SIZE, vk::BufferUsageFlagBits::eVertexBuffer, {}} {
 
     auto& telemetry_session = Core::System::GetInstance().TelemetrySession();
     constexpr auto user_system = Common::Telemetry::FieldType::UserSystem;
@@ -221,8 +221,7 @@ RendererVulkan::~RendererVulkan() {
             .format = VideoCore::PixelFormatFromGPUPixelFormat(info.texture.format),
             .width = info.texture.width,
             .height = info.texture.height,
-            .layers = 1
-        };
+            .layers = 1};
 
         runtime.Recycle(tag, std::move(info.texture.alloc));
     }
@@ -236,8 +235,8 @@ VideoCore::ResultStatus RendererVulkan::Init() {
     BuildPipelines();
 
     // Create the rasterizer
-    rasterizer = std::make_unique<RasterizerVulkan>(render_window, instance, scheduler,
-                                                    runtime, renderpass_cache);
+    rasterizer = std::make_unique<RasterizerVulkan>(render_window, instance, scheduler, runtime,
+                                                    renderpass_cache);
 
     return VideoCore::ResultStatus::Success;
 }
@@ -266,13 +265,8 @@ void RendererVulkan::PrepareRendertarget() {
 
         if (color_fill.is_enabled) {
             const vk::ClearColorValue clear_color = {
-                .float32 = std::array{
-                    color_fill.color_r / 255.0f,
-                    color_fill.color_g / 255.0f,
-                    color_fill.color_b / 255.0f,
-                    1.0f
-                }
-            };
+                .float32 = std::array{color_fill.color_r / 255.0f, color_fill.color_g / 255.0f,
+                                      color_fill.color_b / 255.0f, 1.0f}};
 
             const vk::ImageSubresourceRange range = {
                 .aspectMask = vk::ImageAspectFlagBits::eColor,
@@ -284,13 +278,14 @@ void RendererVulkan::PrepareRendertarget() {
 
             vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
             TextureInfo& texture = screen_infos[i].texture;
-            runtime.Transition(command_buffer, texture.alloc, vk::ImageLayout::eTransferDstOptimal, 0, texture.alloc.levels);
-            command_buffer.clearColorImage(texture.alloc.image, vk::ImageLayout::eTransferDstOptimal,
-                                           clear_color, range);
+            runtime.Transition(command_buffer, texture.alloc, vk::ImageLayout::eTransferDstOptimal,
+                               0, texture.alloc.levels);
+            command_buffer.clearColorImage(
+                texture.alloc.image, vk::ImageLayout::eTransferDstOptimal, clear_color, range);
         } else {
             TextureInfo& texture = screen_infos[i].texture;
             if (texture.width != framebuffer.width || texture.height != framebuffer.height ||
-                    texture.format != framebuffer.color_format) {
+                texture.format != framebuffer.color_format) {
 
                 // Reallocate texture if the framebuffer size has changed.
                 // This is expected to not happen very often and hence should not be a
@@ -309,7 +304,8 @@ void RendererVulkan::PrepareRendertarget() {
 
 void RendererVulkan::BeginRendering() {
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, present_pipelines[current_pipeline]);
+    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                present_pipelines[current_pipeline]);
 
     std::array<vk::DescriptorImageInfo, 4> present_textures;
     for (std::size_t i = 0; i < screen_infos.size(); i++) {
@@ -317,38 +313,29 @@ void RendererVulkan::BeginRendering() {
         present_textures[i] = vk::DescriptorImageInfo{
             .imageView = info.display_texture ? info.display_texture->image_view
                                               : info.texture.alloc.image_view,
-            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-        };
+            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
     }
 
-    present_textures[3] = vk::DescriptorImageInfo{
-        .sampler = present_samplers[current_sampler]
-    };
+    present_textures[3] = vk::DescriptorImageInfo{.sampler = present_samplers[current_sampler]};
 
-    const vk::DescriptorSetAllocateInfo alloc_info = {
-        .descriptorPool = scheduler.GetDescriptorPool(),
-        .descriptorSetCount = 1,
-        .pSetLayouts = &present_descriptor_layout
-    };
+    const vk::DescriptorSetAllocateInfo alloc_info = {.descriptorPool =
+                                                          scheduler.GetDescriptorPool(),
+                                                      .descriptorSetCount = 1,
+                                                      .pSetLayouts = &present_descriptor_layout};
 
     vk::Device device = instance.GetDevice();
     vk::DescriptorSet set = device.allocateDescriptorSets(alloc_info)[0];
     device.updateDescriptorSetWithTemplate(set, present_update_template, present_textures[0]);
 
-    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, present_pipeline_layout,
-                                      0, 1, &set, 0, nullptr);
+    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, present_pipeline_layout, 0,
+                                      1, &set, 0, nullptr);
 
-    const vk::ClearValue clear_value = {
-        .color = clear_color
-    };
+    const vk::ClearValue clear_value = {.color = clear_color};
 
     const vk::RenderPassBeginInfo begin_info = {
         .renderPass = renderpass_cache.GetPresentRenderpass(),
         .framebuffer = swapchain.GetFramebuffer(),
-        .renderArea = vk::Rect2D{
-            .offset = {0, 0},
-            .extent = swapchain.GetExtent()
-        },
+        .renderArea = vk::Rect2D{.offset = {0, 0}, .extent = swapchain.GetExtent()},
         .clearValueCount = 1,
         .pClearValues = &clear_value,
     };
@@ -381,7 +368,8 @@ void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
     // only allows rows to have a memory alignement of 4.
     ASSERT(pixel_stride % 4 == 0);
 
-    if (!rasterizer->AccelerateDisplay(framebuffer, framebuffer_addr, static_cast<u32>(pixel_stride), screen_info)) {
+    if (!rasterizer->AccelerateDisplay(framebuffer, framebuffer_addr,
+                                       static_cast<u32>(pixel_stride), screen_info)) {
         ASSERT(false);
         // Reset the screen info's display texture to its own permanent texture
         /*screen_info.display_texture = &screen_info.texture;
@@ -399,14 +387,14 @@ void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
 
 void RendererVulkan::CompileShaders() {
     vk::Device device = instance.GetDevice();
-    present_vertex_shader = Compile(vertex_shader, vk::ShaderStageFlagBits::eVertex,
-                                    device, ShaderOptimization::Debug);
-    present_shaders[0] = Compile(fragment_shader, vk::ShaderStageFlagBits::eFragment,
-                                    device, ShaderOptimization::Debug);
+    present_vertex_shader =
+        Compile(vertex_shader, vk::ShaderStageFlagBits::eVertex, device, ShaderOptimization::Debug);
+    present_shaders[0] = Compile(fragment_shader, vk::ShaderStageFlagBits::eFragment, device,
+                                 ShaderOptimization::Debug);
     present_shaders[1] = Compile(fragment_shader_anaglyph, vk::ShaderStageFlagBits::eFragment,
-                                    device, ShaderOptimization::Debug);
+                                 device, ShaderOptimization::Debug);
     present_shaders[2] = Compile(fragment_shader_interlaced, vk::ShaderStageFlagBits::eFragment,
-                                    device, ShaderOptimization::Debug);
+                                 device, ShaderOptimization::Debug);
 
     auto properties = instance.GetPhysicalDevice().getProperties();
     for (std::size_t i = 0; i < present_samplers.size(); i++) {
@@ -422,8 +410,7 @@ void RendererVulkan::CompileShaders() {
             .compareEnable = false,
             .compareOp = vk::CompareOp::eAlways,
             .borderColor = vk::BorderColor::eIntOpaqueBlack,
-            .unnormalizedCoordinates = false
-        };
+            .unnormalizedCoordinates = false};
 
         present_samplers[i] = device.createSampler(sampler_info);
     }
@@ -431,53 +418,41 @@ void RendererVulkan::CompileShaders() {
 
 void RendererVulkan::BuildLayouts() {
     const std::array present_layout_bindings = {
-        vk::DescriptorSetLayoutBinding{
-            .binding = 0,
-            .descriptorType = vk::DescriptorType::eSampledImage,
-            .descriptorCount = 3,
-            .stageFlags = vk::ShaderStageFlagBits::eFragment
-        },
-        vk::DescriptorSetLayoutBinding{
-            .binding = 1,
-            .descriptorType = vk::DescriptorType::eSampler,
-            .descriptorCount = 1,
-            .stageFlags = vk::ShaderStageFlagBits::eFragment
-        }
-    };
+        vk::DescriptorSetLayoutBinding{.binding = 0,
+                                       .descriptorType = vk::DescriptorType::eSampledImage,
+                                       .descriptorCount = 3,
+                                       .stageFlags = vk::ShaderStageFlagBits::eFragment},
+        vk::DescriptorSetLayoutBinding{.binding = 1,
+                                       .descriptorType = vk::DescriptorType::eSampler,
+                                       .descriptorCount = 1,
+                                       .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
     const vk::DescriptorSetLayoutCreateInfo present_layout_info = {
         .bindingCount = static_cast<u32>(present_layout_bindings.size()),
-        .pBindings = present_layout_bindings.data()
-    };
+        .pBindings = present_layout_bindings.data()};
 
     vk::Device device = instance.GetDevice();
     present_descriptor_layout = device.createDescriptorSetLayout(present_layout_info);
 
     const std::array update_template_entries = {
-        vk::DescriptorUpdateTemplateEntry{
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 3,
-            .descriptorType  = vk::DescriptorType::eSampledImage,
-            .offset = 0,
-            .stride = sizeof(vk::DescriptorImageInfo)
-        },
-        vk::DescriptorUpdateTemplateEntry{
-            .dstBinding = 1,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = vk::DescriptorType::eSampler,
-            .offset = 3 * sizeof(vk::DescriptorImageInfo),
-            .stride = 0
-        }
-    };
+        vk::DescriptorUpdateTemplateEntry{.dstBinding = 0,
+                                          .dstArrayElement = 0,
+                                          .descriptorCount = 3,
+                                          .descriptorType = vk::DescriptorType::eSampledImage,
+                                          .offset = 0,
+                                          .stride = sizeof(vk::DescriptorImageInfo)},
+        vk::DescriptorUpdateTemplateEntry{.dstBinding = 1,
+                                          .dstArrayElement = 0,
+                                          .descriptorCount = 1,
+                                          .descriptorType = vk::DescriptorType::eSampler,
+                                          .offset = 3 * sizeof(vk::DescriptorImageInfo),
+                                          .stride = 0}};
 
     const vk::DescriptorUpdateTemplateCreateInfo template_info = {
         .descriptorUpdateEntryCount = static_cast<u32>(update_template_entries.size()),
         .pDescriptorUpdateEntries = update_template_entries.data(),
         .templateType = vk::DescriptorUpdateTemplateType::eDescriptorSet,
-        .descriptorSetLayout = present_descriptor_layout
-    };
+        .descriptorSetLayout = present_descriptor_layout};
 
     present_update_template = device.createDescriptorUpdateTemplate(template_info);
 
@@ -487,49 +462,37 @@ void RendererVulkan::BuildLayouts() {
         .size = sizeof(PresentUniformData),
     };
 
-    const vk::PipelineLayoutCreateInfo layout_info = {
-        .setLayoutCount = 1,
-        .pSetLayouts = &present_descriptor_layout,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &push_range
-    };
+    const vk::PipelineLayoutCreateInfo layout_info = {.setLayoutCount = 1,
+                                                      .pSetLayouts = &present_descriptor_layout,
+                                                      .pushConstantRangeCount = 1,
+                                                      .pPushConstantRanges = &push_range};
 
     present_pipeline_layout = device.createPipelineLayout(layout_info);
 }
 
 void RendererVulkan::BuildPipelines() {
-    const vk::VertexInputBindingDescription binding = {
-        .binding = 0,
-        .stride = sizeof(ScreenRectVertex),
-        .inputRate = vk::VertexInputRate::eVertex
-    };
+    const vk::VertexInputBindingDescription binding = {.binding = 0,
+                                                       .stride = sizeof(ScreenRectVertex),
+                                                       .inputRate = vk::VertexInputRate::eVertex};
 
     const std::array attributes = {
-        vk::VertexInputAttributeDescription{
-            .location = 0,
-            .binding = 0,
-            .format = vk::Format::eR32G32Sfloat,
-            .offset = offsetof(ScreenRectVertex, position)
-        },
-        vk::VertexInputAttributeDescription{
-            .location = 1,
-            .binding = 0,
-            .format = vk::Format::eR32G32Sfloat,
-            .offset = offsetof(ScreenRectVertex, tex_coord)
-        }
-    };
+        vk::VertexInputAttributeDescription{.location = 0,
+                                            .binding = 0,
+                                            .format = vk::Format::eR32G32Sfloat,
+                                            .offset = offsetof(ScreenRectVertex, position)},
+        vk::VertexInputAttributeDescription{.location = 1,
+                                            .binding = 0,
+                                            .format = vk::Format::eR32G32Sfloat,
+                                            .offset = offsetof(ScreenRectVertex, tex_coord)}};
 
     const vk::PipelineVertexInputStateCreateInfo vertex_input_info = {
         .vertexBindingDescriptionCount = 1,
         .pVertexBindingDescriptions = &binding,
         .vertexAttributeDescriptionCount = static_cast<u32>(attributes.size()),
-        .pVertexAttributeDescriptions = attributes.data()
-    };
+        .pVertexAttributeDescriptions = attributes.data()};
 
     const vk::PipelineInputAssemblyStateCreateInfo input_assembly = {
-        .topology = vk::PrimitiveTopology::eTriangleStrip,
-        .primitiveRestartEnable = false
-    };
+        .topology = vk::PrimitiveTopology::eTriangleStrip, .primitiveRestartEnable = false};
 
     const vk::PipelineRasterizationStateCreateInfo raster_state = {
         .depthClampEnable = false,
@@ -537,26 +500,21 @@ void RendererVulkan::BuildPipelines() {
         .cullMode = vk::CullModeFlagBits::eNone,
         .frontFace = vk::FrontFace::eClockwise,
         .depthBiasEnable = false,
-        .lineWidth = 1.0f
-    };
+        .lineWidth = 1.0f};
 
     const vk::PipelineMultisampleStateCreateInfo multisampling = {
-        .rasterizationSamples  = vk::SampleCountFlagBits::e1,
-        .sampleShadingEnable = false
-    };
+        .rasterizationSamples = vk::SampleCountFlagBits::e1, .sampleShadingEnable = false};
 
     const vk::PipelineColorBlendAttachmentState colorblend_attachment = {
         .blendEnable = false,
         .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA
-    };
+                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
 
     const vk::PipelineColorBlendStateCreateInfo color_blending = {
         .logicOpEnable = false,
         .attachmentCount = 1,
         .pAttachments = &colorblend_attachment,
-        .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f}
-    };
+        .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f}};
 
     const vk::Viewport placeholder_viewport = vk::Viewport{0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f};
     const vk::Rect2D placeholder_scissor = vk::Rect2D{{0, 0}, {1, 1}};
@@ -567,36 +525,27 @@ void RendererVulkan::BuildPipelines() {
         .pScissors = &placeholder_scissor,
     };
 
-    const std::array dynamic_states = {
-        vk::DynamicState::eViewport,
-        vk::DynamicState::eScissor
-    };
+    const std::array dynamic_states = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
 
     const vk::PipelineDynamicStateCreateInfo dynamic_info = {
         .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
-        .pDynamicStates = dynamic_states.data()
-    };
+        .pDynamicStates = dynamic_states.data()};
 
-    const vk::PipelineDepthStencilStateCreateInfo depth_info = {
-        .depthTestEnable = false,
-        .depthWriteEnable = false,
-        .depthCompareOp = vk::CompareOp::eAlways,
-        .depthBoundsTestEnable = false,
-        .stencilTestEnable = false
-    };
+    const vk::PipelineDepthStencilStateCreateInfo depth_info = {.depthTestEnable = false,
+                                                                .depthWriteEnable = false,
+                                                                .depthCompareOp =
+                                                                    vk::CompareOp::eAlways,
+                                                                .depthBoundsTestEnable = false,
+                                                                .stencilTestEnable = false};
 
     for (u32 i = 0; i < PRESENT_PIPELINES; i++) {
         const std::array shader_stages = {
-            vk::PipelineShaderStageCreateInfo{
-                .stage = vk::ShaderStageFlagBits::eVertex,
-                .module = present_vertex_shader,
-                .pName = "main"
-            },
-            vk::PipelineShaderStageCreateInfo{
-                .stage = vk::ShaderStageFlagBits::eFragment,
-                .module = present_shaders[i],
-                .pName = "main"
-            },
+            vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eVertex,
+                                              .module = present_vertex_shader,
+                                              .pName = "main"},
+            vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eFragment,
+                                              .module = present_shaders[i],
+                                              .pName = "main"},
         };
 
         const vk::GraphicsPipelineCreateInfo pipeline_info = {
@@ -611,12 +560,11 @@ void RendererVulkan::BuildPipelines() {
             .pColorBlendState = &color_blending,
             .pDynamicState = &dynamic_info,
             .layout = present_pipeline_layout,
-            .renderPass = renderpass_cache.GetPresentRenderpass()
-        };
+            .renderPass = renderpass_cache.GetPresentRenderpass()};
 
         vk::Device device = instance.GetDevice();
         if (const auto result = device.createGraphicsPipeline({}, pipeline_info);
-                result.result == vk::Result::eSuccess) {
+            result.result == vk::Result::eSuccess) {
             present_pipelines[i] = result.value;
         } else {
             LOG_CRITICAL(Render_Vulkan, "Unable to build present pipelines");
@@ -625,25 +573,27 @@ void RendererVulkan::BuildPipelines() {
     }
 }
 
-void RendererVulkan::ConfigureFramebufferTexture(TextureInfo& texture, const GPU::Regs::FramebufferConfig& framebuffer) {
+void RendererVulkan::ConfigureFramebufferTexture(TextureInfo& texture,
+                                                 const GPU::Regs::FramebufferConfig& framebuffer) {
     TextureInfo old_texture = texture;
     texture = TextureInfo{
-        .alloc = runtime.Allocate(framebuffer.width, framebuffer.height,
-                                  VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format),
-                                  VideoCore::TextureType::Texture2D),
+        .alloc =
+            runtime.Allocate(framebuffer.width, framebuffer.height,
+                             VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format),
+                             VideoCore::TextureType::Texture2D),
         .width = framebuffer.width,
         .height = framebuffer.height,
         .format = framebuffer.color_format,
     };
 
-    // Recyle the old texture after allocation to avoid having duplicates of the same allocation in the recycler
+    // Recyle the old texture after allocation to avoid having duplicates of the same allocation in
+    // the recycler
     if (old_texture.width != 0 && old_texture.height != 0) {
         const VideoCore::HostTextureTag tag = {
             .format = VideoCore::PixelFormatFromGPUPixelFormat(old_texture.format),
             .width = old_texture.width,
             .height = old_texture.height,
-            .layers = 1
-        };
+            .layers = 1};
 
         runtime.Recycle(tag, std::move(old_texture.alloc));
     }
@@ -662,7 +612,7 @@ void RendererVulkan::ReloadPipeline() {
     case Settings::StereoRenderOption::ReverseInterlaced:
         current_pipeline = 2;
         draw_info.reverse_interlaced =
-                Settings::values.render_3d == Settings::StereoRenderOption::ReverseInterlaced;
+            Settings::values.render_3d == Settings::StereoRenderOption::ReverseInterlaced;
         break;
     default:
         current_pipeline = 0;
@@ -694,15 +644,16 @@ void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, fl
     const float width = static_cast<float>(screen_info.texture.width);
     const float height = static_cast<float>(screen_info.texture.height);
 
-    draw_info.i_resolution = Common::Vec4f{width * scale_factor, height * scale_factor,
-                                           1.0f / (width * scale_factor),
-                                           1.0f / (height * scale_factor)};
+    draw_info.i_resolution =
+        Common::Vec4f{width * scale_factor, height * scale_factor, 1.0f / (width * scale_factor),
+                      1.0f / (height * scale_factor)};
     draw_info.o_resolution = Common::Vec4f{h, w, 1.0f / h, 1.0f / w};
     draw_info.screen_id_l = screen_id;
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.pushConstants(present_pipeline_layout,
-                                 vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
+                                 vk::ShaderStageFlagBits::eFragment |
+                                     vk::ShaderStageFlagBits::eVertex,
                                  0, sizeof(draw_info), &draw_info);
 
     command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
@@ -730,20 +681,19 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
     const float width = static_cast<float>(screen_info.texture.width);
     const float height = static_cast<float>(screen_info.texture.height);
 
-    draw_info.i_resolution = Common::Vec4f{width * scale_factor, height * scale_factor,
-                                       1.0f / (width * scale_factor),
-                                       1.0f / (height * scale_factor)};
+    draw_info.i_resolution =
+        Common::Vec4f{width * scale_factor, height * scale_factor, 1.0f / (width * scale_factor),
+                      1.0f / (height * scale_factor)};
     draw_info.o_resolution = Common::Vec4f{h, w, 1.0f / h, 1.0f / w};
     draw_info.screen_id_l = screen_id;
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.pushConstants(present_pipeline_layout,
-                                 vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
+                                 vk::ShaderStageFlagBits::eFragment |
+                                     vk::ShaderStageFlagBits::eVertex,
                                  0, sizeof(draw_info), &draw_info);
 
-    const vk::ClearValue clear_value = {
-        .color = clear_color
-    };
+    const vk::ClearValue clear_value = {.color = clear_color};
 
     const vk::RenderPassBeginInfo begin_info = {
         .renderPass = renderpass_cache.GetPresentRenderpass(),
@@ -758,20 +708,18 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
     command_buffer.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
 }
 
-void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_id_r,
-                                                   float x, float y, float w, float h) {
+void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_id_r, float x,
+                                                   float y, float w, float h) {
     const ScreenInfo& screen_info_l = screen_infos[screen_id_l];
     const auto& texcoords = screen_info_l.display_texcoords;
 
     u32 size = sizeof(ScreenRectVertex) * 4;
     auto [ptr, offset, invalidate] = vertex_buffer.Map(size);
 
-    const std::array vertices = {
-        ScreenRectVertex{x, y, texcoords.bottom, texcoords.left},
-        ScreenRectVertex{x + w, y, texcoords.bottom, texcoords.right},
-        ScreenRectVertex{x, y + h, texcoords.top, texcoords.left},
-        ScreenRectVertex{x + w, y + h, texcoords.top, texcoords.right}
-    };
+    const std::array vertices = {ScreenRectVertex{x, y, texcoords.bottom, texcoords.left},
+                                 ScreenRectVertex{x + w, y, texcoords.bottom, texcoords.right},
+                                 ScreenRectVertex{x, y + h, texcoords.top, texcoords.left},
+                                 ScreenRectVertex{x + w, y + h, texcoords.top, texcoords.right}};
 
     std::memcpy(ptr, vertices.data(), size);
     vertex_buffer.Commit(size);
@@ -780,9 +728,9 @@ void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_i
     const float width = static_cast<float>(screen_info_l.texture.width);
     const float height = static_cast<float>(screen_info_l.texture.height);
 
-    draw_info.i_resolution = Common::Vec4f{width * scale_factor, height * scale_factor,
-                                           1.0f / (width * scale_factor),
-                                           1.0f / (height * scale_factor)};
+    draw_info.i_resolution =
+        Common::Vec4f{width * scale_factor, height * scale_factor, 1.0f / (width * scale_factor),
+                      1.0f / (height * scale_factor)};
 
     draw_info.o_resolution = Common::Vec4f{h, w, 1.0f / h, 1.0f / w};
     draw_info.screen_id_l = screen_id_l;
@@ -790,15 +738,16 @@ void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_i
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.pushConstants(present_pipeline_layout,
-                                 vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
+                                 vk::ShaderStageFlagBits::eFragment |
+                                     vk::ShaderStageFlagBits::eVertex,
                                  0, sizeof(draw_info), &draw_info);
 
     command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
     command_buffer.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
 }
 
-void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r,
-                                            float x, float y, float w, float h) {
+void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, float x, float y,
+                                            float w, float h) {
     const ScreenInfo& screen_info_l = screen_infos[screen_id_l];
     const auto& texcoords = screen_info_l.display_texcoords;
 
@@ -819,9 +768,9 @@ void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r,
     const float width = static_cast<float>(screen_info_l.texture.width);
     const float height = static_cast<float>(screen_info_l.texture.height);
 
-    draw_info.i_resolution = Common::Vec4f{width * scale_factor, height * scale_factor,
-                                           1.0f / (width * scale_factor),
-                                           1.0f / (height * scale_factor)};
+    draw_info.i_resolution =
+        Common::Vec4f{width * scale_factor, height * scale_factor, 1.0f / (width * scale_factor),
+                      1.0f / (height * scale_factor)};
 
     draw_info.o_resolution = Common::Vec4f{w, h, 1.0f / w, 1.0f / h};
     draw_info.screen_id_l = screen_id_l;
@@ -829,7 +778,8 @@ void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r,
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.pushConstants(present_pipeline_layout,
-                                 vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
+                                 vk::ShaderStageFlagBits::eFragment |
+                                     vk::ShaderStageFlagBits::eVertex,
                                  0, sizeof(draw_info), &draw_info);
 
     command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
@@ -857,11 +807,11 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
     const auto& bottom_screen = layout.bottom_screen;
 
     // Set projection matrix
-    //draw_info.modelview =
-    //    MakeOrthographicMatrix(static_cast<float>(layout.width), static_cast<float>(layout.height), flipped);
-    draw_info.modelview = glm::transpose(glm::ortho(0.f, static_cast<float>(layout.width),
-                                                        static_cast<float>(layout.height), 0.0f,
-                                                        0.f, 1.f));
+    // draw_info.modelview =
+    //    MakeOrthographicMatrix(static_cast<float>(layout.width),
+    //    static_cast<float>(layout.height), flipped);
+    draw_info.modelview = glm::transpose(glm::ortho(
+        0.f, static_cast<float>(layout.width), static_cast<float>(layout.height), 0.0f, 0.f, 1.f));
 
     const bool stereo_single_screen =
         Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph ||
@@ -875,31 +825,29 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
     if (layout.top_screen_enabled) {
         if (layout.is_rotated) {
             if (Settings::values.render_3d == Settings::StereoRenderOption::Off) {
-                DrawSingleScreenRotated(0, top_screen.left,
-                                        top_screen.top, top_screen.GetWidth(),
+                DrawSingleScreenRotated(0, top_screen.left, top_screen.top, top_screen.GetWidth(),
                                         top_screen.GetHeight());
             } else if (Settings::values.render_3d == Settings::StereoRenderOption::SideBySide) {
-                DrawSingleScreenRotated(0, (float)top_screen.left / 2,
-                                        (float)top_screen.top, (float)top_screen.GetWidth() / 2,
+                DrawSingleScreenRotated(0, (float)top_screen.left / 2, (float)top_screen.top,
+                                        (float)top_screen.GetWidth() / 2,
                                         (float)top_screen.GetHeight());
                 draw_info.layer = 1;
-                DrawSingleScreenRotated(1,
-                                        ((float)top_screen.left / 2) + ((float)layout.width / 2),
+                DrawSingleScreenRotated(1, ((float)top_screen.left / 2) + ((float)layout.width / 2),
                                         (float)top_screen.top, (float)top_screen.GetWidth() / 2,
                                         (float)top_screen.GetHeight());
             } else if (Settings::values.render_3d == Settings::StereoRenderOption::CardboardVR) {
-                DrawSingleScreenRotated(0, layout.top_screen.left,
-                                        layout.top_screen.top, layout.top_screen.GetWidth(),
+                DrawSingleScreenRotated(0, layout.top_screen.left, layout.top_screen.top,
+                                        layout.top_screen.GetWidth(),
                                         layout.top_screen.GetHeight());
                 draw_info.layer = 1;
-                DrawSingleScreenRotated(1,
-                                        layout.cardboard.top_screen_right_eye +
-                                            ((float)layout.width / 2),
-                                        layout.top_screen.top, layout.top_screen.GetWidth(),
-                                        layout.top_screen.GetHeight());
+                DrawSingleScreenRotated(
+                    1, layout.cardboard.top_screen_right_eye + ((float)layout.width / 2),
+                    layout.top_screen.top, layout.top_screen.GetWidth(),
+                    layout.top_screen.GetHeight());
             } else if (stereo_single_screen) {
                 DrawSingleScreenStereoRotated(0, 1, (float)top_screen.left, (float)top_screen.top,
-                    (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
+                                              (float)top_screen.GetWidth(),
+                                              (float)top_screen.GetHeight());
             }
         } else {
             if (Settings::values.render_3d == Settings::StereoRenderOption::Off) {
@@ -909,8 +857,7 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
                 DrawSingleScreen(0, (float)top_screen.left / 2, (float)top_screen.top,
                                  (float)top_screen.GetWidth() / 2, (float)top_screen.GetHeight());
                 draw_info.layer = 1;
-                DrawSingleScreen(1,
-                                 ((float)top_screen.left / 2) + ((float)layout.width / 2),
+                DrawSingleScreen(1, ((float)top_screen.left / 2) + ((float)layout.width / 2),
                                  (float)top_screen.top, (float)top_screen.GetWidth() / 2,
                                  (float)top_screen.GetHeight());
             } else if (Settings::values.render_3d == Settings::StereoRenderOption::CardboardVR) {
@@ -922,9 +869,8 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
                                  layout.top_screen.top, layout.top_screen.GetWidth(),
                                  layout.top_screen.GetHeight());
             } else if (stereo_single_screen) {
-                DrawSingleScreenStereo(0, 1, (float)top_screen.left,
-                                       (float)top_screen.top, (float)top_screen.GetWidth(),
-                                       (float)top_screen.GetHeight());
+                DrawSingleScreenStereo(0, 1, (float)top_screen.left, (float)top_screen.top,
+                                       (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
             }
         }
     }
@@ -933,60 +879,55 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
     if (layout.bottom_screen_enabled) {
         if (layout.is_rotated) {
             if (Settings::values.render_3d == Settings::StereoRenderOption::Off) {
-                DrawSingleScreenRotated(2, (float)bottom_screen.left,
-                                        (float)bottom_screen.top, (float)bottom_screen.GetWidth(),
+                DrawSingleScreenRotated(2, (float)bottom_screen.left, (float)bottom_screen.top,
+                                        (float)bottom_screen.GetWidth(),
                                         (float)bottom_screen.GetHeight());
             } else if (Settings::values.render_3d == Settings::StereoRenderOption::SideBySide) {
-                DrawSingleScreenRotated(
-                    2, (float)bottom_screen.left / 2, (float)bottom_screen.top,
-                    (float)bottom_screen.GetWidth() / 2, (float)bottom_screen.GetHeight());
+                DrawSingleScreenRotated(2, (float)bottom_screen.left / 2, (float)bottom_screen.top,
+                                        (float)bottom_screen.GetWidth() / 2,
+                                        (float)bottom_screen.GetHeight());
                 draw_info.layer = 1;
                 DrawSingleScreenRotated(
                     2, ((float)bottom_screen.left / 2) + ((float)layout.width / 2),
                     (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
                     (float)bottom_screen.GetHeight());
             } else if (Settings::values.render_3d == Settings::StereoRenderOption::CardboardVR) {
-                DrawSingleScreenRotated(2, layout.bottom_screen.left,
-                                        layout.bottom_screen.top, layout.bottom_screen.GetWidth(),
+                DrawSingleScreenRotated(2, layout.bottom_screen.left, layout.bottom_screen.top,
+                                        layout.bottom_screen.GetWidth(),
                                         layout.bottom_screen.GetHeight());
                 draw_info.layer = 1;
-                DrawSingleScreenRotated(2,
-                                        layout.cardboard.bottom_screen_right_eye +
-                                            ((float)layout.width / 2),
-                                        layout.bottom_screen.top, layout.bottom_screen.GetWidth(),
-                                        layout.bottom_screen.GetHeight());
+                DrawSingleScreenRotated(
+                    2, layout.cardboard.bottom_screen_right_eye + ((float)layout.width / 2),
+                    layout.bottom_screen.top, layout.bottom_screen.GetWidth(),
+                    layout.bottom_screen.GetHeight());
             } else if (stereo_single_screen) {
-                DrawSingleScreenStereoRotated(2, 2, (float)bottom_screen.left, (float)bottom_screen.top,
-                                              (float)bottom_screen.GetWidth(),
-                                              (float)bottom_screen.GetHeight());
+                DrawSingleScreenStereoRotated(
+                    2, 2, (float)bottom_screen.left, (float)bottom_screen.top,
+                    (float)bottom_screen.GetWidth(), (float)bottom_screen.GetHeight());
             }
         } else {
             if (Settings::values.render_3d == Settings::StereoRenderOption::Off) {
-                DrawSingleScreen(2, (float)bottom_screen.left,
-                                 (float)bottom_screen.top, (float)bottom_screen.GetWidth(),
-                                 (float)bottom_screen.GetHeight());
+                DrawSingleScreen(2, (float)bottom_screen.left, (float)bottom_screen.top,
+                                 (float)bottom_screen.GetWidth(), (float)bottom_screen.GetHeight());
             } else if (Settings::values.render_3d == Settings::StereoRenderOption::SideBySide) {
-                DrawSingleScreen(2, (float)bottom_screen.left / 2,
-                                 (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
+                DrawSingleScreen(2, (float)bottom_screen.left / 2, (float)bottom_screen.top,
+                                 (float)bottom_screen.GetWidth() / 2,
                                  (float)bottom_screen.GetHeight());
                 draw_info.layer = 1;
-                DrawSingleScreen(2,
-                                 ((float)bottom_screen.left / 2) + ((float)layout.width / 2),
+                DrawSingleScreen(2, ((float)bottom_screen.left / 2) + ((float)layout.width / 2),
                                  (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
                                  (float)bottom_screen.GetHeight());
             } else if (Settings::values.render_3d == Settings::StereoRenderOption::CardboardVR) {
-                DrawSingleScreen(2, layout.bottom_screen.left,
-                                 layout.bottom_screen.top, layout.bottom_screen.GetWidth(),
-                                 layout.bottom_screen.GetHeight());
+                DrawSingleScreen(2, layout.bottom_screen.left, layout.bottom_screen.top,
+                                 layout.bottom_screen.GetWidth(), layout.bottom_screen.GetHeight());
                 draw_info.layer = 1;
-                DrawSingleScreen(2,
-                                 layout.cardboard.bottom_screen_right_eye +
-                                     ((float)layout.width / 2),
-                                 layout.bottom_screen.top, layout.bottom_screen.GetWidth(),
-                                 layout.bottom_screen.GetHeight());
+                DrawSingleScreen(
+                    2, layout.cardboard.bottom_screen_right_eye + ((float)layout.width / 2),
+                    layout.bottom_screen.top, layout.bottom_screen.GetWidth(),
+                    layout.bottom_screen.GetHeight());
             } else if (stereo_single_screen) {
-                DrawSingleScreenStereo(2, 2, (float)bottom_screen.left,
-                                       (float)bottom_screen.top, (float)bottom_screen.GetWidth(),
+                DrawSingleScreenStereo(2, 2, (float)bottom_screen.left, (float)bottom_screen.top,
+                                       (float)bottom_screen.GetWidth(),
                                        (float)bottom_screen.GetHeight());
             }
         }
@@ -1009,19 +950,14 @@ void RendererVulkan::SwapBuffers() {
     const vk::Semaphore present_ready = scheduler.GetPresentReadySemaphore();
     swapchain.AcquireNextImage(image_acquired);
 
-    const vk::Viewport viewport = {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = static_cast<float>(layout.width),
-        .height = static_cast<float>(layout.height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f
-    };
+    const vk::Viewport viewport = {.x = 0.0f,
+                                   .y = 0.0f,
+                                   .width = static_cast<float>(layout.width),
+                                   .height = static_cast<float>(layout.height),
+                                   .minDepth = 0.0f,
+                                   .maxDepth = 1.0f};
 
-    const vk::Rect2D scissor = {
-        .offset = {0, 0},
-        .extent = {layout.width, layout.height}
-    };
+    const vk::Rect2D scissor = {.offset = {0, 0}, .extent = {layout.width, layout.height}};
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.setViewport(0, viewport);
@@ -1031,7 +967,8 @@ void RendererVulkan::SwapBuffers() {
 
     for (auto& info : screen_infos) {
         auto alloc = info.display_texture ? info.display_texture : &info.texture.alloc;
-        runtime.Transition(command_buffer, *alloc, vk::ImageLayout::eShaderReadOnlyOptimal, 0, alloc->levels);
+        runtime.Transition(command_buffer, *alloc, vk::ImageLayout::eShaderReadOnlyOptimal, 0,
+                           alloc->levels);
     }
 
     DrawScreens(layout, false);

@@ -8,11 +8,11 @@
 #include "common/bit_field.h"
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
+#include "video_core/regs.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 #include "video_core/renderer_vulkan/vk_shader.h"
 #include "video_core/renderer_vulkan/vk_shader_gen.h"
 #include "video_core/shader/shader_cache.h"
-#include "video_core/regs.h"
 
 namespace Vulkan {
 
@@ -22,13 +22,7 @@ constexpr u32 MAX_VERTEX_BINDINGS = 16;
 constexpr u32 MAX_DESCRIPTORS = 8;
 constexpr u32 MAX_DESCRIPTOR_SETS = 6;
 
-enum class AttribType : u32 {
-    Float = 0,
-    Int = 1,
-    Short = 2,
-    Byte = 3,
-    Ubyte = 4
-};
+enum class AttribType : u32 { Float = 0, Int = 1, Short = 2, Byte = 3, Ubyte = 4 };
 
 /**
  * The pipeline state is tightly packed with bitfields to reduce
@@ -110,9 +104,9 @@ struct PipelineInfo {
     bool IsDepthWriteEnabled() const {
         const bool has_stencil = depth_attachment == VideoCore::PixelFormat::D24S8;
         const bool depth_write =
-                depth_stencil.depth_test_enable && depth_stencil.depth_write_enable;
-        const bool stencil_write =
-                has_stencil && depth_stencil.stencil_test_enable && depth_stencil.stencil_write_mask != 0;
+            depth_stencil.depth_test_enable && depth_stencil.depth_write_enable;
+        const bool stencil_write = has_stencil && depth_stencil.stencil_test_enable &&
+                                   depth_stencil.stencil_write_mask != 0;
 
         return depth_write || stencil_write;
     }
@@ -133,15 +127,14 @@ using DescriptorSetData = std::array<DescriptorData, MAX_DESCRIPTORS>;
 /**
  * Vulkan specialized PICA shader caches
  */
-using ProgrammableVertexShaders =
-    Pica::Shader::ShaderDoubleCache<PicaVSConfig, vk::ShaderModule, &Compile, &GenerateVertexShader>;
+using ProgrammableVertexShaders = Pica::Shader::ShaderDoubleCache<PicaVSConfig, vk::ShaderModule,
+                                                                  &Compile, &GenerateVertexShader>;
 
-using FixedGeometryShaders =
-    Pica::Shader::ShaderCache<PicaFixedGSConfig, vk::ShaderModule, &Compile, &GenerateFixedGeometryShader>;
+using FixedGeometryShaders = Pica::Shader::ShaderCache<PicaFixedGSConfig, vk::ShaderModule,
+                                                       &Compile, &GenerateFixedGeometryShader>;
 
 using FragmentShaders =
     Pica::Shader::ShaderCache<PicaFSConfig, vk::ShaderModule, &Compile, &GenerateFragmentShader>;
-
 
 class Instance;
 class TaskScheduler;
@@ -153,7 +146,8 @@ class RenderpassCache;
  */
 class PipelineCache {
 public:
-    PipelineCache(const Instance& instance, TaskScheduler& scheduler, RenderpassCache& renderpass_cache);
+    PipelineCache(const Instance& instance, TaskScheduler& scheduler,
+                  RenderpassCache& renderpass_cache);
     ~PipelineCache();
 
     /// Binds a pipeline using the provided information
@@ -250,11 +244,7 @@ private:
     std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> descriptor_sets;
 
     // Bound shader modules
-    enum ProgramType : u32 {
-        VS = 0,
-        GS = 2,
-        FS = 1
-    };
+    enum ProgramType : u32 { VS = 0, GS = 2, FS = 1 };
 
     std::array<vk::ShaderModule, MAX_SHADER_STAGES> current_shaders;
     std::array<u64, MAX_SHADER_STAGES> shader_hashes;

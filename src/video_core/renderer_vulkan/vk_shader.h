@@ -8,12 +8,9 @@
 
 namespace Vulkan {
 
-enum class ShaderOptimization {
-    High = 0,
-    Debug = 1
-};
+enum class ShaderOptimization { High = 0, Debug = 1 };
 
-vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage,
-                         vk::Device device, ShaderOptimization level);
+vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage, vk::Device device,
+                         ShaderOptimization level);
 
 } // namespace Vulkan

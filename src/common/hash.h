@@ -4,9 +4,9 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <cstring>
-#include <concepts>
 #include "common/cityhash.h"
 #include "common/common_types.h"
 

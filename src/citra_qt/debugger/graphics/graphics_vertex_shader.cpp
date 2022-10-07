@@ -407,7 +407,8 @@ GraphicsVertexShaderWidget::GraphicsVertexShaderWidget(
                 static_cast<void (QSignalMapper::*)()>(&QSignalMapper::map));
         input_data_mapper->setMapping(input_data[i], i);
     }
-    connect(input_data_mapper, &QSignalMapper::mappedInt, this, &GraphicsVertexShaderWidget::OnInputAttributeChanged);
+    connect(input_data_mapper, &QSignalMapper::mappedInt, this,
+            &GraphicsVertexShaderWidget::OnInputAttributeChanged);
 
     auto main_widget = new QWidget;
     auto main_layout = new QVBoxLayout;
@@ -514,7 +515,7 @@ void GraphicsVertexShaderWidget::Reload(bool replace_vertex_data, void* vertex_d
     int num_attributes = shader_config.max_input_attribute_index + 1;
 
     for (auto pattern : shader_setup.swizzle_data) {
-        const nihstro::SwizzleInfo swizzle_info = { .pattern = nihstro::SwizzlePattern{pattern} };
+        const nihstro::SwizzleInfo swizzle_info = {.pattern = nihstro::SwizzlePattern{pattern}};
         info.swizzle_info.push_back(swizzle_info);
     }
 

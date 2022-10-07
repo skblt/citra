@@ -3,8 +3,8 @@
 // Refer to the license.txt file included.
 
 #pragma once
-#include <span>
 #include <memory>
+#include <span>
 #include <vector>
 #include <boost/serialization/export.hpp>
 #include <boost/serialization/shared_ptr.hpp>

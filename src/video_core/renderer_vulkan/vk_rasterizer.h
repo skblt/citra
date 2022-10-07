@@ -9,8 +9,8 @@
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/regs_lighting.h"
 #include "video_core/regs_texturing.h"
-#include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
+#include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
 #include "video_core/shader/shader.h"
 #include "video_core/shader/shader_uniforms.h"
@@ -55,7 +55,7 @@ struct FramebufferInfo {
     auto operator<=>(const FramebufferInfo&) const noexcept = default;
 };
 
-}
+} // namespace Vulkan
 
 namespace std {
 template <>
@@ -77,9 +77,11 @@ namespace Vulkan {
 
 class RasterizerVulkan : public VideoCore::RasterizerAccelerated {
     friend class RendererVulkan;
+
 public:
-    explicit RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instance& instance, TaskScheduler& scheduler,
-                              TextureRuntime& runtime, RenderpassCache& renderpass_cache);
+    explicit RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instance& instance,
+                              TaskScheduler& scheduler, TextureRuntime& runtime,
+                              RenderpassCache& renderpass_cache);
     ~RasterizerVulkan() override;
 
     void LoadDiskResources(const std::atomic_bool& stop_loading,
