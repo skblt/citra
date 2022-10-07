@@ -169,3 +169,7 @@ endif()
 add_library(vma INTERFACE)
 target_include_directories(vma INTERFACE ./vma)
 
+# vulkan-headers
+add_library(vulkan-headers INTERFACE)
+target_include_directories(vulkan-headers INTERFACE ./vulkan-headers/include)
+
