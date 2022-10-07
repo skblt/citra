@@ -187,7 +187,11 @@ endif()
 
 create_target_directory_groups(video_core)
 
-# Include Vulkan headers
+if (NOT MSVC)
+    # Ignore nullability warnings generated from VMA
+    target_compile_options(vma INTERFACE -Wno-unused-variable -Wno-nullability-completeness)
+endif()
+
 target_link_libraries(video_core PUBLIC common core)
 target_link_libraries(video_core PRIVATE glad vma vulkan-headers glm::glm SPIRV glslang nihstro-headers Boost::serialization)
 set_target_properties(video_core PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})

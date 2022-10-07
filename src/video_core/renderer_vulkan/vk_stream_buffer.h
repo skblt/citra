@@ -3,11 +3,14 @@
 // Refer to the license.txt file included.
 
 #pragma once
+
 #include <array>
 #include <map>
 #include <span>
 #include "common/assert.h"
 #include "video_core/renderer_vulkan/vk_common.h"
+
+VK_DEFINE_HANDLE(VmaAllocation)
 
 namespace Vulkan {
 

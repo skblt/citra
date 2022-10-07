@@ -2,9 +2,9 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#define VULKAN_HPP_NO_CONSTRUCTORS
 #include <algorithm>
 #include "common/logging/log.h"
+#include "core/settings.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_swapchain.h"
@@ -29,7 +29,7 @@ Swapchain::~Swapchain() {
     }
 }
 
-void Swapchain::Create(u32 width, u32 height, bool vsync_enabled) {
+void Swapchain::Create(u32 width, u32 height) {
     is_outdated = false;
     is_suboptimal = false;
 
@@ -184,12 +184,14 @@ void Swapchain::Configure(u32 width, u32 height) {
 
     // FIFO is guaranteed by the Vulkan standard to be available
     present_mode = vk::PresentModeKHR::eFifo;
-    auto iter = std::ranges::find_if(
-        modes, [](vk::PresentModeKHR mode) { return vk::PresentModeKHR::eMailbox == mode; });
+    if (!Settings::values.use_vsync_new) {
+        auto iter = std::ranges::find_if(
+            modes, [](vk::PresentModeKHR mode) { return vk::PresentModeKHR::eMailbox == mode; });
 
-    // Prefer Mailbox if present for lowest latency
-    if (iter != modes.end()) {
-        present_mode = vk::PresentModeKHR::eMailbox;
+        // Prefer Mailbox when vsync is disabled for lowest latency
+        if (iter != modes.end()) {
+            present_mode = vk::PresentModeKHR::eMailbox;
+        }
     }
 
     // Query surface extent
