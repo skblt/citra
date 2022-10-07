@@ -9,6 +9,7 @@
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
+#include "video_core/renderer_vulkan/vk_format_reinterpreter.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
 
@@ -25,6 +26,8 @@ struct ImageAlloc {
     vk::Image image;
     vk::ImageView image_view;
     vk::ImageView base_view;
+    vk::ImageView depth_view;
+    vk::ImageView stencil_view;
     VmaAllocation allocation;
     vk::ImageUsageFlags usage;
     vk::Format format;
@@ -52,12 +55,12 @@ public:
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
     [[nodiscard]] StagingData FindStaging(u32 size, bool upload);
 
-    /// Causes a GPU command flush
-    void Finish();
-
     /// Allocates a vulkan image possibly resusing an existing one
     [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
                                       VideoCore::TextureType type);
+
+    /// Causes a GPU command flush
+    void Finish();
 
     /// Takes back ownership of the allocation for recycling
     void Recycle(const VideoCore::HostTextureTag tag, ImageAlloc&& alloc);
@@ -84,6 +87,10 @@ public:
     /// Generates mipmaps for all the available levels of the texture
     void GenerateMipmaps(Surface& surface, u32 max_level);
 
+    /// Returns all source formats that support reinterpretation to the dest format
+    [[nodiscard]] const ReinterpreterList& GetPossibleReinterpretations(
+            VideoCore::PixelFormat dest_format) const;
+
     /// Performs operations that need to be done on every scheduler slot switch
     void OnSlotSwitch(u32 new_slot);
 
@@ -102,10 +109,12 @@ private:
     const Instance& instance;
     TaskScheduler& scheduler;
     RenderpassCache& renderpass_cache;
+    std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
     std::array<std::unique_ptr<StagingBuffer>, SCHEDULER_COMMAND_COUNT> staging_buffers;
     std::array<u32, SCHEDULER_COMMAND_COUNT> staging_offsets{};
     std::unordered_multimap<VideoCore::HostTextureTag, ImageAlloc> texture_recycler;
     std::unordered_map<vk::ImageView, vk::Framebuffer> clear_framebuffers;
+    ReinterpreterList list;
 };
 
 class Surface : public VideoCore::SurfaceBase<Surface> {
@@ -137,6 +146,16 @@ public:
         return alloc.base_view;
     }
 
+    /// Returns the depth only image view of the surface, null otherwise
+    vk::ImageView GetDepthView() const {
+        return alloc.depth_view;
+    }
+
+    /// Returns the stencil only image view of the surface, null otherwise
+    vk::ImageView GetStencilView() const {
+        return alloc.stencil_view;
+    }
+
     /// Returns the internal format of the allocated texture
     vk::Format GetInternalFormat() const {
         return alloc.format;
@@ -156,6 +175,8 @@ private:
     TextureRuntime& runtime;
     const Instance& instance;
     TaskScheduler& scheduler;
+
+public:
     ImageAlloc alloc{};
     FormatTraits traits;
 };
