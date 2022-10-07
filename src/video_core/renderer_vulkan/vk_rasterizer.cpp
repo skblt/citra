@@ -185,10 +185,7 @@ RasterizerVulkan::~RasterizerVulkan() {
     }
 
     const VideoCore::HostTextureTag tag = {
-        .format = VideoCore::PixelFormat::RGBA8,
-        .width = 1,
-        .height = 1
-    };
+        .format = VideoCore::PixelFormat::RGBA8, .width = 1, .height = 1};
 
     runtime.Recycle(tag, std::move(default_texture));
     device.destroySampler(default_sampler);
@@ -1791,10 +1788,9 @@ void RasterizerVulkan::SyncDepthWriteMask() {
 void RasterizerVulkan::SyncStencilTest() {
     const auto& regs = Pica::g_state.regs;
 
-    const bool test_enable =
-        regs.framebuffer.output_merger.stencil_test.enable &&
-        regs.framebuffer.framebuffer.depth_format == Pica::FramebufferRegs::DepthFormat::D24S8;
     const auto& stencil_test = regs.framebuffer.output_merger.stencil_test;
+    const bool test_enable = stencil_test.enable && regs.framebuffer.framebuffer.depth_format ==
+                                                        Pica::FramebufferRegs::DepthFormat::D24S8;
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack,

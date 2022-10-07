@@ -41,7 +41,6 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
 
 Instance::Instance() {
     // Fetch instance independant function pointers
-    vk::DynamicLoader dl;
     auto vkGetInstanceProcAddr =
         dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
@@ -71,7 +70,6 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index, bool 
     auto window_info = window.GetWindowInfo();
 
     // Fetch instance independant function pointers
-    vk::DynamicLoader dl;
     auto vkGetInstanceProcAddr =
         dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
