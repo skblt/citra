@@ -2,7 +2,6 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#define VULKAN_HPP_NO_CONSTRUCTORS
 #include <SPIRV/GlslangToSpv.h>
 #include <glslang/Include/ResourceLimits.h>
 #include <glslang/Public/ShaderLang.h>

@@ -2,7 +2,6 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#define VULKAN_HPP_NO_CONSTRUCTORS
 #include "common/alignment.h"
 #include "common/logging/log.h"
 #include "common/math_util.h"
@@ -175,7 +174,6 @@ RasterizerVulkan::~RasterizerVulkan() {
     renderpass_cache.ExitRenderpass();
     scheduler.Submit(SubmitMode::Flush | SubmitMode::Shutdown);
 
-    VmaAllocator allocator = instance.GetAllocator();
     vk::Device device = instance.GetDevice();
 
     for (auto& [key, sampler] : samplers) {
@@ -186,9 +184,13 @@ RasterizerVulkan::~RasterizerVulkan() {
         device.destroyFramebuffer(framebuffer);
     }
 
-    vmaDestroyImage(allocator, default_texture.image, default_texture.allocation);
-    device.destroyImageView(default_texture.image_view);
-    device.destroyImageView(default_texture.base_view);
+    const VideoCore::HostTextureTag tag = {
+        .format = VideoCore::PixelFormat::RGBA8,
+        .width = 1,
+        .height = 1
+    };
+
+    runtime.Recycle(tag, std::move(default_texture));
     device.destroySampler(default_sampler);
 }
 

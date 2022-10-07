@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #pragma once
+
 #include <functional>
 #include <optional>
 #include "common/hash.h"

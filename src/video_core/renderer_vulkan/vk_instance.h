@@ -14,6 +14,8 @@ namespace Frontend {
 class EmuWindow;
 }
 
+VK_DEFINE_HANDLE(VmaAllocator)
+
 namespace Vulkan {
 
 struct FormatTraits {
