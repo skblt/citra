@@ -260,7 +260,7 @@ endif()
 create_target_directory_groups(citra-qt)
 
 target_link_libraries(citra-qt PRIVATE audio_core common core input_common network video_core)
-target_link_libraries(citra-qt PRIVATE Boost::boost glad vma nihstro-headers Qt5::Widgets Qt5::Multimedia)
+target_link_libraries(citra-qt PRIVATE Boost::boost glad vma vulkan-headers nihstro-headers Qt5::Widgets Qt5::Multimedia)
 target_link_libraries(citra-qt PRIVATE ${PLATFORM_LIBRARIES} Threads::Threads)
 
 if (NOT WIN32)
@@ -307,7 +307,7 @@ if(UNIX AND NOT APPLE)
     install(TARGETS citra-qt RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}/bin")
 endif()
 
-if (MSVC OR MINGW)
+if (MSVC)
     include(CopyCitraQt5Deps)
     include(CopyCitraSDLDeps)
     copy_citra_Qt5_deps(citra-qt)

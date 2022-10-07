@@ -8,6 +8,7 @@
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
+
 #include <vulkan/vulkan_format_traits.hpp>
 
 namespace Vulkan {
