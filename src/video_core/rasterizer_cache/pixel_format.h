@@ -186,7 +186,7 @@ constexpr u32 GetFormatBpp(PixelFormat format) {
 }
 
 constexpr u32 GetBytesPerPixel(PixelFormat format) {
-    // OpenGL needs 4 bpp alignment for D24 since using GL_UNSIGNED_INT as type
+    // Modern GPUs need 4 bpp alignment for D24
     if (format == PixelFormat::D24 || GetFormatType(format) == SurfaceType::Texture) {
         return 4;
     }

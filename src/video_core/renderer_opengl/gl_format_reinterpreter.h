@@ -4,44 +4,60 @@
 
 #pragma once
 
-#include <unordered_map>
-#include "common/math_util.h"
-#include "video_core/rasterizer_cache/pixel_format.h"
+#include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 
 namespace OpenGL {
 
-class RasterizerCacheOpenGL;
+class Surface;
 
 class FormatReinterpreterBase {
 public:
-    FormatReinterpreterBase() {
-        read_fbo.Create();
-        draw_fbo.Create();
-    }
-
     virtual ~FormatReinterpreterBase() = default;
 
     virtual VideoCore::PixelFormat GetSourceFormat() const = 0;
-    virtual void Reinterpret(const OGLTexture& src_tex, Common::Rectangle<u32> src_rect,
-                             const OGLTexture& dst_tex, Common::Rectangle<u32> dst_rect) = 0;
-
-protected:
-    OGLFramebuffer read_fbo;
-    OGLFramebuffer draw_fbo;
+    virtual void Reinterpret(const Surface& source, VideoCore::Rect2D src_rect,
+                             const Surface& dest, VideoCore::Rect2D dst_rect) = 0;
 };
 
 using ReinterpreterList = std::vector<std::unique_ptr<FormatReinterpreterBase>>;
 
-class FormatReinterpreterOpenGL : NonCopyable {
+class D24S8toRGBA8 final : public FormatReinterpreterBase {
 public:
-    FormatReinterpreterOpenGL();
-    ~FormatReinterpreterOpenGL() = default;
+    D24S8toRGBA8(bool use_texture_view);
 
-    const ReinterpreterList& GetPossibleReinterpretations(VideoCore::PixelFormat dst_format);
+    [[nodiscard]] VideoCore::PixelFormat GetSourceFormat() const override {
+        return VideoCore::PixelFormat::D24S8;
+    }
+
+    void Reinterpret(const Surface& source, VideoCore::Rect2D src_rect,
+                     const Surface& dest, VideoCore::Rect2D dst_rect) override;
 
 private:
-    std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
+    bool use_texture_view{};
+    OGLProgram program{};
+    GLint src_offset_loc{-1};
+    OGLTexture temp_tex{};
+    VideoCore::Rect2D temp_rect{0, 0, 0, 0};
+};
+
+class RGBA4toRGB5A1 final : public FormatReinterpreterBase {
+public:
+    RGBA4toRGB5A1();
+
+    [[nodiscard]] VideoCore::PixelFormat GetSourceFormat() const override {
+        return VideoCore::PixelFormat::RGBA4;
+    }
+
+    void Reinterpret(const Surface& source, VideoCore::Rect2D src_rect,
+                     const Surface& dest, VideoCore::Rect2D dst_rect) override;
+
+private:
+    OGLFramebuffer read_fbo;
+    OGLFramebuffer draw_fbo;
+    OGLProgram program;
+    GLint dst_size_loc{-1}, src_size_loc{-1}, src_offset_loc{-1};
+    OGLVertexArray vao;
 };
 
 } // namespace OpenGL

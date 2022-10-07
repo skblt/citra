@@ -14,19 +14,18 @@
 namespace OpenGL {
 
 GLuint LoadShader(const char* source, GLenum type) {
-    const std::string version = GLES ? R"(#version 320 es
-
+    const std::string version = GLES ? R"(
+#version 320 es
 #define CITRA_GLES
 
 #if defined(GL_ANDROID_extension_pack_es31a)
 #extension GL_ANDROID_extension_pack_es31a : enable
-#endif // defined(GL_ANDROID_extension_pack_es31a)
+#endif
 
 #if defined(GL_EXT_clip_cull_distance)
 #extension GL_EXT_clip_cull_distance : enable
-#endif // defined(GL_EXT_clip_cull_distance)
-)"
-                                     : "#version 430 core\n";
+#endif
+)" : "#version 430 core\n";
 
     const char* debug_type;
     switch (type) {
@@ -38,6 +37,9 @@ GLuint LoadShader(const char* source, GLenum type) {
         break;
     case GL_FRAGMENT_SHADER:
         debug_type = "fragment";
+        break;
+    case GL_COMPUTE_SHADER:
+        debug_type = "compute";
         break;
     default:
         UNREACHABLE();
