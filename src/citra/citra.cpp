@@ -19,6 +19,7 @@
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
+#include "common/string_util.h"
 #include "core/core.h"
 #include "core/dumping/backend.h"
 #include "core/frontend/applets/default_applets.h"

@@ -2,14 +2,15 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <bit>
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
-#include <vulkan/vulkan_format_traits.hpp>
 #include <vk_mem_alloc.h>
+#include <vulkan/vulkan_format_traits.hpp>
 
 namespace Vulkan {
 

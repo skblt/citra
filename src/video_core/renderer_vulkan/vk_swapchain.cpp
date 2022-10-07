@@ -69,7 +69,6 @@ void Swapchain::Create(u32 width, u32 height) {
         device.destroySwapchainKHR(old_swapchain);
     }
 
-    vk::RenderPass present_renderpass = renderpass_cache.GetPresentRenderpass();
     auto images = device.getSwapchainImagesKHR(swapchain);
 
     // Destroy the previous images
@@ -81,31 +80,33 @@ void Swapchain::Create(u32 width, u32 height) {
     swapchain_images.clear();
     swapchain_images.resize(images.size());
 
-    std::ranges::transform(images, swapchain_images.begin(), [&](vk::Image image) -> Image {
-        const vk::ImageViewCreateInfo view_info = {
-            .image = image,
-            .viewType = vk::ImageViewType::e2D,
-            .format = surface_format.format,
-            .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
-                                 .baseMipLevel = 0,
-                                 .levelCount = 1,
-                                 .baseArrayLayer = 0,
-                                 .layerCount = 1}};
+    std::ranges::transform(
+        images, swapchain_images.begin(), [device, this](vk::Image image) -> Image {
+            const vk::ImageViewCreateInfo view_info = {
+                .image = image,
+                .viewType = vk::ImageViewType::e2D,
+                .format = surface_format.format,
+                .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
+                                     .baseMipLevel = 0,
+                                     .levelCount = 1,
+                                     .baseArrayLayer = 0,
+                                     .layerCount = 1}};
 
-        vk::ImageView image_view = device.createImageView(view_info);
-        const std::array attachments{image_view};
+            vk::ImageView image_view = device.createImageView(view_info);
+            const std::array attachments = {image_view};
 
-        const vk::FramebufferCreateInfo framebuffer_info = {.renderPass = present_renderpass,
-                                                            .attachmentCount = 1,
-                                                            .pAttachments = attachments.data(),
-                                                            .width = extent.width,
-                                                            .height = extent.height,
-                                                            .layers = 1};
+            const vk::FramebufferCreateInfo framebuffer_info = {
+                .renderPass = renderpass_cache.GetPresentRenderpass(),
+                .attachmentCount = 1,
+                .pAttachments = attachments.data(),
+                .width = extent.width,
+                .height = extent.height,
+                .layers = 1};
 
-        vk::Framebuffer framebuffer = device.createFramebuffer(framebuffer_info);
+            vk::Framebuffer framebuffer = device.createFramebuffer(framebuffer_info);
 
-        return Image{.image = image, .image_view = image_view, .framebuffer = framebuffer};
-    });
+            return Image{.image = image, .image_view = image_view, .framebuffer = framebuffer};
+        });
 }
 
 // Wait for maximum of 1 second
