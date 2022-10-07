@@ -40,6 +40,13 @@ TextureRuntime::TextureRuntime(const Instance& instance, TaskScheduler& schedule
                                                  vk::BufferUsageFlagBits::eTransferSrc |
                                                  vk::BufferUsageFlagBits::eTransferDst);
     }
+
+    auto Register = [this](VideoCore::PixelFormat dest, std::unique_ptr<FormatReinterpreterBase>&& obj) {
+        const u32 dst_index = static_cast<u32>(dest);
+        return reinterpreters[dst_index].push_back(std::move(obj));
+    };
+
+    Register(VideoCore::PixelFormat::RGBA8, std::make_unique<D24S8toRGBA8>(instance, scheduler, *this));
 }
 
 TextureRuntime::~TextureRuntime() {
@@ -51,6 +58,10 @@ TextureRuntime::~TextureRuntime() {
         vmaDestroyImage(allocator, alloc.image, alloc.allocation);
         device.destroyImageView(alloc.image_view);
         device.destroyImageView(alloc.base_view);
+        if (alloc.depth_view) {
+            device.destroyImageView(alloc.depth_view);
+            device.destroyImageView(alloc.stencil_view);
+        }
     }
 
     for (const auto& [key, framebuffer] : clear_framebuffers) {
@@ -175,10 +186,36 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     vk::ImageView image_view = device.createImageView(view_info);
     vk::ImageView base_view = device.createImageView(base_view_info);
 
+    // Create seperate depth/stencil views in case this gets reinterpreted with a compute shader
+    vk::ImageView depth_view;
+    vk::ImageView stencil_view;
+    if (format == VideoCore::PixelFormat::D24S8) {
+        vk::ImageViewCreateInfo view_info = {
+            .image = image,
+            .viewType = type == VideoCore::TextureType::CubeMap ?
+                                vk::ImageViewType::eCube :
+                                vk::ImageViewType::e2D,
+            .format = vk_format,
+            .subresourceRange = {
+                .aspectMask = vk::ImageAspectFlagBits::eDepth,
+                .baseMipLevel = 0,
+                .levelCount = levels,
+                .baseArrayLayer = 0,
+                .layerCount = layers
+            }
+        };
+
+        depth_view = device.createImageView(view_info);
+        view_info.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eStencil;
+        stencil_view = device.createImageView(view_info);
+    }
+
     return ImageAlloc{
         .image = image,
         .image_view = image_view,
         .base_view = base_view,
+        .depth_view = depth_view,
+        .stencil_view = stencil_view,
         .allocation = allocation,
         .format = vk_format,
         .aspect = aspect,
@@ -440,6 +477,10 @@ void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {
     }
 }
 
+const ReinterpreterList& TextureRuntime::GetPossibleReinterpretations(VideoCore::PixelFormat dest_format) const {
+    return reinterpreters[static_cast<u32>(dest_format)];
+}
+
 void TextureRuntime::Transition(vk::CommandBuffer command_buffer, ImageAlloc& alloc,
                                 vk::ImageLayout new_layout, u32 level, u32 level_count,
                                 u32 layer, u32 layer_count) {
@@ -501,7 +542,13 @@ void TextureRuntime::Transition(vk::CommandBuffer command_buffer, ImageAlloc& al
         case vk::ImageLayout::eGeneral:
             info.access = vk::AccessFlagBits::eInputAttachmentRead;
             info.stage = vk::PipelineStageFlagBits::eColorAttachmentOutput |
-                    vk::PipelineStageFlagBits::eFragmentShader;
+                    vk::PipelineStageFlagBits::eFragmentShader |
+                    vk::PipelineStageFlagBits::eComputeShader;
+            break;
+        case vk::ImageLayout::eDepthStencilReadOnlyOptimal:
+            // Image is going to be sampled from a compute shader
+            info.access = vk::AccessFlagBits::eShaderRead;
+            info.stage = vk::PipelineStageFlagBits::eComputeShader;
             break;
         default:
             LOG_CRITICAL(Render_Vulkan, "Unhandled vulkan image layout {}\n", layout);
