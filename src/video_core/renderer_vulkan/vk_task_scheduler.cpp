@@ -49,6 +49,8 @@ TaskScheduler::TaskScheduler(const Instance& instance, RendererVulkan& renderer)
         .pPoolSizes = pool_sizes.data()
     };
 
+    persistent_descriptor_pool = device.createDescriptorPool(descriptor_pool_info);
+
     const vk::CommandBufferAllocateInfo buffer_info = {
         .commandPool = command_pool,
         .level = vk::CommandBufferLevel::ePrimary,
@@ -93,6 +95,7 @@ TaskScheduler::~TaskScheduler() {
     }
 
     device.destroyCommandPool(command_pool);
+    device.destroyDescriptorPool(persistent_descriptor_pool);
 }
 
 void TaskScheduler::Synchronize(u32 slot) {
