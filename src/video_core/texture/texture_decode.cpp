@@ -252,8 +252,8 @@ void ConvertABGRToRGBA(std::span<const std::byte> source, std::span<std::byte> d
 }
 
 void ConvertD32S8ToD24S8(std::span<const std::byte> source, std::span<std::byte> dest) {
-    u32 depth_offset = 0;
-    u32 stencil_offset = 4 * source.size() / 5;
+    std::size_t depth_offset = 0;
+    std::size_t stencil_offset = 4 * source.size() / 5;
     for (std::size_t i = 0; i < dest.size(); i += 4) {
         float depth;
         std::memcpy(&depth, source.data() + depth_offset, sizeof(float));
@@ -287,8 +287,8 @@ void ConvertRGBA8ToRGBA4(std::span<const std::byte> source, std::span<std::byte>
 }
 
 void InterleaveD24S8(std::span<const std::byte> source, std::span<std::byte> dest) {
-    u32 depth_offset = 0;
-    u32 stencil_offset = 3 * source.size() / 4;
+    std::size_t depth_offset = 0;
+    std::size_t stencil_offset = 3 * source.size() / 4;
     for (std::size_t i = 0; i < dest.size(); i += 4) {
         dest[i] = source[stencil_offset];
         std::memcpy(dest.data() + i + 1, source.data() + depth_offset, 3);
