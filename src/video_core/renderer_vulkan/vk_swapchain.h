@@ -19,7 +19,7 @@ public:
     ~Swapchain();
 
     /// Creates (or recreates) the swapchain with a given size.
-    void Create(u32 width, u32 height, bool vsync_enabled);
+    void Create(u32 width, u32 height);
 
     /// Acquires the next image in the swapchain.
     void AcquireNextImage(vk::Semaphore signal_acquired);
@@ -83,7 +83,6 @@ private:
     std::vector<Image> swapchain_images;
     u32 current_image = 0;
     u32 current_frame = 0;
-    bool vsync_enabled = false;
     bool is_outdated = true;
     bool is_suboptimal = true;
 };

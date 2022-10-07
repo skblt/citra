@@ -2,7 +2,6 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#define VULKAN_HPP_NO_CONSTRUCTORS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtc/matrix_transform.hpp>
 #include "common/assert.h"
@@ -913,7 +912,7 @@ void RendererVulkan::SwapBuffers() {
 
     // Create swapchain if needed
     if (swapchain.NeedsRecreation()) {
-        swapchain.Create(layout.width, layout.height, false);
+        swapchain.Create(layout.width, layout.height);
     }
 
     // Calling Submit will change the slot so get the required semaphores now
