@@ -144,7 +144,7 @@ private:
     bool IntervalHasInvalidPixelFormat(SurfaceParams& params, SurfaceInterval interval);
 
     /// Attempt to find a reinterpretable surface in the cache and use it to copy for validation
-    bool ValidateByReinterpretation(const Surface& surface, const SurfaceParams& params,
+    bool ValidateByReinterpretation(const Surface& surface, SurfaceParams& params,
                                     SurfaceInterval interval);
 
     /// Create a new surface
@@ -547,7 +547,7 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
 
         // Blit mipmaps that have been invalidated
         SurfaceParams surface_params = *surface;
-        for (u32 level = 1; level <= max_level; ++level) {
+        for (u32 level = 1; level <= max_level; level++) {
             // In PICA all mipmap levels are stored next to each other
             surface_params.addr +=
                 surface_params.width * surface_params.height * surface_params.GetFormatBpp() / 8;
@@ -1059,28 +1059,24 @@ bool RasterizerCache<T>::IntervalHasInvalidPixelFormat(SurfaceParams& params, Su
 }
 
 template <class T>
-bool RasterizerCache<T>::ValidateByReinterpretation(const Surface& surface, const SurfaceParams& params,
+bool RasterizerCache<T>::ValidateByReinterpretation(const Surface& surface, SurfaceParams& params,
                                                     SurfaceInterval interval) {
-    /*const PixelFormat dst_format = surface->pixel_format;
-    const SurfaceType type = GetFormatType(dst_format);
-
-    for (auto& reinterpreter :
-         format_reinterpreter->GetPossibleReinterpretations(surface->pixel_format)) {
-
+    const PixelFormat dest_format = surface->pixel_format;
+    for (const auto& reinterpreter : runtime.GetPossibleReinterpretations(dest_format)) {
         params.pixel_format = reinterpreter->GetSourceFormat();
         Surface reinterpret_surface =
             FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
 
-        if (reinterpret_surface != nullptr) {
-            auto reinterpret_interval = params.GetCopyableInterval(reinterpret_surface);
+        if (reinterpret_surface) {
+            auto reinterpret_interval = reinterpret_surface->GetCopyableInterval(params);
             auto reinterpret_params = surface->FromInterval(reinterpret_interval);
             auto src_rect = reinterpret_surface->GetScaledSubRect(reinterpret_params);
             auto dest_rect = surface->GetScaledSubRect(reinterpret_params);
 
-            reinterpreter->Reinterpret(reinterpret_surface->texture, src_rect, surface->texture, dest_rect);
+            reinterpreter->Reinterpret(*reinterpret_surface, src_rect, *surface, dest_rect);
             return true;
         }
-    }*/
+    }
 
     return false;
 }

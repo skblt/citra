@@ -153,6 +153,14 @@ void OGLProgram::Create(const char* vert_shader, const char* frag_shader) {
     Create(false, {vert.handle, frag.handle});
 }
 
+void OGLProgram::Create(const std::string_view compute_shader) {
+    OGLShader comp;
+    comp.Create(compute_shader.data(), GL_COMPUTE_SHADER);
+
+    MICROPROFILE_SCOPE(OpenGL_ResourceCreation);
+    Create(false, {comp.handle});
+}
+
 void OGLProgram::Release() {
     if (handle == 0)
         return;

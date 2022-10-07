@@ -7,7 +7,7 @@
 #include <set>
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/rasterizer_cache/surface_base.h"
-#include "video_core/renderer_opengl/gl_resource_manager.h"
+#include "video_core/renderer_opengl/gl_format_reinterpreter.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
 #include "video_core/renderer_opengl/texture_downloader_es.h"
 
@@ -92,6 +92,10 @@ public:
     /// Generates mipmaps for all the available levels of the texture
     void GenerateMipmaps(Surface& surface, u32 max_level);
 
+    /// Returns all source formats that support reinterpretation to the dest format
+    [[nodiscard]] const ReinterpreterList& GetPossibleReinterpretations(
+            VideoCore::PixelFormat dest_format) const;
+
 private:
     /// Returns the framebuffer used for texture downloads
     void BindFramebuffer(GLenum target, GLint level, GLenum textarget,
@@ -116,6 +120,7 @@ private:
     Driver& driver;
     TextureDownloaderES downloader_es;
     TextureFilterer filterer;
+    std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
 
     // Staging buffers stored in increasing size
     std::multiset<StagingBuffer> upload_buffers;

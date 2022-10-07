@@ -6,6 +6,7 @@
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_opengl/gl_texture_runtime.h"
 #include "video_core/renderer_opengl/gl_driver.h"
+#include "video_core/renderer_opengl/gl_format_reinterpreter.h"
 #include "video_core/renderer_opengl/gl_state.h"
 
 namespace OpenGL {
@@ -54,10 +55,18 @@ GLbitfield MakeBufferMask(VideoCore::SurfaceType type) {
 
 TextureRuntime::TextureRuntime(Driver& driver)
     : driver{driver}, downloader_es{false},
-      filterer{Settings::values.texture_filter_name, VideoCore::GetResolutionScaleFactor()} {
+      filterer{Settings::values.texture_filter_name, VideoCore::GetResolutionScaleFactor()}{
 
     read_fbo.Create();
     draw_fbo.Create();
+
+    auto Register = [this](VideoCore::PixelFormat dest, std::unique_ptr<FormatReinterpreterBase>&& obj) {
+        const u32 dst_index = static_cast<u32>(dest);
+        return reinterpreters[dst_index].push_back(std::move(obj));
+    };
+
+    Register(VideoCore::PixelFormat::RGBA8, std::make_unique<D24S8toRGBA8>(!driver.IsOpenGLES()));
+    Register(VideoCore::PixelFormat::RGB5A1, std::make_unique<RGBA4toRGB5A1>());
 }
 
 const StagingBuffer& TextureRuntime::FindStaging(u32 size, bool upload) {
@@ -140,7 +149,6 @@ void TextureRuntime::FormatConvert(const Surface& surface,  bool upload,
 
 OGLTexture TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
                                     VideoCore::TextureType type) {
-
     const u32 layers = type == VideoCore::TextureType::CubeMap ? 6 : 1;
     const GLenum target =
             type == VideoCore::TextureType::CubeMap ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
@@ -300,6 +308,10 @@ void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {
     glActiveTexture(GL_TEXTURE0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, max_level);
     glGenerateMipmap(GL_TEXTURE_2D);
+}
+
+const ReinterpreterList& TextureRuntime::GetPossibleReinterpretations(VideoCore::PixelFormat dest_format) const {
+    return reinterpreters[static_cast<u32>(dest_format)];
 }
 
 void TextureRuntime::BindFramebuffer(GLenum target, GLint level, GLenum textarget,

@@ -5,6 +5,7 @@
 #pragma once
 
 #include <utility>
+#include <string_view>
 #include <vector>
 #include <glad/glad.h>
 #include "common/common_types.h"
@@ -136,6 +137,9 @@ public:
 
     /// Creates a new program from given shader soruce code
     void Create(const char* vert_shader, const char* frag_shader);
+
+    /// Creates a new compute shader program
+    void Create(const std::string_view compute_shader);
 
     /// Deletes the internal OpenGL resource
     void Release();
