@@ -7,13 +7,7 @@
 
 namespace OpenGL {
 
-enum class Vendor {
-    Unknown = 0,
-    AMD = 1,
-    Nvidia = 2,
-    Intel = 3,
-    Generic = 4
-};
+enum class Vendor { Unknown = 0, AMD = 1, Nvidia = 2, Intel = 3, Generic = 4 };
 
 enum class DriverBug {
     // AMD drivers sometimes freeze when one shader stage is changed but not the others.

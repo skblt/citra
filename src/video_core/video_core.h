@@ -47,11 +47,7 @@ extern Layout::FramebufferLayout g_screenshot_framebuffer_layout;
 
 extern Memory::MemorySystem* g_memory;
 
-enum class ResultStatus {
-    Success,
-    ErrorRendererInit,
-    ErrorGenericDrivers
-};
+enum class ResultStatus { Success, ErrorRendererInit, ErrorGenericDrivers };
 
 /// Initialize the video core
 ResultStatus Init(Frontend::EmuWindow& emu_window, Memory::MemorySystem& memory);

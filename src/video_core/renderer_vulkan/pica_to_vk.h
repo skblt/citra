@@ -19,15 +19,10 @@ struct FilterInfo {
 };
 
 inline FilterInfo TextureFilterMode(TextureFilter mag, TextureFilter min, TextureFilter mip) {
-    constexpr std::array filter_table = {
-        vk::Filter::eNearest,
-        vk::Filter::eLinear
-    };
+    constexpr std::array filter_table = {vk::Filter::eNearest, vk::Filter::eLinear};
 
-    constexpr std::array mipmap_table = {
-        vk::SamplerMipmapMode::eNearest,
-        vk::SamplerMipmapMode::eLinear
-    };
+    constexpr std::array mipmap_table = {vk::SamplerMipmapMode::eNearest,
+                                         vk::SamplerMipmapMode::eLinear};
 
     return FilterInfo{filter_table.at(mag), filter_table.at(min), mipmap_table.at(mip)};
 }
@@ -118,21 +113,21 @@ inline vk::BlendOp BlendEquation(Pica::FramebufferRegs::BlendEquation equation) 
 
 inline vk::BlendFactor BlendFunc(Pica::FramebufferRegs::BlendFactor factor) {
     static constexpr std::array<vk::BlendFactor, 15> blend_func_table{{
-        vk::BlendFactor::eZero,                 // BlendFactor::Zero
-        vk::BlendFactor::eOne,                  // BlendFactor::One
-        vk::BlendFactor::eSrcColor,             // BlendFactor::SourceColor
-        vk::BlendFactor::eOneMinusSrcColor,     // BlendFactor::OneMinusSourceColor
-        vk::BlendFactor::eDstColor,             // BlendFactor::DestColor
-        vk::BlendFactor::eOneMinusDstColor,     // BlendFactor::OneMinusDestColor
-        vk::BlendFactor::eSrcAlpha,             // BlendFactor::SourceAlpha
-        vk::BlendFactor::eOneMinusSrcAlpha,     // BlendFactor::OneMinusSourceAlpha
-        vk::BlendFactor::eDstAlpha,             // BlendFactor::DestAlpha
-        vk::BlendFactor::eOneMinusDstAlpha,     // BlendFactor::OneMinusDestAlpha
-        vk::BlendFactor::eConstantColor,        // BlendFactor::ConstantColor
-        vk::BlendFactor::eOneMinusConstantColor,// BlendFactor::OneMinusConstantColor
-        vk::BlendFactor::eConstantAlpha,        // BlendFactor::ConstantAlpha
-        vk::BlendFactor::eOneMinusConstantAlpha,// BlendFactor::OneMinusConstantAlpha
-        vk::BlendFactor::eSrcAlphaSaturate,     // BlendFactor::SourceAlphaSaturate
+        vk::BlendFactor::eZero,                  // BlendFactor::Zero
+        vk::BlendFactor::eOne,                   // BlendFactor::One
+        vk::BlendFactor::eSrcColor,              // BlendFactor::SourceColor
+        vk::BlendFactor::eOneMinusSrcColor,      // BlendFactor::OneMinusSourceColor
+        vk::BlendFactor::eDstColor,              // BlendFactor::DestColor
+        vk::BlendFactor::eOneMinusDstColor,      // BlendFactor::OneMinusDestColor
+        vk::BlendFactor::eSrcAlpha,              // BlendFactor::SourceAlpha
+        vk::BlendFactor::eOneMinusSrcAlpha,      // BlendFactor::OneMinusSourceAlpha
+        vk::BlendFactor::eDstAlpha,              // BlendFactor::DestAlpha
+        vk::BlendFactor::eOneMinusDstAlpha,      // BlendFactor::OneMinusDestAlpha
+        vk::BlendFactor::eConstantColor,         // BlendFactor::ConstantColor
+        vk::BlendFactor::eOneMinusConstantColor, // BlendFactor::OneMinusConstantColor
+        vk::BlendFactor::eConstantAlpha,         // BlendFactor::ConstantAlpha
+        vk::BlendFactor::eOneMinusConstantAlpha, // BlendFactor::OneMinusConstantAlpha
+        vk::BlendFactor::eSrcAlphaSaturate,      // BlendFactor::SourceAlphaSaturate
     }};
 
     const auto index = static_cast<std::size_t>(factor);
@@ -208,14 +203,14 @@ inline vk::CompareOp CompareFunc(Pica::FramebufferRegs::CompareFunc func) {
 
 inline vk::StencilOp StencilOp(Pica::FramebufferRegs::StencilAction action) {
     static constexpr std::array<vk::StencilOp, 8> stencil_op_table{{
-        vk::StencilOp::eKeep,               // StencilAction::Keep
-        vk::StencilOp::eZero,               // StencilAction::Zero
-        vk::StencilOp::eReplace,            // StencilAction::Replace
-        vk::StencilOp::eIncrementAndClamp,  // StencilAction::Increment
-        vk::StencilOp::eDecrementAndClamp,  // StencilAction::Decrement
-        vk::StencilOp::eInvert,             // StencilAction::Invert
-        vk::StencilOp::eIncrementAndWrap,   // StencilAction::IncrementWrap
-        vk::StencilOp::eDecrementAndWrap,   // StencilAction::DecrementWrap
+        vk::StencilOp::eKeep,              // StencilAction::Keep
+        vk::StencilOp::eZero,              // StencilAction::Zero
+        vk::StencilOp::eReplace,           // StencilAction::Replace
+        vk::StencilOp::eIncrementAndClamp, // StencilAction::Increment
+        vk::StencilOp::eDecrementAndClamp, // StencilAction::Decrement
+        vk::StencilOp::eInvert,            // StencilAction::Invert
+        vk::StencilOp::eIncrementAndWrap,  // StencilAction::IncrementWrap
+        vk::StencilOp::eDecrementAndWrap,  // StencilAction::DecrementWrap
     }};
 
     const auto index = static_cast<std::size_t>(action);
@@ -281,4 +276,4 @@ inline Common::Vec3f LightColor(const Pica::LightingRegs::LightColor& color) {
     return Common::Vec3u{color.r, color.g, color.b} / 255.0f;
 }
 
-} // namespace PicaToGL
+} // namespace PicaToVK

@@ -10,9 +10,9 @@
 #include "common/math_util.h"
 #include "core/hw/gpu.h"
 #include "video_core/renderer_base.h"
-#include "video_core/renderer_vulkan/vk_swapchain.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
+#include "video_core/renderer_vulkan/vk_swapchain.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
 namespace Layout {
@@ -81,7 +81,8 @@ private:
     void CompileShaders();
     void BuildLayouts();
     void BuildPipelines();
-    void ConfigureFramebufferTexture(TextureInfo& texture, const GPU::Regs::FramebufferConfig& framebuffer);
+    void ConfigureFramebufferTexture(TextureInfo& texture,
+                                     const GPU::Regs::FramebufferConfig& framebuffer);
     void ConfigureRenderPipeline();
     void PrepareRendertarget();
     void BeginRendering();
@@ -89,8 +90,10 @@ private:
     void DrawScreens(const Layout::FramebufferLayout& layout, bool flipped);
     void DrawSingleScreenRotated(u32 screen_id, float x, float y, float w, float h);
     void DrawSingleScreen(u32 screen_id, float x, float y, float w, float h);
-    void DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_id_r, float x, float y, float w, float h);
-    void DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, float x, float y, float w, float h);
+    void DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_id_r, float x, float y, float w,
+                                       float h);
+    void DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, float x, float y, float w,
+                                float h);
 
     void UpdateFramerate();
 

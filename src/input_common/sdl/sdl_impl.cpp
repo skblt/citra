@@ -8,13 +8,13 @@
 #include <functional>
 #include <iterator>
 #include <mutex>
+#include <numbers>
 #include <string>
 #include <thread>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <numbers>
 #include <SDL.h>
 #include "common/logging/log.h"
 #include "common/param_package.h"

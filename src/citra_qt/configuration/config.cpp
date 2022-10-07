@@ -480,7 +480,7 @@ void Config::ReadRendererValues() {
 
     Settings::values.graphics_api = static_cast<Settings::GraphicsAPI>(
         ReadSetting(QStringLiteral("graphics_api"), static_cast<u32>(Settings::GraphicsAPI::OpenGL))
-                .toUInt());
+            .toUInt());
     Settings::values.physical_device = ReadSetting(QStringLiteral("physical_device"), 0).toUInt();
     Settings::values.renderer_debug = ReadSetting(QStringLiteral("renderer_debug"), false).toBool();
     Settings::values.use_hw_renderer =

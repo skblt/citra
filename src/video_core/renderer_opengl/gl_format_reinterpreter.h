@@ -16,8 +16,8 @@ public:
     virtual ~FormatReinterpreterBase() = default;
 
     virtual VideoCore::PixelFormat GetSourceFormat() const = 0;
-    virtual void Reinterpret(const Surface& source, VideoCore::Rect2D src_rect,
-                             const Surface& dest, VideoCore::Rect2D dst_rect) = 0;
+    virtual void Reinterpret(const Surface& source, VideoCore::Rect2D src_rect, const Surface& dest,
+                             VideoCore::Rect2D dst_rect) = 0;
 };
 
 using ReinterpreterList = std::vector<std::unique_ptr<FormatReinterpreterBase>>;
@@ -30,8 +30,8 @@ public:
         return VideoCore::PixelFormat::D24S8;
     }
 
-    void Reinterpret(const Surface& source, VideoCore::Rect2D src_rect,
-                     const Surface& dest, VideoCore::Rect2D dst_rect) override;
+    void Reinterpret(const Surface& source, VideoCore::Rect2D src_rect, const Surface& dest,
+                     VideoCore::Rect2D dst_rect) override;
 
 private:
     bool use_texture_view{};
@@ -49,8 +49,8 @@ public:
         return VideoCore::PixelFormat::RGBA4;
     }
 
-    void Reinterpret(const Surface& source, VideoCore::Rect2D src_rect,
-                     const Surface& dest, VideoCore::Rect2D dst_rect) override;
+    void Reinterpret(const Surface& source, VideoCore::Rect2D src_rect, const Surface& dest,
+                     VideoCore::Rect2D dst_rect) override;
 
 private:
     OGLFramebuffer read_fbo;

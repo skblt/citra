@@ -221,8 +221,8 @@ std::shared_ptr<PageTable> MemorySystem::GetCurrentPageTable() const {
 
 void MemorySystem::MapPages(PageTable& page_table, u32 base, u32 size, MemoryRef memory,
                             PageType type) {
-    LOG_DEBUG(HW_Memory, "Mapping {} onto {:08X}-{:08X}", (void*)memory.GetPtr(), base * CITRA_PAGE_SIZE,
-              (base + size) * CITRA_PAGE_SIZE);
+    LOG_DEBUG(HW_Memory, "Mapping {} onto {:08X}-{:08X}", (void*)memory.GetPtr(),
+              base * CITRA_PAGE_SIZE, (base + size) * CITRA_PAGE_SIZE);
 
     RasterizerFlushVirtualRegion(base << CITRA_PAGE_BITS, size * CITRA_PAGE_SIZE,
                                  FlushMode::FlushAndInvalidate);
@@ -256,7 +256,8 @@ void MemorySystem::MapIoRegion(PageTable& page_table, VAddr base, u32 size,
                                MMIORegionPointer mmio_handler) {
     ASSERT_MSG((size & CITRA_PAGE_MASK) == 0, "non-page aligned size: {:08X}", size);
     ASSERT_MSG((base & CITRA_PAGE_MASK) == 0, "non-page aligned base: {:08X}", base);
-    MapPages(page_table, base / CITRA_PAGE_SIZE, size / CITRA_PAGE_SIZE, nullptr, PageType::Special);
+    MapPages(page_table, base / CITRA_PAGE_SIZE, size / CITRA_PAGE_SIZE, nullptr,
+             PageType::Special);
 
     page_table.special_regions.emplace_back(SpecialRegion{base, size, mmio_handler});
 }
@@ -264,7 +265,8 @@ void MemorySystem::MapIoRegion(PageTable& page_table, VAddr base, u32 size,
 void MemorySystem::UnmapRegion(PageTable& page_table, VAddr base, u32 size) {
     ASSERT_MSG((size & CITRA_PAGE_MASK) == 0, "non-page aligned size: {:08X}", size);
     ASSERT_MSG((base & CITRA_PAGE_MASK) == 0, "non-page aligned base: {:08X}", base);
-    MapPages(page_table, base / CITRA_PAGE_SIZE, size / CITRA_PAGE_SIZE, nullptr, PageType::Unmapped);
+    MapPages(page_table, base / CITRA_PAGE_SIZE, size / CITRA_PAGE_SIZE, nullptr,
+             PageType::Unmapped);
 }
 
 MemoryRef MemorySystem::GetPointerForRasterizerCache(VAddr addr) const {
@@ -494,12 +496,11 @@ MemoryRef MemorySystem::GetPhysicalRef(PAddr address) const {
         std::make_pair(N3DS_EXTRA_RAM_PADDR, N3DS_EXTRA_RAM_SIZE),
     };
 
-    const auto area =
-        std::ranges::find_if(memory_areas, [&](const auto& area) {
-            // Note: the region end check is inclusive because the user can pass in an address that
-            // represents an open right bound
-            return address >= area.first && address <= area.first + area.second;
-        });
+    const auto area = std::ranges::find_if(memory_areas, [&](const auto& area) {
+        // Note: the region end check is inclusive because the user can pass in an address that
+        // represents an open right bound
+        return address >= area.first && address <= area.first + area.second;
+    });
 
     if (area == memory_areas.end()) {
         LOG_ERROR(HW_Memory, "Unknown GetPhysicalPointer @ {:#08X} at PC {:#08X}", address,

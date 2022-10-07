@@ -111,7 +111,8 @@ ResultStatus AppLoader_NCCH::LoadExec(std::shared_ptr<Kernel::Process>& process)
             codeset->RODataSegment().offset + codeset->RODataSegment().size;
         codeset->DataSegment().addr = overlay_ncch->exheader_header.codeset_info.data.address;
         codeset->DataSegment().size =
-            overlay_ncch->exheader_header.codeset_info.data.num_max_pages * Memory::CITRA_PAGE_SIZE +
+            overlay_ncch->exheader_header.codeset_info.data.num_max_pages *
+                Memory::CITRA_PAGE_SIZE +
             bss_page_size;
 
         // Apply patches now that the entire codeset (including .bss) has been allocated
