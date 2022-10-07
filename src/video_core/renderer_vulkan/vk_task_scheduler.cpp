@@ -150,11 +150,11 @@ void TaskScheduler::Submit(SubmitMode mode) {
     const bool swapchain_sync = True(mode & SubmitMode::SwapchainSynced);
     if (instance.IsTimelineSemaphoreSupported()) {
         const u32 wait_semaphore_count = swapchain_sync ? 2u : 1u;
-        const std::array wait_values{command.fence_counter - 1, 1ul};
+        const std::array wait_values{command.fence_counter - 1, u64(1)};
         const std::array wait_semaphores{timeline, command.image_acquired};
 
         const u32 signal_semaphore_count = swapchain_sync ? 2u : 1u;
-        const std::array signal_values{command.fence_counter, 0ul};
+        const std::array signal_values{command.fence_counter, u64(0)};
         const std::array signal_semaphores{timeline, command.present_ready};
 
         const vk::TimelineSemaphoreSubmitInfoKHR timeline_si = {
