@@ -3,9 +3,9 @@
 // Refer to the license.txt file included.
 
 #pragma once
-#include <span>
-#include <bit>
 #include <algorithm>
+#include <bit>
+#include <span>
 #include "common/alignment.h"
 #include "common/color.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
@@ -108,7 +108,8 @@ inline void EncodePixel(const std::byte* source, std::byte* dest) {
 }
 
 template <bool morton_to_linear, PixelFormat format>
-inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer, std::span<std::byte> linear_buffer) {
+inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer,
+                           std::span<std::byte> linear_buffer) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
     constexpr u32 linear_bytes_per_pixel = GetBytesPerPixel(format);
     constexpr bool is_compressed = format == PixelFormat::ETC1 || format == PixelFormat::ETC1A4;
@@ -116,10 +117,10 @@ inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer, std::sp
 
     for (u32 y = 0; y < 8; y++) {
         for (u32 x = 0; x < 8; x++) {
-            const auto tiled_pixel = tile_buffer.subspan(VideoCore::MortonInterleave(x, y) * bytes_per_pixel,
-                                                         bytes_per_pixel);
-            const auto linear_pixel = linear_buffer.subspan(((7 - y) * stride + x) * linear_bytes_per_pixel,
-                                                            linear_bytes_per_pixel);
+            const auto tiled_pixel = tile_buffer.subspan(
+                VideoCore::MortonInterleave(x, y) * bytes_per_pixel, bytes_per_pixel);
+            const auto linear_pixel = linear_buffer.subspan(
+                ((7 - y) * stride + x) * linear_bytes_per_pixel, linear_bytes_per_pixel);
             if constexpr (morton_to_linear) {
                 if constexpr (is_compressed) {
                     DecodePixelETC1<format>(x, y, tile_buffer.data(), linear_pixel.data());
@@ -138,28 +139,30 @@ inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer, std::sp
 /**
  * @brief Performs morton to/from linear convertions on the provided pixel data
  * @param width, height The dimentions of the rectangular region of pixels in linear_buffer
- * @param start_offset The number of bytes from the start of the first tile to the start of tiled_buffer
+ * @param start_offset The number of bytes from the start of the first tile to the start of
+ * tiled_buffer
  * @param end_offset The number of bytes from the start of the first tile to the end of tiled_buffer
  * @param linear_buffer The linear pixel data
  * @param tiled_buffer The tiled pixel data
  *
- * The MortonCopy is at the heart of the PICA texture implementation, as it's responsible for converting between
- * linear and morton tiled layouts. The function handles both convertions but there are slightly different
- * paths and inputs for each:
+ * The MortonCopy is at the heart of the PICA texture implementation, as it's responsible for
+ * converting between linear and morton tiled layouts. The function handles both convertions but
+ * there are slightly different paths and inputs for each:
  *
  * Morton to Linear:
- * During uploads, tiled_buffer is always aligned to the tile or scanline boundary depending if the linear rectangle
- * spans multiple vertical tiles. linear_buffer does not reference the entire texture area, but rather the
- * specific rectangle affected by the upload.
+ * During uploads, tiled_buffer is always aligned to the tile or scanline boundary depending if the
+ * linear rectangle spans multiple vertical tiles. linear_buffer does not reference the entire
+ * texture area, but rather the specific rectangle affected by the upload.
  *
  * Linear to Morton:
- * This is similar to the other convertion but with some differences. In this case tiled_buffer is not required
- * to be aligned to any specific boundary which requires special care. start_offset/end_offset are useful
- * here as they tell us exactly where the data should be placed in the linear_buffer.
+ * This is similar to the other convertion but with some differences. In this case tiled_buffer is
+ * not required to be aligned to any specific boundary which requires special care.
+ * start_offset/end_offset are useful here as they tell us exactly where the data should be placed
+ * in the linear_buffer.
  */
 template <bool morton_to_linear, PixelFormat format>
 static void MortonCopy(u32 width, u32 height, u32 start_offset, u32 end_offset,
-                        std::span<std::byte> linear_buffer, std::span<std::byte> tiled_buffer) {
+                       std::span<std::byte> linear_buffer, std::span<std::byte> tiled_buffer) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
     constexpr u32 aligned_bytes_per_pixel = GetBytesPerPixel(format);
     constexpr u32 tile_size = GetFormatBpp(format) * 64 / 8;
@@ -170,7 +173,8 @@ static void MortonCopy(u32 width, u32 height, u32 start_offset, u32 end_offset,
     const u32 aligned_start_offset = Common::AlignUp(start_offset, tile_size);
     const u32 aligned_end_offset = Common::AlignDown(end_offset, tile_size);
 
-    ASSERT(!morton_to_linear || (aligned_start_offset == start_offset && aligned_end_offset == end_offset));
+    ASSERT(!morton_to_linear ||
+           (aligned_start_offset == start_offset && aligned_end_offset == end_offset));
 
     // In OpenGL the texture origin is in the bottom left corner as opposed to other
     // APIs that have it at the top left. To avoid flipping texture coordinates in
@@ -184,7 +188,7 @@ static void MortonCopy(u32 width, u32 height, u32 start_offset, u32 end_offset,
         x = (x + 8) % width;
         linear_offset += 8 * aligned_bytes_per_pixel;
         if (!x) {
-            y  = (y + 8) % height;
+            y = (y + 8) % height;
             if (!y) {
                 return;
             }
@@ -222,7 +226,8 @@ static void MortonCopy(u32 width, u32 height, u32 start_offset, u32 end_offset,
         std::array<std::byte, tile_size> tmp_buf;
         auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_stride);
         MortonCopyTile<morton_to_linear, format>(width, tmp_buf, linear_data);
-        std::memcpy(tiled_buffer.data() + tiled_offset, tmp_buf.data(), end_offset - aligned_end_offset);
+        std::memcpy(tiled_buffer.data() + tiled_offset, tmp_buf.data(),
+                    end_offset - aligned_end_offset);
     }
 }
 
@@ -234,19 +239,19 @@ static constexpr std::array<MortonFunc, 18> UNSWIZZLE_TABLE = {
     MortonCopy<true, PixelFormat::RGB5A1>, // 2
     MortonCopy<true, PixelFormat::RGB565>, // 3
     MortonCopy<true, PixelFormat::RGBA4>,  // 4
-    MortonCopy<true, PixelFormat::IA8>,  // 5
-    MortonCopy<true, PixelFormat::RG8>,  // 6
-    MortonCopy<true, PixelFormat::I8>,  // 7
-    MortonCopy<true, PixelFormat::A8>,  // 8
-    MortonCopy<true, PixelFormat::IA4>,  // 9
-    MortonCopy<true, PixelFormat::I4>,  // 10
-    MortonCopy<true, PixelFormat::A4>,  // 11
-    MortonCopy<true, PixelFormat::ETC1>,  // 12
-    MortonCopy<true, PixelFormat::ETC1A4>,  // 13
-    MortonCopy<true, PixelFormat::D16>,  // 14
-    nullptr,                             // 15
-    MortonCopy<true, PixelFormat::D24>,  // 16
-    MortonCopy<true, PixelFormat::D24S8> // 17
+    MortonCopy<true, PixelFormat::IA8>,    // 5
+    MortonCopy<true, PixelFormat::RG8>,    // 6
+    MortonCopy<true, PixelFormat::I8>,     // 7
+    MortonCopy<true, PixelFormat::A8>,     // 8
+    MortonCopy<true, PixelFormat::IA4>,    // 9
+    MortonCopy<true, PixelFormat::I4>,     // 10
+    MortonCopy<true, PixelFormat::A4>,     // 11
+    MortonCopy<true, PixelFormat::ETC1>,   // 12
+    MortonCopy<true, PixelFormat::ETC1A4>, // 13
+    MortonCopy<true, PixelFormat::D16>,    // 14
+    nullptr,                               // 15
+    MortonCopy<true, PixelFormat::D24>,    // 16
+    MortonCopy<true, PixelFormat::D24S8>   // 17
 };
 
 static constexpr std::array<MortonFunc, 18> SWIZZLE_TABLE = {

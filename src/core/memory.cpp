@@ -143,7 +143,8 @@ public:
     }
 
     void WalkBlock(const Kernel::Process& process, const VAddr src_addr, const std::size_t size,
-                   auto on_unmapped, auto on_memory, auto on_special, auto on_rasterizer, auto increment) {
+                   auto on_unmapped, auto on_memory, auto on_special, auto on_rasterizer,
+                   auto increment) {
         auto& page_table = *process.vm_manager.page_table;
 
         std::size_t remaining_size = size;
@@ -152,7 +153,8 @@ public:
 
         while (remaining_size > 0) {
             const std::size_t copy_amount = std::min(CITRA_PAGE_SIZE - page_offset, remaining_size);
-            const VAddr current_vaddr = static_cast<VAddr>((page_index << CITRA_PAGE_BITS) + page_offset);
+            const VAddr current_vaddr =
+                static_cast<VAddr>((page_index << CITRA_PAGE_BITS) + page_offset);
 
             switch (page_table.attributes[page_index]) {
             case PageType::Unmapped: {
@@ -202,13 +204,11 @@ public:
             [&dest_buffer](const std::size_t copy_amount, const u8* const src_ptr) {
                 std::memcpy(dest_buffer, src_ptr, copy_amount);
             },
-            [&dest_buffer](MMIORegionPointer& handler,
-                           const std::size_t copy_amount,
+            [&dest_buffer](MMIORegionPointer& handler, const std::size_t copy_amount,
                            const VAddr current_vaddr) {
                 handler->ReadBlock(current_vaddr, dest_buffer, copy_amount);
             },
-            [&dest_buffer](const VAddr current_vaddr,
-                           const std::size_t copy_amount,
+            [&dest_buffer](const VAddr current_vaddr, const std::size_t copy_amount,
                            const u8* const rasterizer_ptr) {
                 if constexpr (!UNSAFE) {
                     RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
@@ -234,13 +234,12 @@ public:
             [&src_buffer](const std::size_t copy_amount, u8* const dest_ptr) {
                 std::memcpy(dest_ptr, src_buffer, copy_amount);
             },
-            [&src_buffer](MMIORegionPointer& handler,
-                           const std::size_t copy_amount,
-                           const VAddr current_vaddr) {
+            [&src_buffer](MMIORegionPointer& handler, const std::size_t copy_amount,
+                          const VAddr current_vaddr) {
                 handler->WriteBlock(current_vaddr, src_buffer, copy_amount);
             },
-            [&src_buffer](const VAddr current_vaddr,
-                          const std::size_t copy_amount, u8* const host_ptr) {
+            [&src_buffer](const VAddr current_vaddr, const std::size_t copy_amount,
+                          u8* const host_ptr) {
                 if constexpr (!UNSAFE) {
                     RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
                                                  FlushMode::Invalidate);
@@ -356,8 +355,8 @@ std::shared_ptr<PageTable> MemorySystem::GetCurrentPageTable() const {
 
 void MemorySystem::MapPages(PageTable& page_table, u32 base, u32 size, MemoryRef memory,
                             PageType type) {
-    LOG_DEBUG(HW_Memory, "Mapping {} onto {:08X}-{:08X}", (void*)memory.GetPtr(), base * CITRA_PAGE_SIZE,
-              (base + size) * CITRA_PAGE_SIZE);
+    LOG_DEBUG(HW_Memory, "Mapping {} onto {:08X}-{:08X}", (void*)memory.GetPtr(),
+              base * CITRA_PAGE_SIZE, (base + size) * CITRA_PAGE_SIZE);
 
     RasterizerFlushVirtualRegion(base << CITRA_PAGE_BITS, size * CITRA_PAGE_SIZE,
                                  FlushMode::FlushAndInvalidate);
@@ -391,7 +390,8 @@ void MemorySystem::MapIoRegion(PageTable& page_table, VAddr base, u32 size,
                                MMIORegionPointer mmio_handler) {
     ASSERT_MSG((size & CITRA_PAGE_MASK) == 0, "non-page aligned size: {:08X}", size);
     ASSERT_MSG((base & CITRA_PAGE_MASK) == 0, "non-page aligned base: {:08X}", base);
-    MapPages(page_table, base / CITRA_PAGE_SIZE, size / CITRA_PAGE_SIZE, nullptr, PageType::Special);
+    MapPages(page_table, base / CITRA_PAGE_SIZE, size / CITRA_PAGE_SIZE, nullptr,
+             PageType::Special);
 
     page_table.special_regions.emplace_back(SpecialRegion{base, size, mmio_handler});
 }
@@ -399,7 +399,8 @@ void MemorySystem::MapIoRegion(PageTable& page_table, VAddr base, u32 size,
 void MemorySystem::UnmapRegion(PageTable& page_table, VAddr base, u32 size) {
     ASSERT_MSG((size & CITRA_PAGE_MASK) == 0, "non-page aligned size: {:08X}", size);
     ASSERT_MSG((base & CITRA_PAGE_MASK) == 0, "non-page aligned base: {:08X}", base);
-    MapPages(page_table, base / CITRA_PAGE_SIZE, size / CITRA_PAGE_SIZE, nullptr, PageType::Unmapped);
+    MapPages(page_table, base / CITRA_PAGE_SIZE, size / CITRA_PAGE_SIZE, nullptr,
+             PageType::Unmapped);
 }
 
 MemoryRef MemorySystem::GetPointerForRasterizerCache(VAddr addr) const {
@@ -574,12 +575,11 @@ MemoryRef MemorySystem::GetPhysicalRef(PAddr address) const {
         std::make_pair(N3DS_EXTRA_RAM_PADDR, N3DS_EXTRA_RAM_SIZE),
     };
 
-    const auto area =
-        std::ranges::find_if(memory_areas, [&](const auto& area) {
-            // Note: the region end check is inclusive because the user can pass in an address that
-            // represents an open right bound
-            return address >= area.first && address <= area.first + area.second;
-        });
+    const auto area = std::ranges::find_if(memory_areas, [&](const auto& area) {
+        // Note: the region end check is inclusive because the user can pass in an address that
+        // represents an open right bound
+        return address >= area.first && address <= area.first + area.second;
+    });
 
     if (area == memory_areas.end()) {
         LOG_ERROR(HW_Memory, "Unknown GetPhysicalPointer @ {:#08X} at PC {:#08X}", address,
@@ -806,7 +806,8 @@ void MemorySystem::WriteBlock(const Kernel::Process& process, const VAddr dest_a
     return impl->WriteBlockImpl<false>(process, dest_addr, src_buffer, size);
 }
 
-void MemorySystem::WriteBlock(const VAddr dest_addr, const void* src_buffer, const std::size_t size) {
+void MemorySystem::WriteBlock(const VAddr dest_addr, const void* src_buffer,
+                              const std::size_t size) {
     auto& process = *Core::System::GetInstance().Kernel().GetCurrentProcess();
     return impl->WriteBlockImpl<false>(process, dest_addr, src_buffer, size);
 }
@@ -825,13 +826,11 @@ void MemorySystem::ZeroBlock(const Kernel::Process& process, const VAddr dest_ad
         [](const std::size_t copy_amount, u8* const dest_ptr) {
             std::memset(dest_ptr, 0, copy_amount);
         },
-        [&zeros = zeros](MMIORegionPointer& handler,
-                         const std::size_t copy_amount,
+        [&zeros = zeros](MMIORegionPointer& handler, const std::size_t copy_amount,
                          const VAddr current_vaddr) {
             handler->WriteBlock(current_vaddr, zeros.data(), copy_amount);
         },
-        [](const VAddr current_vaddr, const std::size_t copy_amount,
-                           u8* const rasterizer_ptr) {
+        [](const VAddr current_vaddr, const std::size_t copy_amount, u8* const rasterizer_ptr) {
             RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
                                          FlushMode::Invalidate);
             std::memset(rasterizer_ptr, 0, copy_amount);
@@ -861,14 +860,13 @@ void MemorySystem::CopyBlock(const Kernel::Process& dest_process,
         [this, &dest_process, &dest_addr](const std::size_t copy_amount, const u8* const src_ptr) {
             impl->WriteBlockImpl<false>(dest_process, dest_addr, src_ptr, copy_amount);
         },
-        [this, &dest_process, &dest_addr, &copy_buffer](MMIORegionPointer& handler,
-                                                       const std::size_t copy_amount,
-                                                       const VAddr current_vaddr) {
+        [this, &dest_process, &dest_addr, &copy_buffer](
+            MMIORegionPointer& handler, const std::size_t copy_amount, const VAddr current_vaddr) {
             handler->ReadBlock(current_vaddr, copy_buffer.data(), copy_amount);
             impl->WriteBlockImpl<false>(dest_process, dest_addr, copy_buffer.data(), copy_amount);
         },
-        [this, &dest_process, &dest_addr](
-            const VAddr current_vaddr, const std::size_t copy_amount, u8* const rasterizer_ptr) {
+        [this, &dest_process, &dest_addr](const VAddr current_vaddr, const std::size_t copy_amount,
+                                          u8* const rasterizer_ptr) {
             RasterizerFlushVirtualRegion(current_vaddr, static_cast<u32>(copy_amount),
                                          FlushMode::Flush);
             impl->WriteBlockImpl<false>(dest_process, dest_addr, rasterizer_ptr, copy_amount);

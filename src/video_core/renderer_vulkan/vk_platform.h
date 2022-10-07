@@ -11,11 +11,12 @@
 namespace Frontend {
 class EmuWindow;
 enum class WindowSystemType : u8;
-}
+} // namespace Frontend
 
 namespace Vulkan {
 
-std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window_type, bool enable_debug_utils);
+std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window_type,
+                                               bool enable_debug_utils);
 
 vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& emu_window);
 

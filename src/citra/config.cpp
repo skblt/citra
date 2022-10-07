@@ -110,7 +110,7 @@ void Config::ReadValues() {
 
     // Renderer
     Settings::values.graphics_api =
-            static_cast<Settings::GraphicsAPI>(sdl2_config->GetInteger("Renderer", "graphics_api", 0));
+        static_cast<Settings::GraphicsAPI>(sdl2_config->GetInteger("Renderer", "graphics_api", 0));
     Settings::values.use_hw_renderer = sdl2_config->GetBoolean("Renderer", "use_hw_renderer", true);
     Settings::values.use_hw_shader = sdl2_config->GetBoolean("Renderer", "use_hw_shader", true);
 #ifdef __APPLE__

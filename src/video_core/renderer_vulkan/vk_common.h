@@ -41,31 +41,27 @@ constexpr vk::ImageAspectFlags GetImageAspect(vk::Format format) {
 
 /// Returns a bit mask with the required usage of a format with a particular aspect
 constexpr vk::ImageUsageFlags GetImageUsage(vk::ImageAspectFlags aspect) {
-    auto usage = vk::ImageUsageFlagBits::eSampled |
-            vk::ImageUsageFlagBits::eTransferDst |
-            vk::ImageUsageFlagBits::eTransferSrc;
+    auto usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst |
+                 vk::ImageUsageFlagBits::eTransferSrc;
 
     if (aspect & vk::ImageAspectFlagBits::eDepth) {
         return usage | vk::ImageUsageFlagBits::eDepthStencilAttachment;
     } else {
-        return usage | vk::ImageUsageFlagBits::eStorage |
-                vk::ImageUsageFlagBits::eColorAttachment;
+        return usage | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eColorAttachment;
     }
 }
 
 /// Returns a bit mask with the required features of a format with a particular aspect
 constexpr vk::FormatFeatureFlags GetFormatFeatures(vk::ImageAspectFlags aspect) {
     auto usage = vk::FormatFeatureFlagBits::eSampledImage |
-            vk::FormatFeatureFlagBits::eTransferDst |
-            vk::FormatFeatureFlagBits::eTransferSrc |
-            vk::FormatFeatureFlagBits::eBlitSrc |
-            vk::FormatFeatureFlagBits::eBlitDst;
+                 vk::FormatFeatureFlagBits::eTransferDst | vk::FormatFeatureFlagBits::eTransferSrc |
+                 vk::FormatFeatureFlagBits::eBlitSrc | vk::FormatFeatureFlagBits::eBlitDst;
 
     if (aspect & vk::ImageAspectFlagBits::eDepth) {
         return usage | vk::FormatFeatureFlagBits::eDepthStencilAttachment;
     } else {
         return usage | vk::FormatFeatureFlagBits::eStorageImage |
-                vk::FormatFeatureFlagBits::eColorAttachment;
+               vk::FormatFeatureFlagBits::eColorAttachment;
     }
 }
 

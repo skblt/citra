@@ -7,9 +7,9 @@
 #include "common/alignment.h"
 #include "common/assert.h"
 #include "common/logging/log.h"
+#include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
-#include "video_core/renderer_vulkan/vk_instance.h"
 
 namespace Vulkan {
 
@@ -21,13 +21,13 @@ inline auto ToVkAccessStageFlags(vk::BufferUsageFlagBits usage) {
                                 vk::PipelineStageFlagBits::eVertexInput);
         break;
     case vk::BufferUsageFlagBits::eIndexBuffer:
-        result = std::make_pair(vk::AccessFlagBits::eIndexRead,
-                                vk::PipelineStageFlagBits::eVertexInput);
+        result =
+            std::make_pair(vk::AccessFlagBits::eIndexRead, vk::PipelineStageFlagBits::eVertexInput);
     case vk::BufferUsageFlagBits::eUniformBuffer:
         result = std::make_pair(vk::AccessFlagBits::eUniformRead,
                                 vk::PipelineStageFlagBits::eVertexShader |
-                                vk::PipelineStageFlagBits::eGeometryShader |
-                                vk::PipelineStageFlagBits::eFragmentShader);
+                                    vk::PipelineStageFlagBits::eGeometryShader |
+                                    vk::PipelineStageFlagBits::eFragmentShader);
     case vk::BufferUsageFlagBits::eUniformTexelBuffer:
         result = std::make_pair(vk::AccessFlagBits::eShaderRead,
                                 vk::PipelineStageFlagBits::eFragmentShader);
@@ -41,24 +41,20 @@ inline auto ToVkAccessStageFlags(vk::BufferUsageFlagBits usage) {
 
 StagingBuffer::StagingBuffer(const Instance& instance, u32 size, vk::BufferUsageFlags usage)
     : instance{instance} {
-    const vk::BufferCreateInfo buffer_info = {
-        .size = size,
-        .usage = usage
-    };
+    const vk::BufferCreateInfo buffer_info = {.size = size, .usage = usage};
 
     const VmaAllocationCreateInfo alloc_create_info = {
         .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                VMA_ALLOCATION_CREATE_MAPPED_BIT,
-        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
-    };
+                 VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST};
 
     VkBuffer unsafe_buffer = VK_NULL_HANDLE;
     VkBufferCreateInfo unsafe_buffer_info = static_cast<VkBufferCreateInfo>(buffer_info);
     VmaAllocationInfo alloc_info;
     VmaAllocator allocator = instance.GetAllocator();
 
-    vmaCreateBuffer(allocator, &unsafe_buffer_info, &alloc_create_info,
-                    &unsafe_buffer, &allocation, &alloc_info);
+    vmaCreateBuffer(allocator, &unsafe_buffer_info, &alloc_create_info, &unsafe_buffer, &allocation,
+                    &alloc_info);
 
     buffer = vk::Buffer{unsafe_buffer};
     mapped = std::span{reinterpret_cast<std::byte*>(alloc_info.pMappedData), size};
@@ -68,27 +64,25 @@ StagingBuffer::~StagingBuffer() {
     vmaDestroyBuffer(instance.GetAllocator(), static_cast<VkBuffer>(buffer), allocation);
 }
 
-StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler,
-                           u32 size, vk::BufferUsageFlagBits usage, std::span<const vk::Format> view_formats)
-    : instance{instance}, scheduler{scheduler}, staging{instance, size, vk::BufferUsageFlagBits::eTransferSrc},
+StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u32 size,
+                           vk::BufferUsageFlagBits usage, std::span<const vk::Format> view_formats)
+    : instance{instance}, scheduler{scheduler}, staging{instance, size,
+                                                        vk::BufferUsageFlagBits::eTransferSrc},
       usage{usage}, total_size{size} {
 
     const vk::BufferCreateInfo buffer_info = {
-        .size = total_size,
-        .usage = usage | vk::BufferUsageFlagBits::eTransferDst
-    };
+        .size = total_size, .usage = usage | vk::BufferUsageFlagBits::eTransferDst};
 
-    const VmaAllocationCreateInfo alloc_create_info = {
-        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
-    };
+    const VmaAllocationCreateInfo alloc_create_info = {.usage =
+                                                           VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
 
     VkBuffer unsafe_buffer = VK_NULL_HANDLE;
     VkBufferCreateInfo unsafe_buffer_info = static_cast<VkBufferCreateInfo>(buffer_info);
     VmaAllocationInfo alloc_info;
     VmaAllocator allocator = instance.GetAllocator();
 
-    vmaCreateBuffer(allocator, &unsafe_buffer_info, &alloc_create_info,
-                    &unsafe_buffer, &allocation, &alloc_info);
+    vmaCreateBuffer(allocator, &unsafe_buffer_info, &alloc_create_info, &unsafe_buffer, &allocation,
+                    &alloc_info);
 
     buffer = vk::Buffer{unsafe_buffer};
 
@@ -97,11 +91,7 @@ StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler,
     vk::Device device = instance.GetDevice();
     for (std::size_t i = 0; i < view_formats.size(); i++) {
         const vk::BufferViewCreateInfo view_info = {
-            .buffer = buffer,
-            .format = view_formats[i],
-            .offset = 0,
-            .range = total_size
-        };
+            .buffer = buffer, .format = view_formats[i], .offset = 0, .range = total_size};
 
         views[i] = device.createBufferView(view_info);
     }
@@ -138,7 +128,6 @@ std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
     const u32 buffer_offset = current_bucket * bucket_size + bucket.offset;
     u8* mapped = reinterpret_cast<u8*>(staging.mapped.data() + buffer_offset);
     return std::make_tuple(mapped, buffer_offset, invalidate);
-
 }
 
 void StreamBuffer::Commit(u32 size) {
@@ -156,10 +145,7 @@ void StreamBuffer::Flush() {
 
         const u32 flush_start = current_bucket * bucket_size;
         const vk::BufferCopy copy_region = {
-            .srcOffset = flush_start,
-            .dstOffset = flush_start,
-            .size = flush_size
-        };
+            .srcOffset = flush_start, .dstOffset = flush_start, .size = flush_size};
 
         vmaFlushAllocation(allocator, allocation, flush_start, flush_size);
         command_buffer.copyBuffer(staging.buffer, buffer, copy_region);
@@ -173,8 +159,7 @@ void StreamBuffer::Flush() {
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .buffer = buffer,
             .offset = flush_start,
-            .size = flush_size
-        };
+            .size = flush_size};
 
         command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, stage_mask,
                                        vk::DependencyFlagBits::eByRegion, {}, buffer_barrier, {});

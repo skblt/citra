@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <cstdlib>
 #include <compare>
+#include <cstdlib>
 #include <type_traits>
 
 namespace Common {

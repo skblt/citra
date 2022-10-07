@@ -293,7 +293,8 @@ static std::string SampleTexture(const PicaFSConfig& config, unsigned texture_un
         // Only unit 0 respects the texturing type
         switch (state.texture0_type) {
         case TexturingRegs::TextureConfig::Texture2D:
-            return "textureLod(sampler2D(tex0, tex0_sampler), texcoord0, getLod(texcoord0 * vec2(textureSize(sampler2D(tex0, tex0_sampler), 0))))";
+            return "textureLod(sampler2D(tex0, tex0_sampler), texcoord0, getLod(texcoord0 * "
+                   "vec2(textureSize(sampler2D(tex0, tex0_sampler), 0))))";
         case TexturingRegs::TextureConfig::Projection2D:
             // TODO (wwylele): find the exact LOD formula for projection texture
             return "textureProj(sampler2D(tex0, tex0_sampler), vec3(texcoord0, texcoord0_w))";
@@ -311,12 +312,15 @@ static std::string SampleTexture(const PicaFSConfig& config, unsigned texture_un
             return "texture(sampler2D(tex0, tex0_sampler), texcoord0)";
         }
     case 1:
-        return "textureLod(sampler2D(tex1, tex1_sampler), texcoord1, getLod(texcoord1 * vec2(textureSize(sampler2D(tex1, tex1_sampler), 0))))";
+        return "textureLod(sampler2D(tex1, tex1_sampler), texcoord1, getLod(texcoord1 * "
+               "vec2(textureSize(sampler2D(tex1, tex1_sampler), 0))))";
     case 2:
         if (state.texture2_use_coord1)
-            return "textureLod(sampler2D(tex2, tex2_sampler), texcoord1, getLod(texcoord1 * vec2(textureSize(sampler2D(tex2, tex2_sampler), 0))))";
+            return "textureLod(sampler2D(tex2, tex2_sampler), texcoord1, getLod(texcoord1 * "
+                   "vec2(textureSize(sampler2D(tex2, tex2_sampler), 0))))";
         else
-            return "textureLod(sampler2D(tex2, tex2_sampler), texcoord2, getLod(texcoord2 * vec2(textureSize(sampler2D(tex2, tex2_sampler), 0))))";
+            return "textureLod(sampler2D(tex2, tex2_sampler), texcoord2, getLod(texcoord2 * "
+                   "vec2(textureSize(sampler2D(tex2, tex2_sampler), 0))))";
     case 3:
         if (state.proctex.enable) {
             return "ProcTex()";
@@ -1580,8 +1584,8 @@ void main() {
     return out;
 }
 
-std::optional<std::string> GenerateVertexShader(
-    const Pica::Shader::ShaderSetup& setup, const PicaVSConfig& config) {
+std::optional<std::string> GenerateVertexShader(const Pica::Shader::ShaderSetup& setup,
+                                                const PicaVSConfig& config) {
     /*std::string out = "#extension GL_ARB_separate_shader_objects : enable\n";
     out += ShaderDecompiler::GetCommonDeclarations();
 
@@ -1626,7 +1630,8 @@ layout (std140) uniform vs_config {
 
     // output attributes declaration
     for (u32 i = 0; i < config.state.num_outputs; ++i) {
-        out += "layout(location = " + std::to_string(i) + ") out vec4 vs_out_attr" + std::to_string(i) + ";\n";
+        out += "layout(location = " + std::to_string(i) + ") out vec4 vs_out_attr" +
+std::to_string(i) + ";\n";
     }
 
     out += "\nvoid main() {\n";
@@ -1648,7 +1653,8 @@ static std::string GetGSCommonSource(const PicaGSConfigCommonRaw& config) {
 
     out += '\n';
     for (u32 i = 0; i < config.vs_output_attributes; ++i) {
-        out += ("layout(location = " + std::to_string(i) + ") in vec4 vs_out_attr" + std::to_string(i) + "[];\n";
+        out += ("layout(location = " + std::to_string(i) + ") in vec4 vs_out_attr" +
+std::to_string(i) + "[];\n";
     }
 
     out += R"(

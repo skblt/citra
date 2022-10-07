@@ -851,7 +851,7 @@ static void ReadMemory() {
 
     auto& memory = Core::System::GetInstance().Memory();
     if (!memory.IsValidVirtualAddress(*Core::System::GetInstance().Kernel().GetCurrentProcess(),
-                                       addr)) {
+                                      addr)) {
         return SendReply("E00");
     }
 
@@ -875,7 +875,7 @@ static void WriteMemory() {
 
     auto& memory = Core::System::GetInstance().Memory();
     if (!memory.IsValidVirtualAddress(*Core::System::GetInstance().Kernel().GetCurrentProcess(),
-                                       addr)) {
+                                      addr)) {
         return SendReply("E00");
     }
 

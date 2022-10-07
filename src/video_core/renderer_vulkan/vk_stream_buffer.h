@@ -33,8 +33,8 @@ struct StagingBuffer {
 
 class StreamBuffer {
 public:
-    StreamBuffer(const Instance& instance, TaskScheduler& scheduler,
-                  u32 size, vk::BufferUsageFlagBits usage, std::span<const vk::Format> views);
+    StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u32 size,
+                 vk::BufferUsageFlagBits usage, std::span<const vk::Format> views);
     ~StreamBuffer();
 
     std::tuple<u8*, u32, bool> Map(u32 size, u32 alignment = 0);

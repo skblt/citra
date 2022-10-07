@@ -8,7 +8,6 @@
 #include <string>
 #include <thread>
 // This needs to be included before getopt.h because the latter #defines symbols used by it
-#include "common/microprofile.h"
 #include "citra/config.h"
 #include "citra/emu_window/emu_window_sdl2.h"
 #include "citra/lodepng_image_interface.h"
@@ -17,6 +16,7 @@
 #include "common/file_util.h"
 #include "common/logging/backend.h"
 #include "common/logging/log.h"
+#include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
 #include "core/core.h"

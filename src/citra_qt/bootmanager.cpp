@@ -545,7 +545,7 @@ void GRenderWindow::resizeEvent(QResizeEvent* event) {
 std::unique_ptr<Frontend::GraphicsContext> GRenderWindow::CreateSharedContext() const {
     const Settings::GraphicsAPI graphics_api = Settings::values.graphics_api;
     if (graphics_api == Settings::GraphicsAPI::OpenGL ||
-            graphics_api == Settings::GraphicsAPI::OpenGLES) {
+        graphics_api == Settings::GraphicsAPI::OpenGLES) {
         auto c = static_cast<OpenGLSharedContext*>(main_context.get());
         // Bind the shared contexts to the main surface in case the backend wants to take over
         // presentation

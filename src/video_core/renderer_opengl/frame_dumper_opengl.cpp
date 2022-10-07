@@ -22,9 +22,7 @@ Layout::FramebufferLayout FrameDumperOpenGL::GetLayout() const {
 }
 
 void FrameDumperOpenGL::StartDumping() {
-    present_thread = std::jthread([&](std::stop_token stop_token) {
-        PresentLoop(stop_token);
-    });
+    present_thread = std::jthread([&](std::stop_token stop_token) { PresentLoop(stop_token); });
 }
 
 void FrameDumperOpenGL::StopDumping() {

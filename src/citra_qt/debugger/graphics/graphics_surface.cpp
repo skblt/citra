@@ -316,56 +316,46 @@ void GraphicsSurfaceWidget::Pick(int x, int y) {
         case Format::RGBA8: {
             auto value = Color::DecodeRGBA8(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2, Blue: %3, Alpha: %4")
-                .arg(QString::number(value.r(), 'f', 2),
-                     QString::number(value.g(), 'f', 2),
-                     QString::number(value.b(), 'f', 2),
-                     QString::number(value.a(), 'f', 2));
+                .arg(QString::number(value.r(), 'f', 2), QString::number(value.g(), 'f', 2),
+                     QString::number(value.b(), 'f', 2), QString::number(value.a(), 'f', 2));
         }
         case Format::RGB8: {
             auto value = Color::DecodeRGB8(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2, Blue: %3")
-                .arg(QString::number(value.r(), 'f', 2),
-                     QString::number(value.g(), 'f', 2),
+                .arg(QString::number(value.r(), 'f', 2), QString::number(value.g(), 'f', 2),
                      QString::number(value.b(), 'f', 2));
         }
         case Format::RGB5A1: {
             auto value = Color::DecodeRGB5A1(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2, Blue: %3, Alpha: %4")
-                .arg(QString::number(value.r(), 'f', 2),
-                     QString::number(value.g(), 'f', 2),
-                     QString::number(value.b(), 'f', 2),
-                     QString::number(value.a(), 'f', 2));
+                .arg(QString::number(value.r(), 'f', 2), QString::number(value.g(), 'f', 2),
+                     QString::number(value.b(), 'f', 2), QString::number(value.a(), 'f', 2));
         }
         case Format::RGB565: {
             auto value = Color::DecodeRGB565(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2, Blue: %3")
-                .arg(QString::number(value.r(), 'f', 2),
-                     QString::number(value.g(), 'f', 2),
+                .arg(QString::number(value.r(), 'f', 2), QString::number(value.g(), 'f', 2),
                      QString::number(value.b(), 'f', 2));
         }
         case Format::RGBA4: {
             auto value = Color::DecodeRGBA4(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2, Blue: %3, Alpha: %4")
-                .arg(QString::number(value.r(), 'f', 2),
-                     QString::number(value.g(), 'f', 2),
-                     QString::number(value.b(), 'f', 2),
-                     QString::number(value.a(), 'f', 2));
+                .arg(QString::number(value.r(), 'f', 2), QString::number(value.g(), 'f', 2),
+                     QString::number(value.b(), 'f', 2), QString::number(value.a(), 'f', 2));
         }
         case Format::IA8:
             return QStringLiteral("Index: %1, Alpha: %2").arg(pixel[0], pixel[1]);
         case Format::RG8: {
             auto value = Color::DecodeRG8(pixel) / 255.0f;
             return QStringLiteral("Red: %1, Green: %2")
-                .arg(QString::number(value.r(), 'f', 2),
-                     QString::number(value.g(), 'f', 2));
+                .arg(QString::number(value.r(), 'f', 2), QString::number(value.g(), 'f', 2));
         }
         case Format::I8:
             return QStringLiteral("Index: %1").arg(*pixel);
         case Format::A8:
             return QStringLiteral("Alpha: %1").arg(QString::number(*pixel / 255.0f, 'f', 2));
         case Format::IA4:
-            return QStringLiteral("Index: %1, Alpha: %2")
-                .arg(*pixel & 0xF, (*pixel & 0xF0) >> 4);
+            return QStringLiteral("Index: %1, Alpha: %2").arg(*pixel & 0xF, (*pixel & 0xF0) >> 4);
         case Format::I4: {
             u8 i = (*pixel >> ((offset % 2) ? 4 : 0)) & 0xF;
             return QStringLiteral("Index: %1").arg(i);

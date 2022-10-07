@@ -147,7 +147,6 @@ void Driver::FindBugs() {
     if (vendor == Vendor::AMD || (vendor == Vendor::Intel && !is_linux)) {
         bugs |= DriverBug::BrokenTextureView;
     }
-
 }
 
 } // namespace OpenGL
