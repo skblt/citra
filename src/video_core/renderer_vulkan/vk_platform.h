@@ -11,7 +11,7 @@
 namespace Frontend {
 class EmuWindow;
 enum class WindowSystemType : u8;
-} // namespace Frontend
+}
 
 namespace Vulkan {
 

@@ -3,7 +3,7 @@
 // Refer to the license.txt file included.
 
 #pragma once
-#include <array>
+
 #include "common/logging/log.h"
 #include "core/core.h"
 #include "video_core/regs.h"
@@ -12,20 +12,6 @@
 namespace PicaToVK {
 
 using TextureFilter = Pica::TexturingRegs::TextureConfig::TextureFilter;
-
-struct FilterInfo {
-    vk::Filter mag_filter, min_filter;
-    vk::SamplerMipmapMode mip_mode;
-};
-
-inline FilterInfo TextureFilterMode(TextureFilter mag, TextureFilter min, TextureFilter mip) {
-    constexpr std::array filter_table = {vk::Filter::eNearest, vk::Filter::eLinear};
-
-    constexpr std::array mipmap_table = {vk::SamplerMipmapMode::eNearest,
-                                         vk::SamplerMipmapMode::eLinear};
-
-    return FilterInfo{filter_table.at(mag), filter_table.at(min), mipmap_table.at(mip)};
-}
 
 inline vk::Filter TextureFilterMode(TextureFilter mode) {
     switch (mode) {

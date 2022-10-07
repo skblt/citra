@@ -2,14 +2,14 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#define VULKAN_HPP_NO_CONSTRUCTORS
 #include <algorithm>
-#include "common/alignment.h"
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
+
+#include <vk_mem_alloc.h>
 
 namespace Vulkan {
 

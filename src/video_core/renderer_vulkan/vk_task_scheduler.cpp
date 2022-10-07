@@ -2,7 +2,6 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#define VULKAN_HPP_NO_CONSTRUCTORS
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"

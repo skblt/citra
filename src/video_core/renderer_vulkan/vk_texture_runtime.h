@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #pragma once
+
 #include <set>
 #include <span>
 #include <vulkan/vulkan_hash.hpp>
@@ -114,7 +115,6 @@ private:
     std::array<u32, SCHEDULER_COMMAND_COUNT> staging_offsets{};
     std::unordered_multimap<VideoCore::HostTextureTag, ImageAlloc> texture_recycler;
     std::unordered_map<vk::ImageView, vk::Framebuffer> clear_framebuffers;
-    ReinterpreterList list;
 };
 
 class Surface : public VideoCore::SurfaceBase<Surface> {

@@ -9,13 +9,11 @@
 // Include vulkan-hpp header
 #define VK_NO_PROTOTYPES 1
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
+#define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan.hpp>
 
-// Include Vulkan memory allocator
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
-#define VMA_VULKAN_VERSION 1001000 // Vulkan 1.1
-#include <vk_mem_alloc.h>
 
 namespace Vulkan {
 
