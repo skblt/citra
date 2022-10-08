@@ -330,14 +330,12 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
                                         u32 vs_input_index_max) {
     auto [array_ptr, array_offset, _] = vertex_buffer.Map(vs_input_size, 4);
 
-    /**
-     * The Nintendo 3DS has 12 attribute loaders which are used to tell the GPU
-     * how to interpret vertex data. The program firsts sets GPUREG_ATTR_BUF_BASE to the base
-     * address containing the vertex array data. The data for each attribute loader (i) can be found
-     * by adding GPUREG_ATTR_BUFi_OFFSET to the base address. Attribute loaders can be thought
-     * as something analogous to Vulkan bindings. The user can store attributes in separate loaders
-     * or interleave them in the same loader.
-     */
+    // The Nintendo 3DS has 12 attribute loaders which are used to tell the GPU
+    // how to interpret vertex data. The program firsts sets GPUREG_ATTR_BUF_BASE to the base
+    // address containing the vertex array data. The data for each attribute loader (i) can be found
+    // by adding GPUREG_ATTR_BUFi_OFFSET to the base address. Attribute loaders can be thought
+    // as something analogous to Vulkan bindings. The user can store attributes in separate loaders
+    // or interleave them in the same loader.
     const auto& regs = Pica::g_state.regs;
     const auto& vertex_attributes = regs.pipeline.vertex_attributes;
     PAddr base_address = vertex_attributes.GetPhysicalBaseAddress(); // GPUREG_ATTR_BUF_BASE
@@ -346,7 +344,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     std::array<bool, 16> enable_attributes{};
     std::array<u64, 16> binding_offsets{};
 
-    u32 buffer_offset = 0;
+    u32 buffer_offset = array_offset;
     for (const auto& loader : vertex_attributes.attribute_loaders) {
         if (loader.component_count == 0 || loader.byte_count == 0) {
             continue;
@@ -401,13 +399,14 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
         binding.stride.Assign(loader.byte_count);
 
         // Keep track of the binding offsets so we can bind the vertex buffer later
-        binding_offsets[layout.binding_count++] = array_offset + buffer_offset;
+        binding_offsets[layout.binding_count++] = buffer_offset;
         array_ptr += data_size;
         buffer_offset += data_size;
     }
 
     // Reserve the last binding for fixed attributes
     u32 offset = 0;
+    bool has_fixed_binding = false;
     for (std::size_t i = 0; i < 16; i++) {
         if (vertex_attributes.IsDefaultAttribute(i)) {
             const u32 reg = regs.vs.GetRegisterForAttribute(i);
@@ -420,12 +419,6 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
                 const u32 data_size = sizeof(float) * static_cast<u32>(data.size());
                 std::memcpy(array_ptr, data.data(), data_size);
 
-                // Define the binding. Note that the counter is not incremented
-                VertexBinding& binding = layout.bindings.at(layout.binding_count);
-                binding.binding.Assign(layout.binding_count);
-                binding.fixed.Assign(1);
-                binding.stride.Assign(offset);
-
                 VertexAttribute& attribute = layout.attributes.at(layout.attribute_count++);
                 attribute.binding.Assign(layout.binding_count);
                 attribute.location.Assign(reg);
@@ -435,18 +428,28 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
 
                 offset += data_size;
                 array_ptr += data_size;
-                binding_offsets[layout.binding_count] = array_offset + buffer_offset;
+                has_fixed_binding = true;
             }
         }
     }
 
+    if (has_fixed_binding) {
+        VertexBinding& binding = layout.bindings.at(layout.binding_count);
+        binding.binding.Assign(layout.binding_count);
+        binding.fixed.Assign(1);
+        binding.stride.Assign(offset);
+
+        binding_offsets[layout.binding_count++] = buffer_offset;
+        buffer_offset += offset;
+    }
+
     pipeline_info.vertex_layout = layout;
-    vertex_buffer.Commit(vs_input_size);
+    vertex_buffer.Commit(buffer_offset - array_offset);
 
     std::array<vk::Buffer, 16> buffers;
     buffers.fill(vertex_buffer.GetHandle());
 
-    // Bind the vertex buffers with all the bindings
+    // Bind the vertex buffer with all the bindings
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.bindVertexBuffers(0, layout.binding_count, buffers.data(),
                                      binding_offsets.data());
@@ -503,6 +506,7 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
     }
 
     SetupVertexArray(vs_input_size, vs_input_index_min, vs_input_index_max);
+    pipeline_info.rasterization.topology.Assign(regs.pipeline.triangle_topology);
     pipeline_cache.BindPipeline(pipeline_info);
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
@@ -528,7 +532,7 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
         command_buffer.bindIndexBuffer(index_buffer.GetHandle(), index_offset, index_type);
 
         // Submit draw
-        command_buffer.drawIndexed(regs.pipeline.num_vertices, 1, 0, 0, 0);
+        command_buffer.drawIndexed(regs.pipeline.num_vertices, 1, 0, -vs_input_index_min, 0);
     } else {
         command_buffer.draw(regs.pipeline.num_vertices, 1, 0, 0);
     }
