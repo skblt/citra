@@ -8,6 +8,7 @@
 #include "common/logging/log.h"
 #include "core/core.h"
 #include "video_core/pica_state.h"
+#include "video_core/renderer_opengl/gl_shader_decompiler.h"
 #include "video_core/renderer_vulkan/vk_shader_gen.h"
 #include "video_core/video_core.h"
 
@@ -1586,8 +1587,8 @@ void main() {
 
 std::optional<std::string> GenerateVertexShader(const Pica::Shader::ShaderSetup& setup,
                                                 const PicaVSConfig& config) {
-    /*std::string out = "#extension GL_ARB_separate_shader_objects : enable\n";
-    out += ShaderDecompiler::GetCommonDeclarations();
+    std::string out = "#extension GL_ARB_separate_shader_objects : enable\n";
+    out += OpenGL::ShaderDecompiler::GetCommonDeclarations();
 
     std::array<bool, 16> used_regs{};
     const auto get_input_reg = [&used_regs](u32 reg) {
@@ -1604,18 +1605,19 @@ std::optional<std::string> GenerateVertexShader(const Pica::Shader::ShaderSetup&
         return "";
     };
 
-    auto program_source_opt = ShaderDecompiler::DecompileProgram(
+    auto program_source_opt = OpenGL::ShaderDecompiler::DecompileProgram(
         setup.program_code, setup.swizzle_data, config.state.main_offset, get_input_reg,
         get_output_reg, config.state.sanitize_mul);
 
-    if (!program_source_opt)
+    if (!program_source_opt) {
         return std::nullopt;
+    }
 
     std::string& program_source = program_source_opt->code;
 
     out += R"(
 #define uniforms vs_uniforms
-layout (std140) uniform vs_config {
+layout (set = 0, binding = 0, std140) uniform vs_config {
     pica_uniforms uniforms;
 };
 
@@ -1623,15 +1625,14 @@ layout (std140) uniform vs_config {
     // input attributes declaration
     for (std::size_t i = 0; i < used_regs.size(); ++i) {
         if (used_regs[i]) {
-            out += fmt::format("layout(location = {0}) in vec4 vs_in_reg{0};\n", i);
+            out += fmt::format("layout(location = {0}) in {1}vec4 vs_in_reg{0};\n", i, i == 3 ? "" : "");
         }
     }
     out += '\n';
 
     // output attributes declaration
     for (u32 i = 0; i < config.state.num_outputs; ++i) {
-        out += "layout(location = " + std::to_string(i) + ") out vec4 vs_out_attr" +
-std::to_string(i) + ";\n";
+        out += fmt::format("layout(location = {}) out vec4 vs_out_attr{};\n", i, i);
     }
 
     out += "\nvoid main() {\n";
@@ -1642,19 +1643,17 @@ std::to_string(i) + ";\n";
 
     out += program_source;
 
-    return {{std::move(out)}};*/
-    return std::nullopt;
+    return out;
 }
 
 static std::string GetGSCommonSource(const PicaGSConfigCommonRaw& config) {
-    /*std::string out = GetVertexInterfaceDeclaration(true, separable_shader);
+    std::string out = GetVertexInterfaceDeclaration(true);
     out += UniformBlockDef;
-    out += ShaderDecompiler::GetCommonDeclarations();
+    out += OpenGL::ShaderDecompiler::GetCommonDeclarations();
 
     out += '\n';
     for (u32 i = 0; i < config.vs_output_attributes; ++i) {
-        out += ("layout(location = " + std::to_string(i) + ") in vec4 vs_out_attr" +
-std::to_string(i) + "[];\n";
+        out += fmt::format("layout(location = {}) in vec4 vs_out_attr{}[];\n", i, i);
     }
 
     out += R"(
@@ -1728,8 +1727,7 @@ void EmitPrim(Vertex vtx0, Vertex vtx1, Vertex vtx2) {
 }
 )";
 
-    return out;*/
-    return "";
+    return out;
 };
 
 std::string GenerateFixedGeometryShader(const PicaFixedGSConfig& config) {
