@@ -90,8 +90,17 @@ vk::Format ToVkAttributeFormat(VertexAttribute attrib) {
         case 4:
             return vk::Format::eR32G32B32A32Sfloat;
         }
+    case AttribType::Ubyte:
+        switch (attrib.size) {
+        case 4:
+            return vk::Format::eR8G8B8A8Uint;
+        default:
+            fmt::print("{}\n", attrib.size.Value());
+            UNREACHABLE();
+        }
+
     default:
-        LOG_CRITICAL(Render_Vulkan, "Unimplemented vertex attribute format!");
+        LOG_CRITICAL(Render_Vulkan, "Unimplemented vertex attribute type {}", attrib.type.Value());
         UNREACHABLE();
     }
 
