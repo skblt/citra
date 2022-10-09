@@ -530,7 +530,8 @@ void PipelineCache::LoadDiskCache() {
         return;
     }
 
-    const std::string cache_file_path = GetPipelineCacheDir() + DIR_SEP "pipelines.bin";
+    const std::string cache_file_path = fmt::format("{}{:x}{:x}.bin", GetPipelineCacheDir(),
+                                                    instance.GetVendorID(), instance.GetDeviceID());
     vk::PipelineCacheCreateInfo cache_info = {.initialDataSize = 0, .pInitialData = nullptr};
 
     FileUtil::IOFile cache_file{cache_file_path, "r"};
@@ -541,7 +542,8 @@ void PipelineCache::LoadDiskCache() {
         auto cache_data = std::vector<u8>(cache_file_size);
         if (cache_file.ReadBytes(cache_data.data(), cache_file_size)) {
             if (!IsCacheValid(cache_data.data(), cache_file_size)) {
-                LOG_WARNING(Render_Vulkan, "Pipeline cache provided invalid");
+                LOG_WARNING(Render_Vulkan, "Pipeline cache provided invalid, deleting");
+                FileUtil::Delete(cache_file_path);
             } else {
                 cache_info.initialDataSize = cache_file_size;
                 cache_info.pInitialData = cache_data.data();
@@ -560,7 +562,8 @@ void PipelineCache::SaveDiskCache() {
         return;
     }
 
-    const std::string cache_file_path = GetPipelineCacheDir() + DIR_SEP "pipelines.bin";
+    const std::string cache_file_path = fmt::format("{}{:x}{:x}.bin", GetPipelineCacheDir(),
+                                                    instance.GetVendorID(), instance.GetDeviceID());
     FileUtil::IOFile cache_file{cache_file_path, "wb"};
     if (!cache_file.IsOpen()) {
         LOG_INFO(Render_Vulkan, "Unable to open pipeline cache for writing");
@@ -634,7 +637,7 @@ bool PipelineCache::EnsureDirectories() const {
 }
 
 std::string PipelineCache::GetPipelineCacheDir() const {
-    return FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir) + "vulkan";
+    return FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir) + "vulkan" + DIR_SEP;
 }
 
 } // namespace Vulkan
