@@ -12,9 +12,9 @@ namespace OpenGL {
 D24S8toRGBA8::D24S8toRGBA8(bool use_texture_view) : use_texture_view{use_texture_view} {
     constexpr std::string_view cs_source = R"(
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
-layout(binding = 0) uniform sampler2D depth;
-layout(binding = 1) uniform usampler2D stencil;
-layout(rgba8, binding = 2) uniform writeonly image2D color;
+layout(binding = 0) uniform highp sampler2D depth;
+layout(binding = 1) uniform lowp usampler2D stencil;
+layout(rgba8, binding = 2) uniform highp writeonly image2D color;
 
 uniform mediump ivec2 src_offset;
 
