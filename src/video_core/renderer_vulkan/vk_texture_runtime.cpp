@@ -222,7 +222,11 @@ void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::spa
 
     // Handle simple D24S8 interleave case
     if (surface.GetInternalFormat() == vk::Format::eD24UnormS8Uint) {
-        return Pica::Texture::InterleaveD24S8(source, dest);
+        if (!upload) {
+            return Pica::Texture::InterleaveD24S8(source, dest);
+        } else {
+            UNREACHABLE();
+        }
     }
 
     if (upload) {
@@ -242,6 +246,8 @@ void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::spa
             return Pica::Texture::ConvertD32S8ToD24S8(source, dest);
         case VideoCore::PixelFormat::RGBA4:
             return Pica::Texture::ConvertRGBA8ToRGBA4(source, dest);
+        case VideoCore::PixelFormat::RGB8:
+            return Pica::Texture::ConvertRGBAToBGR(source, dest);
         default:
             break;
         }
