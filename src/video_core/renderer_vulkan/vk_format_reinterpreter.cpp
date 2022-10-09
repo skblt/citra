@@ -15,9 +15,9 @@ D24S8toRGBA8::D24S8toRGBA8(const Instance& instance, TaskScheduler& scheduler,
 #version 450 core
 #extension GL_EXT_samplerless_texture_functions : require
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
-layout(set = 0, binding = 0) uniform texture2D depth;
-layout(set = 0, binding = 1) uniform utexture2D stencil;
-layout(set = 0, binding = 2, rgba8) uniform writeonly image2D color;
+layout(set = 0, binding = 0) uniform highp texture2D depth;
+layout(set = 0, binding = 1) uniform lowp utexture2D stencil;
+layout(set = 0, binding = 2, rgba8) uniform highp writeonly image2D color;
 
 layout(push_constant, std140) uniform ComputeInfo {
     mediump ivec2 src_offset;
