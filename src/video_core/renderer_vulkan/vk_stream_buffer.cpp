@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <algorithm>
+#include "common/alignment.h"
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
@@ -115,6 +116,11 @@ std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
 
     const u32 current_bucket = scheduler.GetCurrentSlotIndex();
     auto& bucket = buckets[current_bucket];
+
+    if (alignment > 0) {
+        bucket.offset = Common::AlignUp(bucket.offset, alignment);
+    }
+
     if (bucket.offset + size > bucket_size) {
         UNREACHABLE();
     }

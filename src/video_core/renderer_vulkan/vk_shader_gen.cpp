@@ -1625,7 +1625,24 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
     // input attributes declaration
     for (std::size_t i = 0; i < used_regs.size(); ++i) {
         if (used_regs[i]) {
-            out += fmt::format("layout(location = {0}) in {1}vec4 vs_in_reg{0};\n", i, i == 3 ? "" : "");
+            std::string_view prefix;
+            switch (config.state.attrib_types[i]) {
+            case AttribType::Float:
+                prefix = "";
+                break;
+            case AttribType::Byte:
+            case AttribType::Short:
+                prefix = "i";
+                break;
+            case AttribType::Ubyte:
+                prefix = "u";
+                break;
+            default:
+                LOG_CRITICAL(Render_Vulkan, "Unknown attrib type {}", config.state.attrib_types[i]);
+                UNREACHABLE();
+            }
+
+            out += fmt::format("layout(location = {0}) in {1}vec4 vs_in_reg{0};\n", i, prefix);
         }
     }
     out += '\n';
