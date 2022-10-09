@@ -22,8 +22,6 @@ constexpr u32 MAX_VERTEX_BINDINGS = 16;
 constexpr u32 MAX_DESCRIPTORS = 8;
 constexpr u32 MAX_DESCRIPTOR_SETS = 6;
 
-enum class AttribType : u32 { Float = 0, Int = 1, Short = 2, Byte = 3, Ubyte = 4 };
-
 /**
  * The pipeline state is tightly packed with bitfields to reduce
  * the overhead of hashing as much as possible
@@ -154,7 +152,8 @@ public:
     void BindPipeline(const PipelineInfo& info);
 
     /// Binds a PICA decompiled vertex shader
-    bool UseProgrammableVertexShader(const Pica::Regs& regs, Pica::Shader::ShaderSetup& setup);
+    bool UseProgrammableVertexShader(const Pica::Regs& regs, Pica::Shader::ShaderSetup& setup,
+                                     const VertexLayout& layout);
 
     /// Binds a passthrough vertex shader
     void UseTrivialVertexShader();

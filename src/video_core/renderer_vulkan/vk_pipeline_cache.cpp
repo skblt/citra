@@ -78,33 +78,20 @@ u32 AttribBytes(VertexAttribute attrib) {
 }
 
 vk::Format ToVkAttributeFormat(VertexAttribute attrib) {
-    switch (attrib.type) {
-    case AttribType::Float:
-        switch (attrib.size) {
-        case 1:
-            return vk::Format::eR32Sfloat;
-        case 2:
-            return vk::Format::eR32G32Sfloat;
-        case 3:
-            return vk::Format::eR32G32B32Sfloat;
-        case 4:
-            return vk::Format::eR32G32B32A32Sfloat;
-        }
-    case AttribType::Ubyte:
-        switch (attrib.size) {
-        case 4:
-            return vk::Format::eR8G8B8A8Uint;
-        default:
-            fmt::print("{}\n", attrib.size.Value());
-            UNREACHABLE();
-        }
+    constexpr std::array attribute_formats = {
+        std::array{vk::Format::eR32Sfloat, vk::Format::eR32G32Sfloat, vk::Format::eR32G32B32Sfloat,
+                   vk::Format::eR32G32B32A32Sfloat},
+        std::array{vk::Format::eR32Sint, vk::Format::eR32G32Sint, vk::Format::eR32G32B32Sint,
+                   vk::Format::eR32G32B32A32Sint},
+        std::array{vk::Format::eR16Sint, vk::Format::eR16G16Sint, vk::Format::eR16G16B16Sint,
+                   vk::Format::eR16G16B16A16Sint},
+        std::array{vk::Format::eR8Sint, vk::Format::eR8G8Sint, vk::Format::eR8G8B8Sint,
+                   vk::Format::eR8G8B8A8Sint},
+        std::array{vk::Format::eR8Uint, vk::Format::eR8G8Uint, vk::Format::eR8G8B8Uint,
+                   vk::Format::eR8G8B8A8Uint}};
 
-    default:
-        LOG_CRITICAL(Render_Vulkan, "Unimplemented vertex attribute type {}", attrib.type.Value());
-        UNREACHABLE();
-    }
-
-    return vk::Format::eR32Sfloat;
+    ASSERT(attrib.size <= 4);
+    return attribute_formats[static_cast<u32>(attrib.type.Value())][attrib.size.Value() - 1];
 }
 
 vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
@@ -197,8 +184,14 @@ void PipelineCache::BindPipeline(const PipelineInfo& info) {
 }
 
 bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
-                                                Pica::Shader::ShaderSetup& setup) {
-    const PicaVSConfig config{regs.vs, setup};
+                                                Pica::Shader::ShaderSetup& setup,
+                                                const VertexLayout& layout) {
+    PicaVSConfig config{regs.vs, setup};
+    for (u32 i = 0; i < layout.attribute_count; i++) {
+        const auto& attrib = layout.attributes[i];
+        config.state.attrib_types[attrib.location.Value()] = attrib.type.Value();
+    }
+
     auto [handle, result] =
         programmable_vertex_shaders.Get(config, setup, vk::ShaderStageFlagBits::eVertex,
                                         instance.GetDevice(), ShaderOptimization::Debug);

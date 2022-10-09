@@ -252,6 +252,7 @@ bool Instance::CreateDevice() {
 
     AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     AddExtension(VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME);
+    AddExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME);
     timeline_semaphores = AddExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
@@ -322,6 +323,7 @@ bool Instance::CreateDevice() {
                          .shaderStorageImageMultisample = available.shaderStorageImageMultisample,
                          .shaderClipDistance = available.shaderClipDistance}},
         vk::PhysicalDeviceDepthClipControlFeaturesEXT{.depthClipControl = true},
+        vk::PhysicalDeviceIndexTypeUint8FeaturesEXT{.indexTypeUint8 = true},
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>()};
 
