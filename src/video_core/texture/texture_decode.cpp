@@ -242,6 +242,16 @@ void ConvertBGRToRGBA(std::span<const std::byte> source, std::span<std::byte> de
     }
 }
 
+void ConvertRGBAToBGR(std::span<const std::byte> source, std::span<std::byte> dest) {
+    u32 j = 0;
+    for (std::size_t i = 0; i < dest.size(); i += 3) {
+        dest[i] = source[j + 2];
+        dest[i + 1] = source[j + 1];
+        dest[i + 2] = source[j];
+        j += 4;
+    }
+}
+
 void ConvertABGRToRGBA(std::span<const std::byte> source, std::span<std::byte> dest) {
     for (u32 i = 0; i < dest.size(); i += 4) {
         u32 abgr;

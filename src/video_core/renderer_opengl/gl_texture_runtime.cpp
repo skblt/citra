@@ -142,8 +142,12 @@ void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::spa
     } else if (format == VideoCore::PixelFormat::RGB8 && driver.IsOpenGLES()) {
         return Pica::Texture::ConvertBGRToRGB(source, dest);
     } else {
-        ASSERT(dest.size() >= source.size());
-        std::memcpy(dest.data(), source.data(), source.size());
+        // Sometimes the source size might be larger than the destination.
+        // This can happen during texture downloads when FromInterval aligns
+        // the flush range to scanline boundaries. In that case only copy
+        // what we need
+        const std::size_t copy_size = std::min(source.size(), dest.size());
+        std::memcpy(dest.data(), source.data(), copy_size);
     }
 }
 
