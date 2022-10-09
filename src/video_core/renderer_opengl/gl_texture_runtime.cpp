@@ -258,8 +258,10 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
         .dst_level = copy.dst_level,
         .src_layer = copy.src_layer,
         .dst_layer = copy.dst_layer,
-        .src_rect = {copy.src_offset.x, copy.extent.height, copy.extent.width, copy.src_offset.x},
-        .dst_rect = {copy.dst_offset.x, copy.extent.height, copy.extent.width, copy.dst_offset.x}};
+        .src_rect = {copy.src_offset.x, copy.src_offset.y + copy.extent.height,
+                     copy.src_offset.x + copy.extent.width, copy.src_offset.y},
+        .dst_rect = {copy.dst_offset.x, copy.dst_offset.y + copy.extent.height,
+                     copy.dst_offset.x + copy.extent.width, copy.dst_offset.y}};
 
     return BlitTextures(source, dest, blit);
 }
