@@ -328,7 +328,7 @@ RasterizerVulkan::VertexArrayInfo RasterizerVulkan::AnalyzeVertexArray(bool is_i
 
 void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min,
                                         u32 vs_input_index_max) {
-    auto [array_ptr, array_offset, _] = vertex_buffer.Map(vs_input_size, 4);
+    auto [array_ptr, array_offset, invalidate] = vertex_buffer.Map(vs_input_size, 4);
 
     // The Nintendo 3DS has 12 attribute loaders which are used to tell the GPU
     // how to interpret vertex data. The program firsts sets GPUREG_ATTR_BUF_BASE to the base
@@ -340,9 +340,8 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     const auto& vertex_attributes = regs.pipeline.vertex_attributes;
     PAddr base_address = vertex_attributes.GetPhysicalBaseAddress(); // GPUREG_ATTR_BUF_BASE
 
-    VertexLayout layout{};
     std::array<bool, 16> enable_attributes{};
-    std::array<u64, 16> binding_offsets{};
+    VertexLayout layout{};
 
     u32 buffer_offset = array_offset;
     for (const auto& loader : vertex_attributes.attribute_loaders) {
@@ -387,26 +386,32 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
         const PAddr data_addr =
             base_address + loader.data_offset + (vs_input_index_min * loader.byte_count);
         const u32 vertex_num = vs_input_index_max - vs_input_index_min + 1;
-        const u32 data_size = loader.byte_count * vertex_num;
+        u32 data_size = loader.byte_count * vertex_num;
 
         res_cache.FlushRegion(data_addr, data_size, nullptr);
         std::memcpy(array_ptr, VideoCore::g_memory->GetPhysicalPointer(data_addr), data_size);
 
         // Create the binding associated with this loader
-        VertexBinding& binding = layout.bindings.at(layout.binding_count);
+        VertexBinding& binding = layout.bindings[layout.binding_count];
         binding.binding.Assign(layout.binding_count);
         binding.fixed.Assign(0);
         binding.stride.Assign(loader.byte_count);
 
         // Keep track of the binding offsets so we can bind the vertex buffer later
         binding_offsets[layout.binding_count++] = buffer_offset;
+        data_size = Common::AlignUp(data_size, 16);
         array_ptr += data_size;
         buffer_offset += data_size;
     }
 
-    // Reserve the last binding for fixed attributes
-    u32 offset = 0;
-    bool has_fixed_binding = false;
+    // Reserve the last binding for fixed and default attributes
+    // Place the default attrib at offset zero for easy access
+    constexpr Common::Vec4f default_attrib = Common::MakeVec(0.f, 0.f, 0.f, 1.f);
+    u32 offset = sizeof(Common::Vec4f);
+    std::memcpy(array_ptr, default_attrib.AsArray(), sizeof(Common::Vec4f));
+    array_ptr += sizeof(Common::Vec4f);
+
+    // Find all fixed attributes and assign them to the last binding
     for (std::size_t i = 0; i < 16; i++) {
         if (vertex_attributes.IsDefaultAttribute(i)) {
             const u32 reg = regs.vs.GetRegisterForAttribute(i);
@@ -415,11 +420,10 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
                 const std::array data = {attr.x.ToFloat32(), attr.y.ToFloat32(), attr.z.ToFloat32(),
                                          attr.w.ToFloat32()};
 
-                // Copy the data to the end of the buffer
                 const u32 data_size = sizeof(float) * static_cast<u32>(data.size());
                 std::memcpy(array_ptr, data.data(), data_size);
 
-                VertexAttribute& attribute = layout.attributes.at(layout.attribute_count++);
+                VertexAttribute& attribute = layout.attributes[layout.attribute_count++];
                 attribute.binding.Assign(layout.binding_count);
                 attribute.location.Assign(reg);
                 attribute.offset.Assign(offset);
@@ -428,20 +432,35 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
 
                 offset += data_size;
                 array_ptr += data_size;
-                has_fixed_binding = true;
+                enable_attributes[reg] = true;
             }
         }
     }
 
-    if (has_fixed_binding) {
-        VertexBinding& binding = layout.bindings.at(layout.binding_count);
-        binding.binding.Assign(layout.binding_count);
-        binding.fixed.Assign(1);
-        binding.stride.Assign(offset);
-
-        binding_offsets[layout.binding_count++] = buffer_offset;
-        buffer_offset += offset;
+    // Loop one more time to find unused attributes and assign them to the default one
+    // This needs to happen because i = 2 might be assigned to location = 3 so the loop
+    // above would skip setting it
+    for (std::size_t i = 0; i < 16; i++) {
+        // If the attribute is just disabled, shove the default attribute to avoid
+        // errors if the shader ever decides to use it. The pipeline cache can discard
+        // this if needed since it has access to the usage mask from the code generator
+        if (!enable_attributes[i]) {
+            VertexAttribute& attribute = layout.attributes[layout.attribute_count++];
+            attribute.binding.Assign(layout.binding_count);
+            attribute.location.Assign(i);
+            attribute.offset.Assign(0);
+            attribute.type.Assign(AttribType::Float);
+            attribute.size.Assign(4);
+        }
     }
+
+    // Define the fixed+default binding
+    VertexBinding& binding = layout.bindings[layout.binding_count];
+    binding.binding.Assign(layout.binding_count);
+    binding.fixed.Assign(1);
+    binding.stride.Assign(offset);
+    binding_offsets[layout.binding_count++] = buffer_offset;
+    buffer_offset += offset;
 
     pipeline_info.vertex_layout = layout;
     vertex_buffer.Commit(buffer_offset - array_offset);
@@ -457,7 +476,8 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
 
 bool RasterizerVulkan::SetupVertexShader() {
     MICROPROFILE_SCOPE(OpenGL_VS);
-    return pipeline_cache.UseProgrammableVertexShader(Pica::g_state.regs, Pica::g_state.vs);
+    return pipeline_cache.UseProgrammableVertexShader(Pica::g_state.regs, Pica::g_state.vs,
+                                                      pipeline_info.vertex_layout);
 }
 
 bool RasterizerVulkan::SetupGeometryShader() {
@@ -484,14 +504,6 @@ bool RasterizerVulkan::AccelerateDrawBatch(bool is_indexed) {
         }
     }
 
-    if (!SetupVertexShader()) {
-        return false;
-    }
-
-    if (!SetupGeometryShader()) {
-        return false;
-    }
-
     return Draw(true, is_indexed);
 }
 
@@ -506,6 +518,15 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
     }
 
     SetupVertexArray(vs_input_size, vs_input_index_min, vs_input_index_max);
+
+    if (!SetupVertexShader()) {
+        return false;
+    }
+
+    if (!SetupGeometryShader()) {
+        return false;
+    }
+
     pipeline_info.rasterization.topology.Assign(regs.pipeline.triangle_topology);
     pipeline_cache.BindPipeline(pipeline_info);
 
@@ -848,6 +869,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         succeeded = AccelerateDrawBatchInternal(is_indexed);
     } else {
         pipeline_info.rasterization.topology.Assign(Pica::PipelineRegs::TriangleTopology::List);
+        pipeline_info.vertex_layout = HardwareVertex::GetVertexLayout();
         pipeline_cache.UseTrivialVertexShader();
         pipeline_cache.UseTrivialGeometryShader();
         pipeline_cache.BindPipeline(pipeline_info);

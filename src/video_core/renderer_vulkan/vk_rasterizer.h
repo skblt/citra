@@ -273,6 +273,7 @@ private:
     };
 
     std::vector<HardwareVertex> vertex_batch;
+    std::array<u64, 16> binding_offsets{};
     ImageAlloc default_texture;
     vk::Sampler default_sampler;
 
@@ -288,8 +289,6 @@ private:
         bool proctex_diff_lut_dirty = true;
         bool dirty = true;
     } uniform_block_data = {};
-
-    std::array<bool, 16> hw_enabled_attributes{};
 
     std::array<SamplerInfo, 3> texture_samplers;
     SamplerInfo texture_cube_sampler;
