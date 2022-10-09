@@ -30,7 +30,7 @@ VideoCore::PixelFormat ToFormatDepth(u32 index) {
     switch (index) {
     case 0:
         return VideoCore::PixelFormat::D16;
-    case 1:
+    case 2:
         return VideoCore::PixelFormat::D24;
     case 3:
         return VideoCore::PixelFormat::D24S8;
