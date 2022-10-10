@@ -289,6 +289,16 @@ void ConvertRGB5A1ToRGBA8(std::span<const std::byte> source, std::span<std::byte
     }
 }
 
+void ConvertRGBA8ToRGB5A1(std::span<const std::byte> source, std::span<std::byte> dest) {
+    u32 j = 0;
+    for (std::size_t i = 0; i < dest.size(); i += 2) {
+        Common::Vec4<u8> rgba;
+        std::memcpy(rgba.AsArray(), source.data() + j, sizeof(rgba));
+        Color::EncodeRGB5A1(rgba, reinterpret_cast<u8*>(dest.data() + i));
+        j += 4;
+    }
+}
+
 void ConvertD32S8ToD24S8(std::span<const std::byte> source, std::span<std::byte> dest) {
     std::size_t depth_offset = 0;
     std::size_t stencil_offset = 4 * source.size() / 5;
@@ -311,6 +321,17 @@ void InterleaveD24S8(std::span<const std::byte> source, std::span<std::byte> des
     for (std::size_t i = 0; i < dest.size(); i += 4) {
         dest[i] = source[stencil_offset];
         std::memcpy(dest.data() + i + 1, source.data() + depth_offset, 3);
+        depth_offset += 3;
+        stencil_offset += 1;
+    }
+}
+
+void DeinterleaveD24S8(std::span<const std::byte> source, std::span<std::byte> dest) {
+    std::size_t depth_offset = 0;
+    std::size_t stencil_offset = 3 * source.size() / 4;
+    for (std::size_t i = 0; i < dest.size(); i += 4) {
+        dest[stencil_offset] = source[i];
+        std::memcpy(dest.data() + depth_offset, source.data() + i + 1, 3);
         depth_offset += 3;
         stencil_offset += 1;
     }

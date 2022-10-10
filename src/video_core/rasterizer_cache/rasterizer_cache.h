@@ -916,10 +916,8 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
 
     const auto upload_data = source_ptr.GetWriteBytes(load_info.end - load_info.addr);
     if (surface->is_tiled) {
-        std::vector<std::byte> unswizzled_data(load_info.width * load_info.height *
-                                               GetBytesPerPixel(load_info.pixel_format));
-        UnswizzleTexture(load_info, load_info.addr, load_info.end, upload_data, unswizzled_data);
-        runtime.FormatConvert(*surface, true, unswizzled_data, staging.mapped);
+        UnswizzleTexture(load_info, load_info.addr, load_info.end, upload_data, staging.mapped,
+                         runtime.NeedsConvertion(surface->pixel_format));
     } else {
         runtime.FormatConvert(*surface, true, upload_data, staging.mapped);
     }
@@ -959,10 +957,8 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
             const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
 
             if (surface->is_tiled) {
-                std::vector<std::byte> temp_data(flush_info.width * flush_info.height *
-                                                 GetBytesPerPixel(flush_info.pixel_format));
-                runtime.FormatConvert(*surface, false, mapped, temp_data);
-                SwizzleTexture(flush_info, flush_start, flush_end, temp_data, download_dest);
+                SwizzleTexture(flush_info, flush_start, flush_end, mapped, download_dest,
+                               runtime.NeedsConvertion(surface->pixel_format));
             } else {
                 runtime.FormatConvert(*surface, false, mapped, download_dest);
             }
