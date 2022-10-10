@@ -439,7 +439,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     // Loop one more time to find unused attributes and assign them to the default one
     // This needs to happen because i = 2 might be assigned to location = 3 so the loop
     // above would skip setting it
-    for (std::size_t i = 0; i < 16; i++) {
+    for (u32 i = 0; i < 16; i++) {
         // If the attribute is just disabled, shove the default attribute to avoid
         // errors if the shader ever decides to use it. The pipeline cache can discard
         // this if needed since it has access to the usage mask from the code generator
