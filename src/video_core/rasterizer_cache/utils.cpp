@@ -48,17 +48,20 @@ ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_d
 }
 
 void SwizzleTexture(const SurfaceParams& swizzle_info, PAddr start_addr, PAddr end_addr,
-                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled) {
+                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled,
+                    bool convert) {
     const u32 func_index = static_cast<u32>(swizzle_info.pixel_format);
-    const MortonFunc SwizzleImpl = SWIZZLE_TABLE[func_index];
+    const MortonFunc SwizzleImpl = (convert ? SWIZZLE_TABLE_CONVERTED : SWIZZLE_TABLE)[func_index];
     SwizzleImpl(swizzle_info.width, swizzle_info.height, start_addr - swizzle_info.addr,
                 end_addr - swizzle_info.addr, source_linear, dest_tiled);
 }
 
 void UnswizzleTexture(const SurfaceParams& unswizzle_info, PAddr start_addr, PAddr end_addr,
-                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear) {
+                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear,
+                      bool convert) {
     const u32 func_index = static_cast<u32>(unswizzle_info.pixel_format);
-    const MortonFunc UnswizzleImpl = UNSWIZZLE_TABLE[func_index];
+    const MortonFunc UnswizzleImpl =
+        (convert ? UNSWIZZLE_TABLE_CONVERTED : UNSWIZZLE_TABLE)[func_index];
     UnswizzleImpl(unswizzle_info.width, unswizzle_info.height, start_addr - unswizzle_info.addr,
                   end_addr - unswizzle_info.addr, dest_linear, source_tiled);
 }

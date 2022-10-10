@@ -82,7 +82,6 @@ private:
     // Swapchain state
     std::vector<Image> swapchain_images;
     u32 current_image = 0;
-    u32 current_frame = 0;
     bool is_outdated = true;
     bool is_suboptimal = true;
 };

@@ -97,6 +97,9 @@ public:
     [[nodiscard]] const ReinterpreterList& GetPossibleReinterpretations(
         VideoCore::PixelFormat dest_format) const;
 
+    /// Returns true if the provided pixel format needs convertion
+    [[nodiscard]] bool NeedsConvertion(VideoCore::PixelFormat format) const;
+
 private:
     /// Returns the framebuffer used for texture downloads
     void BindFramebuffer(GLenum target, GLint level, GLenum textarget, VideoCore::SurfaceType type,

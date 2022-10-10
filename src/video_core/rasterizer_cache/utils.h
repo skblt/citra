@@ -116,7 +116,8 @@ struct TextureCubeConfig {
  * @param dest_linear The output buffer where the generated linear data will be written to.
  */
 void UnswizzleTexture(const SurfaceParams& unswizzle_info, PAddr start_addr, PAddr end_addr,
-                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear);
+                      std::span<std::byte> source_tiled, std::span<std::byte> dest_linear,
+                      bool convert = false);
 
 /**
  * Swizzles a linear texture according to the morton code.
@@ -128,7 +129,8 @@ void UnswizzleTexture(const SurfaceParams& unswizzle_info, PAddr start_addr, PAd
  * @param dest_linear The output buffer where the generated linear data will be written to.
  */
 void SwizzleTexture(const SurfaceParams& swizzle_info, PAddr start_addr, PAddr end_addr,
-                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled);
+                    std::span<std::byte> source_linear, std::span<std::byte> dest_tiled,
+                    bool convert = false);
 
 } // namespace VideoCore
 

@@ -210,50 +210,28 @@ void TextureRuntime::Recycle(const VideoCore::HostTextureTag tag, ImageAlloc&& a
 
 void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
                                    std::span<std::byte> dest) {
-    if (!surface.NeedsConvert()) {
+    if (!NeedsConvertion(surface.pixel_format)) {
         std::memcpy(dest.data(), source.data(), source.size());
         return;
     }
 
-    // Since this is the most common case handle it separately
-    if (surface.pixel_format == VideoCore::PixelFormat::RGBA8) {
-        return Pica::Texture::ConvertABGRToRGBA(source, dest);
-    }
-
-    // Handle simple D24S8 interleave case
-    if (surface.GetInternalFormat() == vk::Format::eD24UnormS8Uint) {
-        if (!upload) {
-            return Pica::Texture::InterleaveD24S8(source, dest);
-        } else {
-            UNREACHABLE();
-        }
-    }
-
     if (upload) {
         switch (surface.pixel_format) {
+        case VideoCore::PixelFormat::RGBA8:
+            return Pica::Texture::ConvertABGRToRGBA(source, dest);
         case VideoCore::PixelFormat::RGB8:
             return Pica::Texture::ConvertBGRToRGBA(source, dest);
-        case VideoCore::PixelFormat::RGBA4:
-            return Pica::Texture::ConvertRGBA4ToRGBA8(source, dest);
-        case VideoCore::PixelFormat::RGB5A1:
-            return Pica::Texture::ConvertRGB5A1ToRGBA8(source, dest);
         default:
             break;
         }
     } else {
         switch (surface.pixel_format) {
-        case VideoCore::PixelFormat::D24S8:
-            return Pica::Texture::ConvertD32S8ToD24S8(source, dest);
         case VideoCore::PixelFormat::RGBA4:
             return Pica::Texture::ConvertRGBA8ToRGBA4(source, dest);
-        case VideoCore::PixelFormat::RGB8:
-            return Pica::Texture::ConvertRGBAToBGR(source, dest);
-        default:
-            break;
         }
     }
 
-    LOG_WARNING(Render_Vulkan, "Missing format convertion: {} {} {}",
+    LOG_WARNING(Render_Vulkan, "Missing linear format convertion: {} {} {}",
                 vk::to_string(surface.traits.native), upload ? "->" : "<-",
                 vk::to_string(surface.alloc.format));
 }
@@ -457,6 +435,14 @@ const ReinterpreterList& TextureRuntime::GetPossibleReinterpretations(
     return reinterpreters[static_cast<u32>(dest_format)];
 }
 
+bool TextureRuntime::NeedsConvertion(VideoCore::PixelFormat format) const {
+    const FormatTraits traits = instance.GetTraits(format);
+    const VideoCore::SurfaceType type = VideoCore::GetFormatType(format);
+    return type == VideoCore::SurfaceType::Color &&
+           (format == VideoCore::PixelFormat::RGBA8 || !traits.blit_support ||
+            !traits.attachment_support);
+}
+
 void TextureRuntime::Transition(vk::CommandBuffer command_buffer, ImageAlloc& alloc,
                                 vk::ImageLayout new_layout, u32 level, u32 level_count, u32 layer,
                                 u32 layer_count) {
@@ -588,9 +574,12 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
     if (is_scaled) {
         ScaledUpload(upload);
     } else {
+        u32 region_count = 0;
+        std::array<vk::BufferImageCopy, 2> copy_regions;
+
         vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
         const VideoCore::Rect2D rect = upload.texture_rect;
-        const vk::BufferImageCopy copy_region = {
+        vk::BufferImageCopy copy_region = {
             .bufferOffset = staging.buffer_offset,
             .bufferRowLength = rect.GetWidth(),
             .bufferImageHeight = rect.GetHeight(),
@@ -601,11 +590,25 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
             .imageOffset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom), 0},
             .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1}};
 
+        if (alloc.aspect & vk::ImageAspectFlagBits::eColor) {
+            copy_regions[region_count++] = copy_region;
+        } else if (alloc.aspect & vk::ImageAspectFlagBits::eDepth) {
+            copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eDepth;
+            copy_regions[region_count++] = copy_region;
+
+            if (alloc.aspect & vk::ImageAspectFlagBits::eStencil) {
+                copy_region.bufferOffset += 4 * staging.size / 5;
+                copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eStencil;
+                copy_regions[region_count++] = copy_region;
+            }
+        }
+
         runtime.Transition(command_buffer, alloc, vk::ImageLayout::eTransferDstOptimal, 0,
                            alloc.levels, 0,
                            texture_type == VideoCore::TextureType::CubeMap ? 6 : 1);
         command_buffer.copyBufferToImage(staging.buffer, alloc.image,
-                                         vk::ImageLayout::eTransferDstOptimal, copy_region);
+                                         vk::ImageLayout::eTransferDstOptimal, region_count,
+                                         copy_regions.data());
     }
 
     InvalidateAllWatcher();
@@ -665,13 +668,6 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
     // Lock this data until the next scheduler switch
     const u32 current_slot = scheduler.GetCurrentSlotIndex();
     runtime.staging_offsets[current_slot] += staging.size;
-}
-
-bool Surface::NeedsConvert() const {
-    // RGBA8 needs a byteswap since R8G8B8A8UnormPack32 does not exist
-    // D24S8 always needs an interleave pass even if natively supported
-    return alloc.format != traits.native || pixel_format == VideoCore::PixelFormat::RGBA8 ||
-           pixel_format == VideoCore::PixelFormat::D24S8;
 }
 
 u32 Surface::GetInternalBytesPerPixel() const {

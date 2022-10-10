@@ -22,13 +22,31 @@ inline T MakeInt(const std::byte* bytes) {
     return integer;
 }
 
-template <PixelFormat format>
+template <PixelFormat format, bool converted>
 inline void DecodePixel(const std::byte* source, std::byte* dest) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
 
     if constexpr (format == PixelFormat::D24S8) {
         const u32 d24s8 = std::rotl(MakeInt<u32>(source), 8);
         std::memcpy(dest, &d24s8, sizeof(u32));
+    } else if constexpr (format == PixelFormat::RGBA8 && converted) {
+        const u32 rgba = MakeInt<u32>(source);
+        const u32 abgr = Common::swap32(rgba);
+        std::memcpy(dest, &abgr, 4);
+    } else if constexpr (format == PixelFormat::RGB8 && converted) {
+        u32 rgb{};
+        std::memcpy(&rgb, source, 3);
+        const u32 abgr = Common::swap32(rgb << 8) | 0xFF000000;
+        std::memcpy(dest, &abgr, 4);
+    } else if constexpr (format == PixelFormat::RGB565 && converted) {
+        const auto abgr = Color::DecodeRGB565(reinterpret_cast<const u8*>(source));
+        std::memcpy(dest, abgr.AsArray(), 4);
+    } else if constexpr (format == PixelFormat::RGB5A1 && converted) {
+        const auto abgr = Color::DecodeRGB5A1(reinterpret_cast<const u8*>(source));
+        std::memcpy(dest, abgr.AsArray(), 4);
+    } else if constexpr (format == PixelFormat::RGBA4 && converted) {
+        const auto abgr = Color::DecodeRGBA4(reinterpret_cast<const u8*>(source));
+        std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::IA8) {
         std::memset(dest, static_cast<int>(source[1]), 3);
         dest[3] = source[0];
@@ -95,23 +113,43 @@ inline void DecodePixelETC1(u32 x, u32 y, const std::byte* source_tile, std::byt
     dest_pixel[3] = std::byte{alpha};
 }
 
-template <PixelFormat format>
+template <PixelFormat format, bool converted>
 inline void EncodePixel(const std::byte* source, std::byte* dest) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
 
     if constexpr (format == PixelFormat::D24S8) {
         const u32 s8d24 = std::rotr(MakeInt<u32>(source), 8);
         std::memcpy(dest, &s8d24, sizeof(u32));
+    } else if constexpr (format == PixelFormat::RGBA8 && converted) {
+        const u32 abgr = MakeInt<u32>(source);
+        const u32 rgba = Common::swap32(abgr);
+        std::memcpy(dest, &rgba, 4);
+    } else if constexpr (format == PixelFormat::RGB8 && converted) {
+        const u32 abgr = MakeInt<u32>(source);
+        const u32 rgb = Common::swap32(abgr << 8);
+        std::memcpy(dest, &rgb, 3);
+    } else if constexpr (format == PixelFormat::RGB565 && converted) {
+        Common::Vec4<u8> rgba;
+        std::memcpy(rgba.AsArray(), source, 4);
+        Color::EncodeRGB565(rgba, reinterpret_cast<u8*>(dest));
+    } else if constexpr (format == PixelFormat::RGB5A1 && converted) {
+        Common::Vec4<u8> rgba;
+        std::memcpy(rgba.AsArray(), source, 4);
+        Color::EncodeRGB5A1(rgba, reinterpret_cast<u8*>(dest));
+    } else if constexpr (format == PixelFormat::RGBA4 && converted) {
+        Common::Vec4<u8> rgba;
+        std::memcpy(rgba.AsArray(), source, 4);
+        Color::EncodeRGBA4(rgba, reinterpret_cast<u8*>(dest));
     } else {
         std::memcpy(dest, source, bytes_per_pixel);
     }
 }
 
-template <bool morton_to_linear, PixelFormat format>
+template <bool morton_to_linear, PixelFormat format, bool converted>
 inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer,
                            std::span<std::byte> linear_buffer) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
-    constexpr u32 linear_bytes_per_pixel = GetBytesPerPixel(format);
+    constexpr u32 linear_bytes_per_pixel = converted ? 4 : GetBytesPerPixel(format);
     constexpr bool is_compressed = format == PixelFormat::ETC1 || format == PixelFormat::ETC1A4;
     constexpr bool is_4bit = format == PixelFormat::I4 || format == PixelFormat::A4;
 
@@ -127,10 +165,10 @@ inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer,
                 } else if constexpr (is_4bit) {
                     DecodePixel4<format>(x, y, tile_buffer.data(), linear_pixel.data());
                 } else {
-                    DecodePixel<format>(tiled_pixel.data(), linear_pixel.data());
+                    DecodePixel<format, converted>(tiled_pixel.data(), linear_pixel.data());
                 }
             } else {
-                EncodePixel<format>(linear_pixel.data(), tiled_pixel.data());
+                EncodePixel<format, converted>(linear_pixel.data(), tiled_pixel.data());
             }
         }
     }
@@ -138,6 +176,7 @@ inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer,
 
 /**
  * @brief Performs morton to/from linear convertions on the provided pixel data
+ * @param converted If true performs RGBA8 to/from convertion to all color formats
  * @param width, height The dimentions of the rectangular region of pixels in linear_buffer
  * @param start_offset The number of bytes from the start of the first tile to the start of
  * tiled_buffer
@@ -160,11 +199,11 @@ inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer,
  * start_offset/end_offset are useful here as they tell us exactly where the data should be placed
  * in the linear_buffer.
  */
-template <bool morton_to_linear, PixelFormat format>
+template <bool morton_to_linear, PixelFormat format, bool converted = false>
 static void MortonCopy(u32 width, u32 height, u32 start_offset, u32 end_offset,
                        std::span<std::byte> linear_buffer, std::span<std::byte> tiled_buffer) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
-    constexpr u32 aligned_bytes_per_pixel = GetBytesPerPixel(format);
+    constexpr u32 aligned_bytes_per_pixel = converted ? 4 : GetBytesPerPixel(format);
     constexpr u32 tile_size = GetFormatBpp(format) * 64 / 8;
     static_assert(aligned_bytes_per_pixel >= bytes_per_pixel, "");
 
@@ -202,7 +241,7 @@ static void MortonCopy(u32 width, u32 height, u32 start_offset, u32 end_offset,
     if (start_offset < aligned_start_offset && !morton_to_linear) {
         std::array<std::byte, tile_size> tmp_buf;
         auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_stride);
-        MortonCopyTile<morton_to_linear, format>(width, tmp_buf, linear_data);
+        MortonCopyTile<morton_to_linear, format, converted>(width, tmp_buf, linear_data);
 
         std::memcpy(tiled_buffer.data(), tmp_buf.data() + start_offset - aligned_down_start_offset,
                     std::min(aligned_start_offset, end_offset) - start_offset);
@@ -215,7 +254,7 @@ static void MortonCopy(u32 width, u32 height, u32 start_offset, u32 end_offset,
     while (tiled_offset < buffer_end) {
         auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_stride);
         auto tiled_data = tiled_buffer.subspan(tiled_offset, tile_size);
-        MortonCopyTile<morton_to_linear, format>(width, tiled_data, linear_data);
+        MortonCopyTile<morton_to_linear, format, converted>(width, tiled_data, linear_data);
         tiled_offset += tile_size;
         LinearNextTile();
     }
@@ -225,7 +264,7 @@ static void MortonCopy(u32 width, u32 height, u32 start_offset, u32 end_offset,
     if (end_offset > std::max(aligned_start_offset, aligned_end_offset) && !morton_to_linear) {
         std::array<std::byte, tile_size> tmp_buf;
         auto linear_data = linear_buffer.subspan(linear_offset, linear_tile_stride);
-        MortonCopyTile<morton_to_linear, format>(width, tmp_buf, linear_data);
+        MortonCopyTile<morton_to_linear, format, converted>(width, tmp_buf, linear_data);
         std::memcpy(tiled_buffer.data() + tiled_offset, tmp_buf.data(),
                     end_offset - aligned_end_offset);
     }
@@ -254,6 +293,14 @@ static constexpr std::array<MortonFunc, 18> UNSWIZZLE_TABLE = {
     MortonCopy<true, PixelFormat::D24S8>   // 17
 };
 
+static constexpr std::array<MortonFunc, 18> UNSWIZZLE_TABLE_CONVERTED = {
+    MortonCopy<true, PixelFormat::RGBA8, true>,  // 0
+    MortonCopy<true, PixelFormat::RGB8, true>,   // 1
+    MortonCopy<true, PixelFormat::RGB5A1, true>, // 2
+    MortonCopy<true, PixelFormat::RGB565, true>, // 3
+    MortonCopy<true, PixelFormat::RGBA4, true>   // 4
+};
+
 static constexpr std::array<MortonFunc, 18> SWIZZLE_TABLE = {
     MortonCopy<false, PixelFormat::RGBA8>,  // 0
     MortonCopy<false, PixelFormat::RGB8>,   // 1
@@ -273,6 +320,14 @@ static constexpr std::array<MortonFunc, 18> SWIZZLE_TABLE = {
     nullptr,                              // 15
     MortonCopy<false, PixelFormat::D24>,  // 16
     MortonCopy<false, PixelFormat::D24S8> // 17
+};
+
+static constexpr std::array<MortonFunc, 18> SWIZZLE_TABLE_CONVERTED = {
+    MortonCopy<false, PixelFormat::RGBA8, true>,  // 0
+    MortonCopy<false, PixelFormat::RGB8, true>,   // 1
+    MortonCopy<false, PixelFormat::RGB5A1, true>, // 2
+    MortonCopy<false, PixelFormat::RGB565, true>, // 3
+    MortonCopy<false, PixelFormat::RGBA4, true>   // 4
 };
 
 } // namespace VideoCore

@@ -16,6 +16,8 @@
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
 #include "video_core/video_core.h"
 
+#include <vk_mem_alloc.h>
+
 namespace Vulkan {
 
 MICROPROFILE_DEFINE(OpenGL_VAO, "OpenGL", "Vertex Array Setup", MP_RGB(255, 128, 0));
@@ -93,7 +95,7 @@ constexpr VertexLayout RasterizerVulkan::HardwareVertex::GetVertexLayout() {
     return layout;
 }
 
-constexpr u32 VERTEX_BUFFER_SIZE = 128 * 1024 * 1024;
+constexpr u32 VERTEX_BUFFER_SIZE = 256 * 1024 * 1024;
 constexpr u32 INDEX_BUFFER_SIZE = 8 * 1024 * 1024;
 constexpr u32 UNIFORM_BUFFER_SIZE = 16 * 1024 * 1024;
 constexpr u32 TEXTURE_BUFFER_SIZE = 16 * 1024 * 1024;
@@ -121,10 +123,7 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
                         vk::BufferUsageFlagBits::eUniformTexelBuffer, TEXTURE_BUFFER_LF_FORMATS} {
 
     // Create a 1x1 clear texture to use in the NULL case,
-    default_texture =
-        runtime.Allocate(1, 1, VideoCore::PixelFormat::RGBA8, VideoCore::TextureType::Texture2D);
-    runtime.Transition(scheduler.GetUploadCommandBuffer(), default_texture,
-                       vk::ImageLayout::eShaderReadOnlyOptimal, 0, 1);
+    CreateDefaultTextures();
 
     uniform_block_data.lighting_lut_dirty.fill(true);
 
@@ -162,7 +161,7 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
     }
 
     for (u32 i = 0; i < 7; i++) {
-        pipeline_cache.BindStorageImage(i, default_texture.image_view);
+        pipeline_cache.BindStorageImage(i, default_storage_texture.image_view);
     }
 
     // Explicitly call the derived version to avoid warnings about calling virtual
@@ -174,6 +173,7 @@ RasterizerVulkan::~RasterizerVulkan() {
     renderpass_cache.ExitRenderpass();
     scheduler.Submit(SubmitMode::Flush | SubmitMode::Shutdown);
 
+    VmaAllocator allocator = instance.GetAllocator();
     vk::Device device = instance.GetDevice();
 
     for (auto& [key, sampler] : samplers) {
@@ -184,10 +184,10 @@ RasterizerVulkan::~RasterizerVulkan() {
         device.destroyFramebuffer(framebuffer);
     }
 
-    const VideoCore::HostTextureTag tag = {
-        .format = VideoCore::PixelFormat::RGBA8, .width = 1, .height = 1};
-
-    runtime.Recycle(tag, std::move(default_texture));
+    vmaDestroyImage(allocator, default_texture.image, default_texture.allocation);
+    vmaDestroyImage(allocator, default_storage_texture.image, default_storage_texture.allocation);
+    device.destroyImageView(default_texture.image_view);
+    device.destroyImageView(default_storage_texture.image_view);
     device.destroySampler(default_sampler);
 }
 
@@ -374,7 +374,6 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
                     enable_attributes[input_reg] = true;
                     offset += vertex_attributes.GetStride(attribute_index);
                 }
-
             } else {
                 // Attribute ids 12, 13, 14 and 15 signify 4, 8, 12 and 16-byte paddings
                 // respectively
@@ -675,7 +674,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         if (surface != nullptr) {
             pipeline_cache.BindStorageImage(binding, surface->alloc.image_view);
         } else {
-            pipeline_cache.BindStorageImage(binding, default_texture.image_view);
+            pipeline_cache.BindStorageImage(binding, default_storage_texture.image_view);
         }
     };
 
@@ -687,16 +686,15 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         // filters GL_LINEAR/GL_NEAREST so emulate them by setting minLod = 0, and maxLod = 0.25,
         // and using minFilter = VK_FILTER_LINEAR or minFilter = VK_FILTER_NEAREST
         const bool skip_mipmap = config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
-        info =
-            SamplerInfo{.mag_filter = config.mag_filter,
-                        .min_filter = config.min_filter,
-                        .mip_filter = config.mip_filter,
-                        .wrap_s = config.wrap_s,
-                        .wrap_t = config.wrap_t,
-                        .border_color = config.border_color.raw,
-                        .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
-                        .lod_max = skip_mipmap ? 0.25f : static_cast<float>(config.lod.max_level),
-                        .lod_bias = static_cast<float>(config.lod.bias)};
+        info = SamplerInfo{.mag_filter = config.mag_filter,
+                           .min_filter = config.min_filter,
+                           .mip_filter = config.mip_filter,
+                           .wrap_s = config.wrap_s,
+                           .wrap_t = config.wrap_t,
+                           .border_color = config.border_color.raw,
+                           .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
+                           .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level),
+                           .lod_bias = static_cast<float>(config.lod.bias)};
 
         // Search the cache and bind the appropriate sampler
         if (auto it = samplers.find(info); it != samplers.end()) {
@@ -707,8 +705,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             pipeline_cache.BindSampler(binding, texture_sampler);
         }
     };
-
-    renderpass_cache.ExitRenderpass();
 
     // Sync and bind the texture surfaces
     const auto pica_textures = regs.texturing.GetTextures();
@@ -722,9 +718,9 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                 case TextureType::Shadow2D: {
                     auto surface = res_cache.GetTextureSurface(texture);
                     if (surface != nullptr) {
-                        pipeline_cache.BindStorageImage(0, surface->alloc.image_view);
+                        pipeline_cache.BindStorageImage(0, surface->GetImageView());
                     } else {
-                        pipeline_cache.BindStorageImage(0, default_texture.image_view);
+                        pipeline_cache.BindStorageImage(0, default_storage_texture.image_view);
                     }
                     continue;
                 }
@@ -874,13 +870,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         pipeline_cache.UseTrivialGeometryShader();
         pipeline_cache.BindPipeline(pipeline_info);
 
-        // Bind the vertex buffer at the current mapped offset. This effectively means
-        // that when base_vertex is zero the GPU will start drawing from the current mapped
-        // offset not the start of the buffer.
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(),
-                                         vertex_buffer.GetBufferOffset());
-
         const u32 max_vertices = VERTEX_BUFFER_SIZE / sizeof(HardwareVertex);
         const u32 batch_size = static_cast<u32>(vertex_batch.size());
         for (u32 base_vertex = 0; base_vertex < batch_size; base_vertex += max_vertices) {
@@ -891,6 +880,12 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             auto [array_ptr, offset, _] = vertex_buffer.Map(vertex_size, sizeof(HardwareVertex));
             std::memcpy(array_ptr, vertex_batch.data() + base_vertex, vertex_size);
             vertex_buffer.Commit(vertex_size);
+
+            // Bind the vertex buffer at the current mapped offset. This effectively means
+            // that when base_vertex is zero the GPU will start drawing from the current mapped
+            // offset not the start of the buffer.
+            vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+            command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), offset);
 
             command_buffer.draw(vertices, 1, base_vertex, 0);
         }
@@ -1640,6 +1635,66 @@ vk::Framebuffer RasterizerVulkan::CreateFramebuffer(const FramebufferInfo& info)
 
     vk::Device device = instance.GetDevice();
     return device.createFramebuffer(framebuffer_info);
+}
+
+void RasterizerVulkan::CreateDefaultTextures() {
+    default_texture.format = vk::Format::eR8G8B8A8Unorm;
+    default_storage_texture.format = vk::Format::eR8G8B8A8Uint;
+
+    vk::ImageCreateInfo image_info = {.imageType = vk::ImageType::e2D,
+                                      .format = default_texture.format,
+                                      .extent = {1, 1, 1},
+                                      .mipLevels = 1,
+                                      .arrayLayers = 1,
+                                      .samples = vk::SampleCountFlagBits::e1,
+                                      .usage = GetImageUsage(vk::ImageAspectFlagBits::eColor)};
+
+    const VmaAllocationCreateInfo alloc_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+
+    VkImage unsafe_image{};
+    VkImageCreateInfo& unsafe_image_info = static_cast<VkImageCreateInfo&>(image_info);
+
+    VkResult result = vmaCreateImage(instance.GetAllocator(), &unsafe_image_info, &alloc_info,
+                                     &unsafe_image, &default_texture.allocation, nullptr);
+    if (result != VK_SUCCESS) {
+        LOG_CRITICAL(Render_Vulkan, "Failed allocating default texture with error {}", result);
+        UNREACHABLE();
+    }
+
+    default_texture.image = vk::Image{unsafe_image};
+    vk::ImageViewCreateInfo view_info = {
+        .image = default_texture.image,
+        .viewType = vk::ImageViewType::e2D,
+        .format = default_texture.format,
+        .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
+                             .baseMipLevel = 0,
+                             .levelCount = 1,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1}};
+
+    vk::Device device = instance.GetDevice();
+    default_texture.image_view = device.createImageView(view_info);
+
+    // Define the default texture for storage descriptors
+    image_info.format = default_storage_texture.format;
+    result = vmaCreateImage(instance.GetAllocator(), &unsafe_image_info, &alloc_info, &unsafe_image,
+                            &default_storage_texture.allocation, nullptr);
+    if (result != VK_SUCCESS) {
+        LOG_CRITICAL(Render_Vulkan, "Failed allocating default storage texture with error {}",
+                     result);
+        UNREACHABLE();
+    }
+
+    default_storage_texture.image = vk::Image{unsafe_image};
+
+    view_info.format = default_storage_texture.format;
+    view_info.image = default_storage_texture.image;
+    default_storage_texture.image_view = device.createImageView(view_info);
+
+    runtime.Transition(scheduler.GetUploadCommandBuffer(), default_texture,
+                       vk::ImageLayout::eShaderReadOnlyOptimal, 0, 1);
+    runtime.Transition(scheduler.GetUploadCommandBuffer(), default_storage_texture,
+                       vk::ImageLayout::eGeneral, 0, 1);
 }
 
 void RasterizerVulkan::FlushBuffers() {
