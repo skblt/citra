@@ -33,7 +33,7 @@ struct ImageAlloc {
     vk::ImageUsageFlags usage;
     vk::Format format;
     vk::ImageLayout layout = vk::ImageLayout::eUndefined;
-    vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eNone;
+    vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
     u32 levels = 1;
     u32 layers = 1;
 };
@@ -92,6 +92,9 @@ public:
     [[nodiscard]] const ReinterpreterList& GetPossibleReinterpretations(
         VideoCore::PixelFormat dest_format) const;
 
+    /// Returns true if the provided pixel format needs convertion
+    [[nodiscard]] bool NeedsConvertion(VideoCore::PixelFormat format) const;
+
     /// Performs operations that need to be done on every scheduler slot switch
     void OnSlotSwitch(u32 new_slot);
 
@@ -130,9 +133,6 @@ public:
 
     /// Downloads pixel data to staging from a rectangle region of the surface texture
     void Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging);
-
-    /// Returns true if the surface requires pixel data convertion
-    bool NeedsConvert() const;
 
     /// Returns the bpp of the internal surface format
     u32 GetInternalBytesPerPixel() const;

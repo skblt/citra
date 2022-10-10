@@ -222,6 +222,9 @@ private:
     /// Internal implementation for AccelerateDrawBatch
     bool AccelerateDrawBatchInternal(bool is_indexed);
 
+    /// Copies vertex data performing needed convertions and casts
+    void PaddedVertexCopy(u32 stride, u32 vertex_num, u8* data);
+
     struct VertexArrayInfo {
         u32 vs_input_index_min;
         u32 vs_input_index_max;
@@ -245,6 +248,8 @@ private:
 
     /// Creates a new Vulkan framebuffer object
     vk::Framebuffer CreateFramebuffer(const FramebufferInfo& info);
+
+    void CreateDefaultTextures();
 
 private:
     const Instance& instance;
@@ -274,8 +279,9 @@ private:
 
     std::vector<HardwareVertex> vertex_batch;
     std::array<u64, 16> binding_offsets{};
-    ImageAlloc default_texture;
     vk::Sampler default_sampler;
+    ImageAlloc default_texture;
+    ImageAlloc default_storage_texture;
 
     struct {
         Pica::Shader::UniformData data{};

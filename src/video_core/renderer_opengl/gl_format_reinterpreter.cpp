@@ -11,7 +11,7 @@ namespace OpenGL {
 
 D24S8toRGBA8::D24S8toRGBA8(bool use_texture_view) : use_texture_view{use_texture_view} {
     constexpr std::string_view cs_source = R"(
-layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(binding = 0) uniform highp sampler2D depth;
 layout(binding = 1) uniform lowp usampler2D stencil;
 layout(rgba8, binding = 2) uniform highp writeonly image2D color;
@@ -77,7 +77,7 @@ void D24S8toRGBA8::Reinterpret(const Surface& source, VideoCore::Rect2D src_rect
     glTexParameteri(GL_TEXTURE_2D, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_STENCIL_INDEX);
 
     glUniform2i(src_offset_loc, src_rect.left, src_rect.bottom);
-    glDispatchCompute(src_rect.GetWidth() / 32, src_rect.GetHeight() / 32, 1);
+    glDispatchCompute(src_rect.GetWidth() / 8, src_rect.GetHeight() / 8, 1);
 
     if (use_texture_view) {
         temp_tex.Release();

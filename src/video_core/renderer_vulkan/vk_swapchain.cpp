@@ -33,6 +33,15 @@ void Swapchain::Create(u32 width, u32 height) {
     is_outdated = false;
     is_suboptimal = false;
 
+    // Destroy the previous image views
+    vk::Device device = instance.GetDevice();
+    for (auto& image : swapchain_images) {
+        if (image.image) {
+            device.destroyImageView(image.image_view);
+            device.destroyFramebuffer(image.framebuffer);
+        }
+    }
+
     // Fetch information about the provided surface
     Configure(width, height);
 
@@ -61,7 +70,6 @@ void Swapchain::Create(u32 width, u32 height) {
         .clipped = true,
         .oldSwapchain = swapchain};
 
-    vk::Device device = instance.GetDevice();
     vk::SwapchainKHR new_swapchain = device.createSwapchainKHR(swapchain_info);
 
     // If an old swapchain exists, destroy it and move the new one to its place.
@@ -70,12 +78,6 @@ void Swapchain::Create(u32 width, u32 height) {
     }
 
     auto images = device.getSwapchainImagesKHR(swapchain);
-
-    // Destroy the previous images
-    for (auto& image : swapchain_images) {
-        device.destroyImageView(image.image_view);
-        device.destroyFramebuffer(image.framebuffer);
-    }
 
     swapchain_images.clear();
     swapchain_images.resize(images.size());
@@ -113,6 +115,10 @@ void Swapchain::Create(u32 width, u32 height) {
 constexpr u64 ACQUIRE_TIMEOUT = 1000000000;
 
 void Swapchain::AcquireNextImage(vk::Semaphore signal_acquired) {
+    if (NeedsRecreation()) [[unlikely]] {
+        return;
+    }
+
     vk::Device device = instance.GetDevice();
     vk::Result result = device.acquireNextImageKHR(swapchain, ACQUIRE_TIMEOUT, signal_acquired,
                                                    VK_NULL_HANDLE, &current_image);
@@ -132,6 +138,10 @@ void Swapchain::AcquireNextImage(vk::Semaphore signal_acquired) {
 }
 
 void Swapchain::Present(vk::Semaphore wait_for_present) {
+    if (NeedsRecreation()) [[unlikely]] {
+        return;
+    }
+
     const vk::PresentInfoKHR present_info = {.waitSemaphoreCount = 1,
                                              .pWaitSemaphores = &wait_for_present,
                                              .swapchainCount = 1,
@@ -145,6 +155,7 @@ void Swapchain::Present(vk::Semaphore wait_for_present) {
     case vk::Result::eSuccess:
         break;
     case vk::Result::eSuboptimalKHR:
+        is_suboptimal = true;
         LOG_DEBUG(Render_Vulkan, "Suboptimal swapchain");
         break;
     case vk::Result::eErrorOutOfDateKHR:
@@ -154,8 +165,6 @@ void Swapchain::Present(vk::Semaphore wait_for_present) {
         LOG_CRITICAL(Render_Vulkan, "Swapchain presentation failed");
         break;
     }
-
-    current_frame = (current_frame + 1) % swapchain_images.size();
 }
 
 void Swapchain::Configure(u32 width, u32 height) {
