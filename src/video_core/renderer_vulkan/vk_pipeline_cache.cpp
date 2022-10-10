@@ -414,8 +414,8 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
                           vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
 
     const vk::PipelineColorBlendStateCreateInfo color_blending = {
-        .logicOpEnable = info.blending.logic_op_enable.Value(),
-        .logicOp = PicaToVK::LogicOp(info.blending.logic_op),
+        .logicOpEnable = !info.blending.blend_enable.Value(),
+        .logicOp = PicaToVK::LogicOp(info.blending.logic_op.Value()),
         .attachmentCount = 1,
         .pAttachments = &colorblend_attachment,
         .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f}};

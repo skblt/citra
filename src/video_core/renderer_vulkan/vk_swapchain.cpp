@@ -33,15 +33,6 @@ void Swapchain::Create(u32 width, u32 height) {
     is_outdated = false;
     is_suboptimal = false;
 
-    // Destroy the previous image views
-    vk::Device device = instance.GetDevice();
-    for (auto& image : swapchain_images) {
-        if (image.image) {
-            device.destroyImageView(image.image_view);
-            device.destroyFramebuffer(image.framebuffer);
-        }
-    }
-
     // Fetch information about the provided surface
     Configure(width, height);
 
@@ -70,6 +61,7 @@ void Swapchain::Create(u32 width, u32 height) {
         .clipped = true,
         .oldSwapchain = swapchain};
 
+    vk::Device device = instance.GetDevice();
     vk::SwapchainKHR new_swapchain = device.createSwapchainKHR(swapchain_info);
 
     // If an old swapchain exists, destroy it and move the new one to its place.
@@ -78,6 +70,12 @@ void Swapchain::Create(u32 width, u32 height) {
     }
 
     auto images = device.getSwapchainImagesKHR(swapchain);
+
+    // Destroy the previous image views
+    for (auto& image : swapchain_images) {
+        device.destroyImageView(image.image_view);
+        device.destroyFramebuffer(image.framebuffer);
+    }
 
     swapchain_images.clear();
     swapchain_images.resize(images.size());
@@ -149,21 +147,13 @@ void Swapchain::Present(vk::Semaphore wait_for_present) {
                                              .pImageIndices = &current_image};
 
     vk::Queue present_queue = instance.GetPresentQueue();
-    vk::Result result = present_queue.presentKHR(present_info);
-
-    switch (result) {
-    case vk::Result::eSuccess:
-        break;
-    case vk::Result::eSuboptimalKHR:
-        is_suboptimal = true;
-        LOG_DEBUG(Render_Vulkan, "Suboptimal swapchain");
-        break;
-    case vk::Result::eErrorOutOfDateKHR:
+    try {
+        [[maybe_unused]] vk::Result result = present_queue.presentKHR(present_info);
+    } catch (vk::OutOfDateKHRError err) {
         is_outdated = true;
-        break;
-    default:
+    } catch (vk::SystemError err) {
         LOG_CRITICAL(Render_Vulkan, "Swapchain presentation failed");
-        break;
+        UNREACHABLE();
     }
 }
 
