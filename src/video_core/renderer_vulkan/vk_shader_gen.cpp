@@ -1642,7 +1642,16 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
                 UNREACHABLE();
             }
 
-            out += fmt::format("layout(location = {0}) in {1}vec4 vs_in_reg{0};\n", i, prefix);
+            out +=
+                fmt::format("layout(location = {0}) in {1}vec4 vs_in_typed_reg{0};\n", i, prefix);
+        }
+    }
+    out += '\n';
+
+    // cast input registers to float to avoid computational errors
+    for (std::size_t i = 0; i < used_regs.size(); ++i) {
+        if (used_regs[i]) {
+            out += fmt::format("vec4 vs_in_reg{0} = vec4(vs_in_typed_reg{0});\n", i);
         }
     }
     out += '\n';

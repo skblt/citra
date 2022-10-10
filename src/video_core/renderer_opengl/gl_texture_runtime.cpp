@@ -319,6 +319,11 @@ const ReinterpreterList& TextureRuntime::GetPossibleReinterpretations(
     return reinterpreters[static_cast<u32>(dest_format)];
 }
 
+bool TextureRuntime::NeedsConvertion(VideoCore::PixelFormat format) const {
+    return driver.IsOpenGLES() &&
+           (format == VideoCore::PixelFormat::RGB8 || format == VideoCore::PixelFormat::RGBA8);
+}
+
 void TextureRuntime::BindFramebuffer(GLenum target, GLint level, GLenum textarget,
                                      VideoCore::SurfaceType type, OGLTexture& texture) const {
     const GLint framebuffer = target == GL_DRAW_FRAMEBUFFER ? draw_fbo.handle : read_fbo.handle;

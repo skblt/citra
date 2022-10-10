@@ -14,7 +14,7 @@ D24S8toRGBA8::D24S8toRGBA8(const Instance& instance, TaskScheduler& scheduler,
     constexpr std::string_view cs_source = R"(
 #version 450 core
 #extension GL_EXT_samplerless_texture_functions : require
-layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(set = 0, binding = 0) uniform highp texture2D depth;
 layout(set = 0, binding = 1) uniform lowp utexture2D stencil;
 layout(set = 0, binding = 2, rgba8) uniform highp writeonly image2D color;
@@ -154,7 +154,7 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
     command_buffer.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
                                  sizeof(Common::Vec2i), src_offset.AsArray());
 
-    command_buffer.dispatch(src_rect.GetWidth() / 32, src_rect.GetHeight() / 32, 1);
+    command_buffer.dispatch(src_rect.GetWidth() / 8, src_rect.GetHeight() / 8, 1);
 }
 
 } // namespace Vulkan
