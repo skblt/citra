@@ -534,12 +534,13 @@ void PipelineCache::LoadDiskCache() {
                                                     instance.GetVendorID(), instance.GetDeviceID());
     vk::PipelineCacheCreateInfo cache_info = {.initialDataSize = 0, .pInitialData = nullptr};
 
+    std::vector<u8> cache_data;
     FileUtil::IOFile cache_file{cache_file_path, "r"};
     if (cache_file.IsOpen()) {
         LOG_INFO(Render_Vulkan, "Loading pipeline cache");
 
         const u32 cache_file_size = cache_file.GetSize();
-        auto cache_data = std::vector<u8>(cache_file_size);
+        cache_data.resize(cache_file_size);
         if (cache_file.ReadBytes(cache_data.data(), cache_file_size)) {
             if (!IsCacheValid(cache_data.data(), cache_file_size)) {
                 LOG_WARNING(Render_Vulkan, "Pipeline cache provided invalid, deleting");
