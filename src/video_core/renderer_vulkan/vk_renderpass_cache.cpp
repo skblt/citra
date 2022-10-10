@@ -161,7 +161,7 @@ vk::RenderPass RenderpassCache::CreateRenderPass(vk::Format color, vk::Format de
             .format = depth,
             .loadOp = load_op,
             .storeOp = vk::AttachmentStoreOp::eStore,
-            .stencilLoadOp = vk::AttachmentLoadOp::eLoad,
+            .stencilLoadOp = load_op,
             .stencilStoreOp = vk::AttachmentStoreOp::eStore,
             .initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
             .finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal};
