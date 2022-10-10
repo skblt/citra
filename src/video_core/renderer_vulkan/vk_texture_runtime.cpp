@@ -228,6 +228,10 @@ void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::spa
         switch (surface.pixel_format) {
         case VideoCore::PixelFormat::RGBA4:
             return Pica::Texture::ConvertRGBA8ToRGBA4(source, dest);
+        case VideoCore::PixelFormat::RGB8:
+            return Pica::Texture::ConvertRGBAToBGR(source, dest);
+        default:
+            break;
         }
     }
 
@@ -449,6 +453,8 @@ void TextureRuntime::Transition(vk::CommandBuffer command_buffer, ImageAlloc& al
     if (new_layout == alloc.layout || !alloc.image) {
         return;
     }
+
+    renderpass_cache.ExitRenderpass();
 
     struct LayoutInfo {
         vk::AccessFlags access;
