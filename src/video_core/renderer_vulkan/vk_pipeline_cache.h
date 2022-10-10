@@ -61,8 +61,7 @@ union BlendingState {
     BitField<16, 4, Pica::FramebufferRegs::BlendFactor> dst_alpha_blend_factor;
     BitField<20, 3, Pica::FramebufferRegs::BlendEquation> alpha_blend_eq;
     BitField<23, 4, u32> color_write_mask;
-    BitField<27, 1, u32> logic_op_enable;
-    BitField<28, 4, Pica::FramebufferRegs::LogicOp> logic_op;
+    BitField<27, 4, Pica::FramebufferRegs::LogicOp> logic_op;
 };
 
 union VertexBinding {
