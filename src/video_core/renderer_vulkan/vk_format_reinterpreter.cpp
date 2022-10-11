@@ -99,13 +99,6 @@ void main() {
 
     compute_pipeline_layout = device.createPipelineLayout(layout_info);
 
-    const vk::DescriptorSetAllocateInfo alloc_info = {.descriptorPool =
-                                                          scheduler.GetPersistentDescriptorPool(),
-                                                      .descriptorSetCount = 1,
-                                                      .pSetLayouts = &descriptor_layout};
-
-    descriptor_set = device.allocateDescriptorSets(alloc_info)[0];
-
     const vk::PipelineShaderStageCreateInfo compute_stage = {
         .stage = vk::ShaderStageFlagBits::eCompute, .module = compute_shader, .pName = "main"};
 
@@ -144,10 +137,16 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
         vk::DescriptorImageInfo{.imageView = dest.GetImageView(),
                                 .imageLayout = vk::ImageLayout::eGeneral}};
 
+    const vk::DescriptorSetAllocateInfo alloc_info = {.descriptorPool =
+                                                          scheduler.GetDescriptorPool(),
+                                                      .descriptorSetCount = 1,
+                                                      .pSetLayouts = &descriptor_layout};
+
+    descriptor_set = device.allocateDescriptorSets(alloc_info)[0];
+
     device.updateDescriptorSetWithTemplate(descriptor_set, update_template, textures[0]);
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout, 0,
                                       1, &descriptor_set, 0, nullptr);
-
     command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
 
     const auto src_offset = Common::MakeVec(src_rect.left, src_rect.bottom);
