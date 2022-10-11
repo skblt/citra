@@ -52,11 +52,6 @@ public:
         return commands[current_command].descriptor_pool;
     }
 
-    /// Returns the persistent descriptor pool
-    vk::DescriptorPool GetPersistentDescriptorPool() const {
-        return persistent_descriptor_pool;
-    }
-
     /// Returns the index of the current command slot
     u32 GetCurrentSlotIndex() const {
         return current_command;
@@ -97,7 +92,6 @@ private:
 
     vk::CommandPool command_pool{};
     vk::Semaphore timeline{};
-    vk::DescriptorPool persistent_descriptor_pool;
     std::array<ExecutionSlot, SCHEDULER_COMMAND_COUNT> commands{};
     u32 current_command = 0;
 };

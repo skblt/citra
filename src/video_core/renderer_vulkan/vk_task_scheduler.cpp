@@ -35,14 +35,13 @@ TaskScheduler::TaskScheduler(const Instance& instance, RendererVulkan& renderer)
         vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 2048},
         vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 512},
         vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 2048},
-        vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 1024}};
+        vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 1024},
+        vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1024}};
 
     const vk::DescriptorPoolCreateInfo descriptor_pool_info = {
         .maxSets = 2048,
         .poolSizeCount = static_cast<u32>(pool_sizes.size()),
         .pPoolSizes = pool_sizes.data()};
-
-    persistent_descriptor_pool = device.createDescriptorPool(descriptor_pool_info);
 
     const vk::CommandBufferAllocateInfo buffer_info = {.commandPool = command_pool,
                                                        .level = vk::CommandBufferLevel::ePrimary,
@@ -86,7 +85,6 @@ TaskScheduler::~TaskScheduler() {
     }
 
     device.destroyCommandPool(command_pool);
-    device.destroyDescriptorPool(persistent_descriptor_pool);
 }
 
 void TaskScheduler::Synchronize(u32 slot) {
