@@ -532,7 +532,7 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     if (is_indexed) {
         bool index_u16 = regs.pipeline.index_array.format != 0;
-        const u64 index_buffer_size = regs.pipeline.num_vertices * (index_u16 ? 2 : 1);
+        const u32 index_buffer_size = regs.pipeline.num_vertices * (index_u16 ? 2 : 1);
 
         if (index_buffer_size > INDEX_BUFFER_SIZE) {
             LOG_WARNING(Render_Vulkan, "Too large index input size {}", index_buffer_size);
@@ -681,10 +681,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     const auto BindSampler = [&](u32 binding, SamplerInfo& info,
                                  const Pica::TexturingRegs::TextureConfig& config) {
         // TODO(GPUCode): Cubemaps don't contain any mipmaps for now, so sampling from them returns
-        // nothing Always sample from the base level until mipmaps for texture cubes are implemented
-        // NOTE: There are no Vulkan filter modes that directly correspond to OpenGL minification
-        // filters GL_LINEAR/GL_NEAREST so emulate them by setting minLod = 0, and maxLod = 0.25,
-        // and using minFilter = VK_FILTER_LINEAR or minFilter = VK_FILTER_NEAREST
+        // nothing. Always sample from the base level until mipmaps for texture cubes are
+        // implemented
         const bool skip_mipmap = config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
         info = SamplerInfo{.mag_filter = config.mag_filter,
                            .min_filter = config.min_filter,
@@ -783,7 +781,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                 // the geometry in question.
                 // For example: a bug in Pokemon X/Y causes NULL-texture squares to be drawn
                 // on the male character's face, which in the OpenGL default appear black.
-                // state.texture_units[texture_index].texture_2d = default_texture;
                 pipeline_cache.BindTexture(texture_index, default_texture.image_view);
             }
         } else {
@@ -1725,12 +1722,6 @@ void RasterizerVulkan::SyncClipCoef() {
 
 void RasterizerVulkan::SyncCullMode() {
     const auto& regs = Pica::g_state.regs;
-    if (instance.IsExtendedDynamicStateSupported()) {
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        command_buffer.setCullModeEXT(PicaToVK::CullMode(regs.rasterizer.cull_mode));
-        command_buffer.setFrontFaceEXT(PicaToVK::FrontFace(regs.rasterizer.cull_mode));
-    }
-
     pipeline_info.rasterization.cull_mode.Assign(regs.rasterizer.cull_mode);
 }
 
@@ -1846,10 +1837,6 @@ void RasterizerVulkan::SyncStencilWriteMask() {
         (regs.framebuffer.framebuffer.allow_depth_stencil_write != 0)
             ? static_cast<u32>(regs.framebuffer.output_merger.stencil_test.write_mask)
             : 0;
-
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.setStencilWriteMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                       pipeline_info.depth_stencil.stencil_write_mask);
 }
 
 void RasterizerVulkan::SyncDepthWriteMask() {
@@ -1857,12 +1844,6 @@ void RasterizerVulkan::SyncDepthWriteMask() {
 
     const bool write_enable = (regs.framebuffer.framebuffer.allow_depth_stencil_write != 0 &&
                                regs.framebuffer.output_merger.depth_write_enable);
-
-    if (instance.IsExtendedDynamicStateSupported()) {
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        command_buffer.setDepthWriteEnableEXT(write_enable);
-    }
-
     pipeline_info.depth_stencil.depth_write_enable.Assign(write_enable);
 }
 
@@ -1872,21 +1853,6 @@ void RasterizerVulkan::SyncStencilTest() {
     const auto& stencil_test = regs.framebuffer.output_merger.stencil_test;
     const bool test_enable = stencil_test.enable && regs.framebuffer.framebuffer.depth_format ==
                                                         Pica::FramebufferRegs::DepthFormat::D24S8;
-
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                         stencil_test.input_mask);
-    command_buffer.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
-                                       stencil_test.reference_value);
-
-    if (instance.IsExtendedDynamicStateSupported()) {
-        command_buffer.setStencilTestEnableEXT(test_enable);
-        command_buffer.setStencilOpEXT(vk::StencilFaceFlagBits::eFrontAndBack,
-                                       PicaToVK::StencilOp(stencil_test.action_stencil_fail),
-                                       PicaToVK::StencilOp(stencil_test.action_depth_pass),
-                                       PicaToVK::StencilOp(stencil_test.action_depth_fail),
-                                       PicaToVK::CompareFunc(stencil_test.func));
-    }
 
     pipeline_info.depth_stencil.stencil_test_enable.Assign(test_enable);
     pipeline_info.depth_stencil.stencil_fail_op.Assign(stencil_test.action_stencil_fail);
@@ -1905,12 +1871,6 @@ void RasterizerVulkan::SyncDepthTest() {
     const auto compare_op = regs.framebuffer.output_merger.depth_test_enable == 1
                                 ? regs.framebuffer.output_merger.depth_test_func.Value()
                                 : Pica::FramebufferRegs::CompareFunc::Always;
-
-    if (instance.IsExtendedDynamicStateSupported()) {
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        command_buffer.setDepthCompareOpEXT(PicaToVK::CompareFunc(compare_op));
-        command_buffer.setDepthTestEnableEXT(test_enabled);
-    }
 
     pipeline_info.depth_stencil.depth_test_enable.Assign(test_enabled);
     pipeline_info.depth_stencil.depth_compare_op.Assign(compare_op);
@@ -1991,7 +1951,7 @@ void RasterizerVulkan::SyncLightPosition(int light_index) {
 
 void RasterizerVulkan::SyncLightSpotDirection(int light_index) {
     const auto& light = Pica::g_state.regs.lighting.light[light_index];
-    const auto spot_direction = Common::Vec3f{light.spot_x, light.spot_y, light.spot_z} / 2047.0f;
+    const auto spot_direction = Common::Vec3i{light.spot_x, light.spot_y, light.spot_z} / 2047.0f;
 
     if (spot_direction != uniform_block_data.data.light_src[light_index].spot_direction) {
         uniform_block_data.data.light_src[light_index].spot_direction = spot_direction;

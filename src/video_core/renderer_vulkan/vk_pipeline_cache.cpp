@@ -75,6 +75,8 @@ u32 AttribBytes(VertexAttribute attrib) {
     case AttribType::Ubyte:
         return sizeof(u8) * attrib.size;
     }
+
+    return 0;
 }
 
 vk::Format ToVkAttributeFormat(VertexAttribute attrib) {
@@ -264,26 +266,105 @@ void PipelineCache::BindSampler(u32 binding, vk::Sampler sampler) {
 }
 
 void PipelineCache::SetViewport(float x, float y, float width, float height) {
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.setViewport(0, vk::Viewport{x, y, width, height, 0.f, 1.f});
+    const vk::Viewport viewport{x, y, width, height, 0.f, 1.f};
+
+    if (viewport != current_viewport || state_dirty) {
+        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+        command_buffer.setViewport(0, vk::Viewport{x, y, width, height, 0.f, 1.f});
+        current_viewport = viewport;
+    }
 }
 
 void PipelineCache::SetScissor(s32 x, s32 y, u32 width, u32 height) {
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.setScissor(0, vk::Rect2D{{x, y}, {width, height}});
+    const vk::Rect2D scissor{{x, y}, {width, height}};
+
+    if (scissor != current_scissor || state_dirty) {
+        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+        command_buffer.setScissor(0, vk::Rect2D{{x, y}, {width, height}});
+        current_scissor = scissor;
+    }
 }
 
 void PipelineCache::MarkDirty() {
     descriptor_dirty.fill(true);
     current_pipeline = VK_NULL_HANDLE;
+    state_dirty = true;
 }
 
 void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
-    if (instance.IsExtendedDynamicStateSupported()) {
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        command_buffer.setPrimitiveTopologyEXT(
-            PicaToVK::PrimitiveTopology(info.rasterization.topology));
+    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+
+    if (info.depth_stencil.stencil_compare_mask !=
+            current_info.depth_stencil.stencil_compare_mask ||
+        state_dirty) {
+        command_buffer.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack,
+                                             info.depth_stencil.stencil_compare_mask);
     }
+
+    if (info.depth_stencil.stencil_write_mask != current_info.depth_stencil.stencil_write_mask ||
+        state_dirty) {
+        command_buffer.setStencilWriteMask(vk::StencilFaceFlagBits::eFrontAndBack,
+                                           info.depth_stencil.stencil_write_mask);
+    }
+
+    if (info.depth_stencil.stencil_reference != current_info.depth_stencil.stencil_reference ||
+        state_dirty) {
+        command_buffer.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
+                                           info.depth_stencil.stencil_reference);
+    }
+
+    if (instance.IsExtendedDynamicStateSupported()) {
+        if (info.rasterization.cull_mode != current_info.rasterization.cull_mode || state_dirty) {
+            command_buffer.setCullModeEXT(PicaToVK::CullMode(info.rasterization.cull_mode));
+            command_buffer.setFrontFaceEXT(PicaToVK::FrontFace(info.rasterization.cull_mode));
+        }
+
+        if (info.depth_stencil.depth_compare_op != current_info.depth_stencil.depth_compare_op ||
+            state_dirty) {
+            command_buffer.setDepthCompareOpEXT(
+                PicaToVK::CompareFunc(info.depth_stencil.depth_compare_op));
+        }
+
+        if (info.depth_stencil.depth_test_enable != current_info.depth_stencil.depth_test_enable ||
+            state_dirty) {
+            command_buffer.setDepthTestEnableEXT(info.depth_stencil.depth_test_enable);
+        }
+
+        if (info.depth_stencil.depth_write_enable !=
+                current_info.depth_stencil.depth_write_enable ||
+            state_dirty) {
+            command_buffer.setDepthWriteEnableEXT(info.depth_stencil.depth_write_enable);
+        }
+
+        if (info.rasterization.topology != current_info.rasterization.topology || state_dirty) {
+            command_buffer.setPrimitiveTopologyEXT(
+                PicaToVK::PrimitiveTopology(info.rasterization.topology));
+        }
+
+        if (info.depth_stencil.stencil_test_enable !=
+                current_info.depth_stencil.stencil_test_enable ||
+            state_dirty) {
+            command_buffer.setStencilTestEnableEXT(info.depth_stencil.stencil_test_enable);
+        }
+
+        if (info.depth_stencil.stencil_fail_op != current_info.depth_stencil.stencil_fail_op ||
+            info.depth_stencil.stencil_pass_op != current_info.depth_stencil.stencil_pass_op ||
+            info.depth_stencil.stencil_depth_fail_op !=
+                current_info.depth_stencil.stencil_depth_fail_op ||
+            info.depth_stencil.stencil_compare_op !=
+                current_info.depth_stencil.stencil_compare_op ||
+            state_dirty) {
+            command_buffer.setStencilOpEXT(
+                vk::StencilFaceFlagBits::eFrontAndBack,
+                PicaToVK::StencilOp(info.depth_stencil.stencil_fail_op),
+                PicaToVK::StencilOp(info.depth_stencil.stencil_pass_op),
+                PicaToVK::StencilOp(info.depth_stencil.stencil_depth_fail_op),
+                PicaToVK::CompareFunc(info.depth_stencil.stencil_compare_op));
+        }
+    }
+
+    current_info = info;
+    state_dirty = false;
 }
 
 void PipelineCache::SetBinding(u32 set, u32 binding, DescriptorData data) {
@@ -539,12 +620,11 @@ void PipelineCache::LoadDiskCache() {
     if (cache_file.IsOpen()) {
         LOG_INFO(Render_Vulkan, "Loading pipeline cache");
 
-        const u32 cache_file_size = cache_file.GetSize();
+        const u64 cache_file_size = cache_file.GetSize();
         cache_data.resize(cache_file_size);
         if (cache_file.ReadBytes(cache_data.data(), cache_file_size)) {
             if (!IsCacheValid(cache_data.data(), cache_file_size)) {
-                LOG_WARNING(Render_Vulkan, "Pipeline cache provided invalid, deleting");
-                FileUtil::Delete(cache_file_path);
+                LOG_WARNING(Render_Vulkan, "Pipeline cache provided invalid, ignoring");
             } else {
                 cache_info.initialDataSize = cache_file_size;
                 cache_info.pInitialData = cache_data.data();

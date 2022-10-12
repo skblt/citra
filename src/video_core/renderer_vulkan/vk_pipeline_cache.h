@@ -230,6 +230,9 @@ private:
     vk::PipelineCache pipeline_cache;
     std::unordered_map<u64, vk::Pipeline, Common::IdentityHash<u64>> graphics_pipelines;
     vk::Pipeline current_pipeline{};
+    PipelineInfo current_info{};
+    vk::Viewport current_viewport{};
+    vk::Rect2D current_scissor{};
 
     // Cached layouts for the rasterizer pipelines
     vk::PipelineLayout layout;
@@ -240,6 +243,7 @@ private:
     std::array<DescriptorSetData, MAX_DESCRIPTOR_SETS> update_data{};
     std::array<bool, MAX_DESCRIPTOR_SETS> descriptor_dirty{};
     std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> descriptor_sets;
+    bool state_dirty = true;
 
     // Bound shader modules
     enum ProgramType : u32 { VS = 0, GS = 2, FS = 1 };
