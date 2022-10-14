@@ -967,6 +967,7 @@ void RendererVulkan::SwapBuffers() {
 void RendererVulkan::FlushBuffers() {
     vertex_buffer.Flush();
     rasterizer->FlushBuffers();
+    renderpass_cache.ExitRenderpass();
 }
 
 void RendererVulkan::OnSlotSwitch() {

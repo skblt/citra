@@ -39,7 +39,7 @@ public:
 
     /// Invalidates the currently active renderpass
     void OnSlotSwitch() {
-        active_renderpass = VK_NULL_HANDLE;
+        active_begin = vk::RenderPassBeginInfo{};
     }
 
 private:
@@ -52,7 +52,7 @@ private:
     const Instance& instance;
     TaskScheduler& scheduler;
 
-    vk::RenderPass active_renderpass = VK_NULL_HANDLE;
+    vk::RenderPassBeginInfo active_begin{};
     vk::RenderPass present_renderpass{};
     vk::RenderPass cached_renderpasses[MAX_COLOR_FORMATS + 1][MAX_DEPTH_FORMATS + 1][2];
 };
