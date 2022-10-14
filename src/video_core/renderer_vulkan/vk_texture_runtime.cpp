@@ -115,7 +115,8 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     const FormatTraits traits = instance.GetTraits(format);
     const vk::ImageAspectFlags aspect = ToVkAspect(VideoCore::GetFormatType(format));
 
-    const bool is_suitable = traits.blit_support && traits.attachment_support;
+    const bool is_suitable = traits.transfer_support && traits.attachment_support &&
+                             (traits.blit_support || aspect & vk::ImageAspectFlagBits::eDepth);
     const vk::Format vk_format = is_suitable ? traits.native : traits.fallback;
     const vk::ImageUsageFlags vk_usage = is_suitable ? traits.usage : GetImageUsage(aspect);
 

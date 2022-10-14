@@ -151,10 +151,9 @@ void Instance::CreateFormatTable() {
         VideoCore::PixelFormat::D24S8};
 
     const vk::FormatFeatureFlags storage_usage = vk::FormatFeatureFlagBits::eStorageImage;
+    const vk::FormatFeatureFlags transfer_usage = vk::FormatFeatureFlagBits::eSampledImage;
     const vk::FormatFeatureFlags blit_usage =
-        vk::FormatFeatureFlagBits::eSampledImage | vk::FormatFeatureFlagBits::eTransferDst |
-        vk::FormatFeatureFlagBits::eTransferSrc | vk::FormatFeatureFlagBits::eBlitSrc |
-        vk::FormatFeatureFlagBits::eBlitDst;
+        vk::FormatFeatureFlagBits::eBlitSrc | vk::FormatFeatureFlagBits::eBlitDst;
 
     for (const auto& pixel_format : pixel_formats) {
         const vk::Format format = ToVkFormat(pixel_format);
@@ -166,6 +165,8 @@ void Instance::CreateFormatTable() {
                 ? vk::FormatFeatureFlagBits::eDepthStencilAttachment
                 : vk::FormatFeatureFlagBits::eColorAttachment;
 
+        const bool supports_transfer =
+            (properties.optimalTilingFeatures & transfer_usage) == transfer_usage;
         const bool supports_blit = (properties.optimalTilingFeatures & blit_usage) == blit_usage;
         const bool supports_attachment =
             (properties.optimalTilingFeatures & attachment_usage) == attachment_usage;
@@ -174,7 +175,7 @@ void Instance::CreateFormatTable() {
 
         // Find the most inclusive usage flags for this format
         vk::ImageUsageFlags best_usage;
-        if (supports_blit) {
+        if (supports_blit || supports_transfer) {
             best_usage |= vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst |
                           vk::ImageUsageFlagBits::eTransferSrc;
         }
@@ -203,7 +204,8 @@ void Instance::CreateFormatTable() {
         }
 
         const u32 index = static_cast<u32>(pixel_format);
-        format_table[index] = FormatTraits{.blit_support = supports_blit,
+        format_table[index] = FormatTraits{.transfer_support = supports_transfer,
+                                           .blit_support = supports_blit,
                                            .attachment_support = supports_attachment,
                                            .storage_support = supports_storage,
                                            .usage = best_usage,
