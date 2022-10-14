@@ -121,12 +121,8 @@ public:
     explicit OpenGLSharedContext(QSurface* surface) : surface(surface) {
         QSurfaceFormat format;
 
-        if (Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES) {
-            format.setVersion(3, 2);
-        } else {
-            format.setVersion(4, 4);
-            format.setProfile(QSurfaceFormat::CoreProfile);
-        }
+        format.setVersion(4, 4);
+        format.setProfile(QSurfaceFormat::CoreProfile);
 
         if (Settings::values.renderer_debug) {
             format.setOption(QSurfaceFormat::FormatOption::DebugContext);

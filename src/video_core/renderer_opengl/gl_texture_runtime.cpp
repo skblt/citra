@@ -30,7 +30,7 @@ static constexpr std::array COLOR_TUPLES = {
 
 static constexpr std::array COLOR_TUPLES_OES = {
     FormatTuple{GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE},            // RGBA8
-    FormatTuple{GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE},              // RGB8
+    FormatTuple{GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE},            // RGB8
     FormatTuple{GL_RGB5_A1, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1}, // RGB5A1
     FormatTuple{GL_RGB565, GL_RGB, GL_UNSIGNED_SHORT_5_6_5},     // RGB565
     FormatTuple{GL_RGBA4, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4},   // RGBA4
