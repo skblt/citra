@@ -61,6 +61,11 @@ public:
     [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
                                       VideoCore::TextureType type);
 
+    /// Allocates a vulkan image
+    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, u32 layers, u32 levels,
+                                      vk::Format format, vk::ImageUsageFlags usage,
+                                      vk::ImageCreateFlags flags);
+
     /// Causes a GPU command flush
     void Finish();
 
