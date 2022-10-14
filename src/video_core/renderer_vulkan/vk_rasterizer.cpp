@@ -844,8 +844,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     }
 
     const vk::RenderPassBeginInfo renderpass_begin = {
-        .renderPass = renderpass_cache.GetRenderpass(pipeline_info.color_attachment,
-                                                     pipeline_info.depth_attachment, false),
+        .renderPass = framebuffer_info.renderpass,
         .framebuffer = it->second,
         .renderArea = vk::Rect2D{.offset = {static_cast<s32>(draw_rect.left),
                                             static_cast<s32>(draw_rect.bottom)},

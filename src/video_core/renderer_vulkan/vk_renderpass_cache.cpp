@@ -89,27 +89,27 @@ RenderpassCache::~RenderpassCache() {
 }
 
 void RenderpassCache::EnterRenderpass(const vk::RenderPassBeginInfo begin_info) {
-    if (active_renderpass == begin_info.renderPass) {
+    if (active_begin == begin_info) {
         return;
     }
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    if (active_renderpass) {
+    if (active_begin.renderPass) {
         command_buffer.endRenderPass();
     }
 
     command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
-    active_renderpass = begin_info.renderPass;
+    active_begin = begin_info;
 }
 
 void RenderpassCache::ExitRenderpass() {
-    if (!active_renderpass) {
+    if (!active_begin.renderPass) {
         return;
     }
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.endRenderPass();
-    active_renderpass = VK_NULL_HANDLE;
+    active_begin = vk::RenderPassBeginInfo{};
 }
 
 void RenderpassCache::CreatePresentRenderpass(vk::Format format) {
