@@ -18,6 +18,17 @@
 
 namespace Settings {
 
+[[nodiscard]] std::string_view GetAPIName(GraphicsAPI api) {
+    switch (api) {
+    case GraphicsAPI::OpenGL:
+        return "OpenGL";
+    case GraphicsAPI::OpenGLES:
+        return "OpenGLES";
+    case GraphicsAPI::Vulkan:
+        return "Vulkan";
+    }
+}
+
 Values values = {};
 
 void Apply() {
@@ -78,7 +89,7 @@ void LogSettings() {
     LOG_INFO(Config, "Citra Configuration:");
     log_setting("Core_UseCpuJit", values.use_cpu_jit);
     log_setting("Core_CPUClockPercentage", values.cpu_clock_percentage);
-    log_setting("Renderer_GraphicsAPI", values.graphics_api);
+    log_setting("Renderer_GraphicsAPI", GetAPIName(values.graphics_api));
     log_setting("Renderer_UseHwRenderer", values.use_hw_renderer);
     log_setting("Renderer_UseHwShader", values.use_hw_shader);
     log_setting("Renderer_SeparableShader", values.separable_shader);

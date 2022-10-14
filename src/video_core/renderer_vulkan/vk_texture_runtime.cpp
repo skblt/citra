@@ -149,7 +149,7 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, u32 layers, u32 level
 
     VkResult result = vmaCreateImage(instance.GetAllocator(), &unsafe_image_info, &alloc_info,
                                      &unsafe_image, &allocation, nullptr);
-    if (result != VK_SUCCESS) {
+    if (result != VK_SUCCESS) [[unlikely]] {
         LOG_CRITICAL(Render_Vulkan, "Failed allocating texture with error {}", result);
         UNREACHABLE();
     }
@@ -168,19 +168,23 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, u32 layers, u32 level
                                                                     .baseArrayLayer = 0,
                                                                     .layerCount = layers}};
 
-    // Also create a base mip view in case this is used as an attachment
-    const vk::ImageViewCreateInfo base_view_info = {.image = image,
-                                                    .viewType = view_type,
-                                                    .format = format,
-                                                    .subresourceRange = {.aspectMask = aspect,
-                                                                         .baseMipLevel = 0,
-                                                                         .levelCount = 1,
-                                                                         .baseArrayLayer = 0,
-                                                                         .layerCount = layers}};
-
     vk::Device device = instance.GetDevice();
     vk::ImageView image_view = device.createImageView(view_info);
-    vk::ImageView base_view = device.createImageView(base_view_info);
+
+    // Also create a base mip view in case this is used as an attachment
+    vk::ImageView base_view;
+    if (levels > 1) [[likely]] {
+        const vk::ImageViewCreateInfo base_view_info = {.image = image,
+                                                        .viewType = view_type,
+                                                        .format = format,
+                                                        .subresourceRange = {.aspectMask = aspect,
+                                                                             .baseMipLevel = 0,
+                                                                             .levelCount = 1,
+                                                                             .baseArrayLayer = 0,
+                                                                             .layerCount = layers}};
+
+        base_view = device.createImageView(base_view_info);
+    }
 
     // Create seperate depth/stencil views in case this gets reinterpreted with a compute shader
     vk::ImageView depth_view;
@@ -587,6 +591,7 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
 
     const bool is_scaled = res_scale != 1;
     if (is_scaled) {
+        LOG_ERROR(Render_Vulkan, "Unimplemented scaled upload!");
         ScaledUpload(upload);
     } else {
         u32 region_count = 0;
@@ -641,6 +646,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
 
     const bool is_scaled = res_scale != 1;
     if (is_scaled) {
+        LOG_ERROR(Render_Vulkan, "Unimplemented scaled download!");
         ScaledDownload(download);
     } else {
         u32 region_count = 0;
