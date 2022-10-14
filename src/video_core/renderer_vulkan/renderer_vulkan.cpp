@@ -14,6 +14,8 @@
 #include "core/hw/hw.h"
 #include "core/hw/lcd.h"
 #include "core/settings.h"
+#include "core/tracer/recorder.h"
+#include "video_core/debug_utils/debug_utils.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
 #include "video_core/renderer_vulkan/vk_shader.h"
@@ -946,6 +948,20 @@ void RendererVulkan::SwapBuffers() {
 
     scheduler.Submit(SubmitMode::SwapchainSynced);
     swapchain.Present(present_ready);
+
+    m_current_frame++;
+
+    Core::System& system = Core::System::GetInstance();
+    system.perf_stats->EndSystemFrame();
+
+    render_window.PollEvents();
+
+    system.frame_limiter.DoFrameLimiting(system.CoreTiming().GetGlobalTimeUs());
+    system.perf_stats->BeginSystemFrame();
+
+    if (Pica::g_debug_context && Pica::g_debug_context->recorder) {
+        Pica::g_debug_context->recorder->FrameFinished();
+    }
 }
 
 void RendererVulkan::FlushBuffers() {
