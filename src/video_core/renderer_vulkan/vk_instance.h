@@ -19,7 +19,8 @@ VK_DEFINE_HANDLE(VmaAllocator)
 namespace Vulkan {
 
 struct FormatTraits {
-    bool blit_support = false;       ///< True if the format supports omnidirectonal blit operations
+    bool transfer_support = false;   ///< True if the format supports transfer operations
+    bool blit_support = false;       ///< True if the format supports blit operations
     bool attachment_support = false; ///< True if the format supports being used as an attachment
     bool storage_support = false;    ///< True if the format supports storage operations
     vk::ImageUsageFlags usage{};     ///< Most supported usage for the native format

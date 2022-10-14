@@ -661,7 +661,7 @@ void PipelineCache::SaveDiskCache() {
     cache_file.Close();
 }
 
-bool PipelineCache::IsCacheValid(const u8* data, u32 size) const {
+bool PipelineCache::IsCacheValid(const u8* data, u64 size) const {
     if (size < sizeof(vk::PipelineCacheHeaderVersionOne)) {
         LOG_ERROR(Render_Vulkan, "Pipeline cache failed validation: Invalid header");
         return false;
