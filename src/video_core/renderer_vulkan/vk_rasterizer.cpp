@@ -187,9 +187,7 @@ RasterizerVulkan::~RasterizerVulkan() {
     vmaDestroyImage(allocator, default_texture.image, default_texture.allocation);
     vmaDestroyImage(allocator, default_storage_texture.image, default_storage_texture.allocation);
     device.destroyImageView(default_texture.image_view);
-    device.destroyImageView(default_texture.base_view);
     device.destroyImageView(default_storage_texture.image_view);
-    device.destroyImageView(default_storage_texture.base_view);
     device.destroySampler(default_sampler);
 }
 
