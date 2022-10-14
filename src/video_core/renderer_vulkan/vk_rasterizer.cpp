@@ -1811,7 +1811,7 @@ void RasterizerVulkan::SyncStencilTest() {
     pipeline_info.depth_stencil.stencil_depth_fail_op.Assign(stencil_test.action_depth_fail);
     pipeline_info.depth_stencil.stencil_compare_op.Assign(stencil_test.func);
     pipeline_info.depth_stencil.stencil_reference = stencil_test.reference_value;
-    pipeline_info.depth_stencil.stencil_write_mask = stencil_test.input_mask;
+    pipeline_info.depth_stencil.stencil_compare_mask = stencil_test.input_mask;
 }
 
 void RasterizerVulkan::SyncDepthTest() {
