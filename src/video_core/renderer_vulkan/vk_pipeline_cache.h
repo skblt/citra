@@ -213,7 +213,7 @@ private:
     void SaveDiskCache();
 
     /// Returns true when the disk data can be used by the current driver
-    bool IsCacheValid(const u8* data, u32 size) const;
+    bool IsCacheValid(const u8* data, u64 size) const;
 
     /// Create shader disk cache directories. Returns true on success.
     bool EnsureDirectories() const;

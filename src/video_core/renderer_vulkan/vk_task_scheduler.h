@@ -7,6 +7,7 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <thread>
 #include "common/common_funcs.h"
 #include "common/common_types.h"
 #include "video_core/renderer_vulkan/vk_common.h"
