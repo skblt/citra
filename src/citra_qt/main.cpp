@@ -277,28 +277,10 @@ void GMainWindow::InitializeWidgets() {
     // Create status bar
     message_label = new QLabel();
     // Configured separately for left alignment
-    message_label->setVisible(false);
     message_label->setFrameStyle(QFrame::NoFrame);
     message_label->setContentsMargins(4, 0, 4, 0);
     message_label->setAlignment(Qt::AlignLeft);
     statusBar()->addPermanentWidget(message_label, 1);
-
-    // Setup Graphics API button
-    graphics_api_button = new QPushButton();
-    graphics_api_button->setCheckable(true);
-    graphics_api_button->setObjectName(QStringLiteral("GraphicsAPIStatusBarButton"));
-    graphics_api_button->setFocusPolicy(Qt::NoFocus);
-    UpdateAPIIndicator(false);
-
-    connect(graphics_api_button, &QPushButton::clicked, this, [this] {
-        if (emulation_running) {
-            return;
-        }
-
-        UpdateAPIIndicator(true);
-    });
-
-    statusBar()->addPermanentWidget(graphics_api_button);
 
     progress_bar = new QProgressBar();
     progress_bar->hide();
@@ -322,8 +304,25 @@ void GMainWindow::InitializeWidgets() {
         statusBar()->addPermanentWidget(label);
     }
 
-    statusBar()->addPermanentWidget(multiplayer_state->GetStatusText(), 0);
-    statusBar()->addPermanentWidget(multiplayer_state->GetStatusIcon(), 0);
+    // Setup Graphics API button
+    graphics_api_button = new QPushButton();
+    graphics_api_button->setObjectName(QStringLiteral("GraphicsAPIStatusBarButton"));
+    graphics_api_button->setFocusPolicy(Qt::NoFocus);
+    UpdateAPIIndicator(false);
+
+    connect(graphics_api_button, &QPushButton::clicked, this, [this] {
+        if (emulation_running) {
+            return;
+        }
+
+        UpdateAPIIndicator(true);
+    });
+
+    statusBar()->insertPermanentWidget(0, graphics_api_button);
+
+    statusBar()->addPermanentWidget(multiplayer_state->GetStatusText());
+    statusBar()->addPermanentWidget(multiplayer_state->GetStatusIcon());
+
     statusBar()->setVisible(true);
 
     // Removes an ugly inner border from the status bar widgets under Linux
@@ -1205,7 +1204,6 @@ void GMainWindow::ShutdownGame() {
 
     // Disable status bar updates
     status_bar_update_timer.stop();
-    message_label->setVisible(false);
     message_label_used_for_movie = false;
     emu_speed_label->setVisible(false);
     game_fps_label->setVisible(false);
@@ -2318,8 +2316,16 @@ void GMainWindow::UpdateUITheme() {
     QStringList theme_paths(default_theme_paths);
 
     if (is_default_theme || current_theme.isEmpty()) {
-        qApp->setStyleSheet({});
-        setStyleSheet({});
+        const QString theme_uri(QStringLiteral(":default/style.qss"));
+        QFile f(theme_uri);
+        if (f.open(QFile::ReadOnly | QFile::Text)) {
+            QTextStream ts(&f);
+            qApp->setStyleSheet(ts.readAll());
+            setStyleSheet(ts.readAll());
+        } else {
+            qApp->setStyleSheet({});
+            setStyleSheet({});
+        }
         theme_paths.append(default_icons);
         QIcon::setThemeName(default_icons);
     } else {
