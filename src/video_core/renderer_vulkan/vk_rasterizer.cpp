@@ -187,7 +187,9 @@ RasterizerVulkan::~RasterizerVulkan() {
     vmaDestroyImage(allocator, default_texture.image, default_texture.allocation);
     vmaDestroyImage(allocator, default_storage_texture.image, default_storage_texture.allocation);
     device.destroyImageView(default_texture.image_view);
+    device.destroyImageView(default_texture.base_view);
     device.destroyImageView(default_storage_texture.image_view);
+    device.destroyImageView(default_storage_texture.base_view);
     device.destroySampler(default_sampler);
 }
 
@@ -1635,63 +1637,14 @@ vk::Framebuffer RasterizerVulkan::CreateFramebuffer(const FramebufferInfo& info)
 }
 
 void RasterizerVulkan::CreateDefaultTextures() {
-    default_texture.format = vk::Format::eR8G8B8A8Unorm;
-    default_storage_texture.format = vk::Format::eR8G8B8A8Uint;
+    const vk::ImageUsageFlags usage = GetImageUsage(vk::ImageAspectFlagBits::eColor);
+    default_texture = runtime.Allocate(1, 1, 1, 1, vk::Format::eR8G8B8A8Unorm, usage, {});
+    default_storage_texture = runtime.Allocate(1, 1, 1, 1, vk::Format::eR8G8B8A8Uint, usage, {});
 
-    vk::ImageCreateInfo image_info = {.imageType = vk::ImageType::e2D,
-                                      .format = default_texture.format,
-                                      .extent = {1, 1, 1},
-                                      .mipLevels = 1,
-                                      .arrayLayers = 1,
-                                      .samples = vk::SampleCountFlagBits::e1,
-                                      .usage = GetImageUsage(vk::ImageAspectFlagBits::eColor)};
-
-    const VmaAllocationCreateInfo alloc_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-
-    VkImage unsafe_image{};
-    VkImageCreateInfo& unsafe_image_info = static_cast<VkImageCreateInfo&>(image_info);
-
-    VkResult result = vmaCreateImage(instance.GetAllocator(), &unsafe_image_info, &alloc_info,
-                                     &unsafe_image, &default_texture.allocation, nullptr);
-    if (result != VK_SUCCESS) {
-        LOG_CRITICAL(Render_Vulkan, "Failed allocating default texture with error {}", result);
-        UNREACHABLE();
-    }
-
-    default_texture.image = vk::Image{unsafe_image};
-    vk::ImageViewCreateInfo view_info = {
-        .image = default_texture.image,
-        .viewType = vk::ImageViewType::e2D,
-        .format = default_texture.format,
-        .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor,
-                             .baseMipLevel = 0,
-                             .levelCount = 1,
-                             .baseArrayLayer = 0,
-                             .layerCount = 1}};
-
-    vk::Device device = instance.GetDevice();
-    default_texture.image_view = device.createImageView(view_info);
-
-    // Define the default texture for storage descriptors
-    image_info.format = default_storage_texture.format;
-    result = vmaCreateImage(instance.GetAllocator(), &unsafe_image_info, &alloc_info, &unsafe_image,
-                            &default_storage_texture.allocation, nullptr);
-    if (result != VK_SUCCESS) {
-        LOG_CRITICAL(Render_Vulkan, "Failed allocating default storage texture with error {}",
-                     result);
-        UNREACHABLE();
-    }
-
-    default_storage_texture.image = vk::Image{unsafe_image};
-
-    view_info.format = default_storage_texture.format;
-    view_info.image = default_storage_texture.image;
-    default_storage_texture.image_view = device.createImageView(view_info);
-
-    runtime.Transition(scheduler.GetUploadCommandBuffer(), default_texture,
-                       vk::ImageLayout::eShaderReadOnlyOptimal, 0, 1);
-    runtime.Transition(scheduler.GetUploadCommandBuffer(), default_storage_texture,
-                       vk::ImageLayout::eGeneral, 0, 1);
+    const vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+    runtime.Transition(command_buffer, default_texture, vk::ImageLayout::eShaderReadOnlyOptimal, 0,
+                       1);
+    runtime.Transition(command_buffer, default_storage_texture, vk::ImageLayout::eGeneral, 0, 1);
 }
 
 void RasterizerVulkan::FlushBuffers() {

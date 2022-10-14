@@ -100,8 +100,9 @@ void TextureRuntime::OnSlotSwitch(u32 new_slot) {
 
 ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
                                     VideoCore::TextureType type) {
-
+    const u32 levels = std::bit_width(std::max(width, height));
     const u32 layers = type == VideoCore::TextureType::CubeMap ? 6 : 1;
+
     const VideoCore::HostTextureTag key = {
         .format = format, .width = width, .height = height, .layers = layers};
 
@@ -120,17 +121,25 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     const vk::Format vk_format = is_suitable ? traits.native : traits.fallback;
     const vk::ImageUsageFlags vk_usage = is_suitable ? traits.usage : GetImageUsage(aspect);
 
-    const u32 levels = std::bit_width(std::max(width, height));
-    const vk::ImageCreateInfo image_info = {.flags = type == VideoCore::TextureType::CubeMap
-                                                         ? vk::ImageCreateFlagBits::eCubeCompatible
-                                                         : vk::ImageCreateFlags{},
+    const vk::ImageCreateFlags flags = type == VideoCore::TextureType::CubeMap
+                                           ? vk::ImageCreateFlagBits::eCubeCompatible
+                                           : vk::ImageCreateFlags{};
+
+    return Allocate(width, height, layers, levels, vk_format, vk_usage, flags);
+}
+
+ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, u32 layers, u32 levels,
+                                    vk::Format format, vk::ImageUsageFlags usage,
+                                    vk::ImageCreateFlags flags) {
+    const vk::ImageAspectFlags aspect = GetImageAspect(format);
+    const vk::ImageCreateInfo image_info = {.flags = flags,
                                             .imageType = vk::ImageType::e2D,
-                                            .format = vk_format,
+                                            .format = format,
                                             .extent = {width, height, 1},
                                             .mipLevels = levels,
                                             .arrayLayers = layers,
                                             .samples = vk::SampleCountFlagBits::e1,
-                                            .usage = vk_usage};
+                                            .usage = usage};
 
     const VmaAllocationCreateInfo alloc_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
 
@@ -145,12 +154,14 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         UNREACHABLE();
     }
 
+    const vk::ImageViewType view_type = flags & vk::ImageCreateFlagBits::eCubeCompatible
+                                            ? vk::ImageViewType::eCube
+                                            : vk::ImageViewType::e2D;
+
     vk::Image image = vk::Image{unsafe_image};
     const vk::ImageViewCreateInfo view_info = {.image = image,
-                                               .viewType = type == VideoCore::TextureType::CubeMap
-                                                               ? vk::ImageViewType::eCube
-                                                               : vk::ImageViewType::e2D,
-                                               .format = vk_format,
+                                               .viewType = view_type,
+                                               .format = format,
                                                .subresourceRange = {.aspectMask = aspect,
                                                                     .baseMipLevel = 0,
                                                                     .levelCount = levels,
@@ -158,16 +169,14 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
                                                                     .layerCount = layers}};
 
     // Also create a base mip view in case this is used as an attachment
-    const vk::ImageViewCreateInfo base_view_info = {
-        .image = image,
-        .viewType = type == VideoCore::TextureType::CubeMap ? vk::ImageViewType::eCube
-                                                            : vk::ImageViewType::e2D,
-        .format = vk_format,
-        .subresourceRange = {.aspectMask = aspect,
-                             .baseMipLevel = 0,
-                             .levelCount = 1,
-                             .baseArrayLayer = 0,
-                             .layerCount = layers}};
+    const vk::ImageViewCreateInfo base_view_info = {.image = image,
+                                                    .viewType = view_type,
+                                                    .format = format,
+                                                    .subresourceRange = {.aspectMask = aspect,
+                                                                         .baseMipLevel = 0,
+                                                                         .levelCount = 1,
+                                                                         .baseArrayLayer = 0,
+                                                                         .layerCount = layers}};
 
     vk::Device device = instance.GetDevice();
     vk::ImageView image_view = device.createImageView(view_info);
@@ -176,12 +185,11 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     // Create seperate depth/stencil views in case this gets reinterpreted with a compute shader
     vk::ImageView depth_view;
     vk::ImageView stencil_view;
-    if (format == VideoCore::PixelFormat::D24S8) {
+    if (aspect & vk::ImageAspectFlagBits::eStencil) {
         vk::ImageViewCreateInfo view_info = {
             .image = image,
-            .viewType = type == VideoCore::TextureType::CubeMap ? vk::ImageViewType::eCube
-                                                                : vk::ImageViewType::e2D,
-            .format = vk_format,
+            .viewType = view_type,
+            .format = format,
             .subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eDepth,
                                  .baseMipLevel = 0,
                                  .levelCount = levels,
@@ -199,7 +207,7 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
                       .depth_view = depth_view,
                       .stencil_view = stencil_view,
                       .allocation = allocation,
-                      .format = vk_format,
+                      .format = format,
                       .aspect = aspect,
                       .levels = levels,
                       .layers = layers};
