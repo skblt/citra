@@ -99,13 +99,19 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index, bool 
                                                       static_cast<u32>(extensions.size()),
                                                   .ppEnabledExtensionNames = extensions.data()};
 
-    instance = vk::createInstance(instance_info);
+    try {
+        instance = vk::createInstance(instance_info);
+    } catch (vk::LayerNotPresentError& err) {
+        LOG_CRITICAL(Render_Vulkan, "Validation requested but layer is not available!");
+        UNREACHABLE();
+    }
+
     surface = CreateSurface(instance, window);
 
     // Pick physical device
     physical_devices = instance.enumeratePhysicalDevices();
     if (const u16 physical_device_count = static_cast<u16>(physical_devices.size());
-        physical_device_index >= physical_devices.size()) {
+        physical_device_index >= physical_devices.size()) [[unlikely]] {
         LOG_CRITICAL(Render_Vulkan,
                      "Invalid physical device index {} provided when only {} devices exist",
                      physical_device_index, physical_device_count);
@@ -114,6 +120,9 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index, bool 
 
     physical_device = physical_devices[physical_device_index];
     device_properties = physical_device.getProperties();
+
+    LOG_INFO(Render_Vulkan, "Creating logical device for physical device: {}",
+             device_properties.deviceName);
 
     CreateDevice();
     CreateFormatTable();
@@ -262,7 +271,7 @@ bool Instance::CreateDevice() {
     // Search queue families for graphics and present queues
     auto family_properties = physical_device.getQueueFamilyProperties();
     if (family_properties.empty()) {
-        LOG_CRITICAL(Render_Vulkan, "Vulkan physical device reported no queues.");
+        LOG_CRITICAL(Render_Vulkan, "Physical device reported no queues.");
         return false;
     }
 
@@ -330,7 +339,14 @@ bool Instance::CreateDevice() {
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>()};
 
     // Create logical device
-    device = physical_device.createDevice(device_chain.get());
+    try {
+        device = physical_device.createDevice(device_chain.get());
+    } catch (vk::ExtensionNotPresentError& err) {
+        LOG_CRITICAL(Render_Vulkan, "Some required extensions are not available, "
+                                    "check extension log for details");
+        UNREACHABLE();
+    }
+
     VULKAN_HPP_DEFAULT_DISPATCHER.init(device);
 
     // Grab the graphics and present queues.
