@@ -47,10 +47,15 @@ RenderpassCache::RenderpassCache(const Instance& instance, TaskScheduler& schedu
             const FormatTraits color_traits = instance.GetTraits(ToFormatColor(color));
             const FormatTraits depth_traits = instance.GetTraits(ToFormatDepth(depth));
 
-            const vk::Format color_format =
-                color_traits.attachment_support ? color_traits.native : color_traits.fallback;
+            const vk::Format color_format = color_traits.transfer_support &&
+                                                    color_traits.blit_support &&
+                                                    color_traits.attachment_support
+                                                ? color_traits.native
+                                                : color_traits.fallback;
             const vk::Format depth_format =
-                depth_traits.attachment_support ? depth_traits.native : depth_traits.fallback;
+                depth_traits.transfer_support && depth_traits.attachment_support
+                    ? depth_traits.native
+                    : depth_traits.fallback;
 
             if (color_format == vk::Format::eUndefined && depth_format == vk::Format::eUndefined) {
                 continue;
