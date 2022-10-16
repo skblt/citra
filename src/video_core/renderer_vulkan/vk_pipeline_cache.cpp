@@ -601,7 +601,13 @@ void PipelineCache::BindDescriptorSets() {
                     .descriptorSetCount = DESCRIPTOR_BATCH_SIZE,
                     .pSetLayouts = layouts.data()};
 
-                batch = device.allocateDescriptorSets(alloc_info);
+                try {
+                    batch = device.allocateDescriptorSets(alloc_info);
+                } catch (vk::OutOfPoolMemoryError& err) {
+                    LOG_CRITICAL(Render_Vulkan, "Run out of pool memory for layout {}: {}",
+                                 i, err.what());
+                    UNREACHABLE();
+                }
             }
 
             vk::DescriptorSet set = batch.back();

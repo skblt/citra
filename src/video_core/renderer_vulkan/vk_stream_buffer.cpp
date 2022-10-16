@@ -69,7 +69,7 @@ StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u
                            vk::BufferUsageFlagBits usage, std::span<const vk::Format> view_formats)
     : instance{instance}, scheduler{scheduler}, staging{instance, size,
                                                         vk::BufferUsageFlagBits::eTransferSrc},
-      usage{usage}, total_size{size} {
+      usage{usage}, total_size{size * SCHEDULER_COMMAND_COUNT} {
 
     const vk::BufferCreateInfo buffer_info = {
         .size = total_size, .usage = usage | vk::BufferUsageFlagBits::eTransferDst};
@@ -98,7 +98,7 @@ StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u
     }
 
     view_count = view_formats.size();
-    bucket_size = size / SCHEDULER_COMMAND_COUNT;
+    bucket_size = size;
 }
 
 StreamBuffer::~StreamBuffer() {
@@ -175,11 +175,6 @@ void StreamBuffer::Flush() {
     const u32 next_bucket = (current_bucket + 1) % SCHEDULER_COMMAND_COUNT;
     buckets[next_bucket].offset = 0;
     buckets[next_bucket].invalid = true;
-}
-
-u32 StreamBuffer::GetBufferOffset() const {
-    const u32 current_bucket = scheduler.GetCurrentSlotIndex();
-    return current_bucket * bucket_size + buckets[current_bucket].offset;
 }
 
 } // namespace Vulkan

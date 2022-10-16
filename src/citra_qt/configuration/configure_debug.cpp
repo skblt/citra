@@ -26,6 +26,7 @@ ConfigureDebug::ConfigureDebug(QWidget* parent)
     const bool is_powered_on = Core::System::GetInstance().IsPoweredOn();
     ui->toggle_cpu_jit->setEnabled(!is_powered_on);
     ui->toggle_renderer_debug->setEnabled(!is_powered_on);
+    ui->toggle_dump_command_buffers->setEnabled(!is_powered_on);
 }
 
 ConfigureDebug::~ConfigureDebug() = default;
@@ -39,6 +40,7 @@ void ConfigureDebug::SetConfiguration() {
     ui->log_filter_edit->setText(QString::fromStdString(Settings::values.log_filter));
     ui->toggle_cpu_jit->setChecked(Settings::values.use_cpu_jit);
     ui->toggle_renderer_debug->setChecked(Settings::values.renderer_debug);
+    ui->toggle_dump_command_buffers->setChecked(Settings::values.dump_command_buffers);
 }
 
 void ConfigureDebug::ApplyConfiguration() {
@@ -52,6 +54,7 @@ void ConfigureDebug::ApplyConfiguration() {
     Log::SetGlobalFilter(filter);
     Settings::values.use_cpu_jit = ui->toggle_cpu_jit->isChecked();
     Settings::values.renderer_debug = ui->toggle_renderer_debug->isChecked();
+    Settings::values.dump_command_buffers = ui->toggle_dump_command_buffers->isChecked();
 }
 
 void ConfigureDebug::RetranslateUI() {

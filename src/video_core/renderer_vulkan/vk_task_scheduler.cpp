@@ -33,7 +33,6 @@ TaskScheduler::TaskScheduler(const Instance& instance, RendererVulkan& renderer)
         vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 1024},
         vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 1024},
         vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 2048},
-        vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 512},
         vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 2048},
         vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 1024},
         vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1024}};
@@ -91,7 +90,7 @@ void TaskScheduler::Synchronize(u32 slot) {
     const auto& command = commands[slot];
     vk::Device device = instance.GetDevice();
 
-    u32 completed_counter = GetFenceCounter();
+    const u64 completed_counter = GetFenceCounter();
     if (command.fence_counter > completed_counter) {
         if (instance.IsTimelineSemaphoreSupported()) {
             const vk::SemaphoreWaitInfo wait_info = {
@@ -134,6 +133,16 @@ void TaskScheduler::Submit(SubmitMode mode) {
 
     command_buffers[command_buffer_count++] = command.render_command_buffer;
 
+    const auto QueueSubmit = [this](const vk::SubmitInfo& info, vk::Fence fence) {
+        try {
+            vk::Queue queue = instance.GetGraphicsQueue();
+            queue.submit(info, fence);
+        } catch (vk::DeviceLostError& err) {
+            LOG_CRITICAL(Render_Vulkan, "Device lost during submit: {}", err.what());
+            UNREACHABLE();
+        }
+    };
+
     const bool swapchain_sync = True(mode & SubmitMode::SwapchainSynced);
     if (instance.IsTimelineSemaphoreSupported()) {
         const u32 wait_semaphore_count = swapchain_sync ? 2u : 1u;
@@ -166,9 +175,7 @@ void TaskScheduler::Submit(SubmitMode mode) {
             .pSignalSemaphores = signal_semaphores.data(),
         };
 
-        vk::Queue queue = instance.GetGraphicsQueue();
-        queue.submit(submit_info);
-
+        QueueSubmit(submit_info, command.fence);
     } else {
         const u32 signal_semaphore_count = swapchain_sync ? 1u : 0u;
         const u32 wait_semaphore_count = swapchain_sync ? 1u : 0u;
@@ -185,8 +192,7 @@ void TaskScheduler::Submit(SubmitMode mode) {
             .pSignalSemaphores = &command.present_ready,
         };
 
-        vk::Queue queue = instance.GetGraphicsQueue();
-        queue.submit(submit_info, command.fence);
+        QueueSubmit(submit_info, command.fence);
     }
 
     // Block host until the GPU catches up
