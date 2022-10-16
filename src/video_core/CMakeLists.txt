@@ -84,10 +84,13 @@ add_library(video_core STATIC
     renderer_vulkan/pica_to_vk.h
     renderer_vulkan/renderer_vulkan.cpp
     renderer_vulkan/renderer_vulkan.h
+    renderer_vulkan/vk_blit_helper.cpp
+    renderer_vulkan/vk_blit_helper.h
     renderer_vulkan/vk_common.cpp
     renderer_vulkan/vk_common.h
     renderer_vulkan/vk_format_reinterpreter.cpp
     renderer_vulkan/vk_format_reinterpreter.h
+    renderer_vulkan/vk_layout_tracker.h
     renderer_vulkan/vk_rasterizer.cpp
     renderer_vulkan/vk_rasterizer.h
     renderer_vulkan/vk_instance.cpp

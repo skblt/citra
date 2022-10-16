@@ -2,7 +2,6 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#include <chrono>
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtc/matrix_transform.hpp>
 #include "common/assert.h"
@@ -190,11 +189,9 @@ RendererVulkan::~RendererVulkan() {
     }
 
     for (auto& info : screen_infos) {
-        const VideoCore::HostTextureTag tag = {
-            .format = VideoCore::PixelFormatFromGPUPixelFormat(info.texture.format),
-            .width = info.texture.width,
-            .height = info.texture.height,
-            .layers = 1};
+        const HostTextureTag tag = {.format = info.texture.alloc.format,
+                                    .width = info.texture.width,
+                                    .height = info.texture.height};
 
         runtime.Recycle(tag, std::move(info.texture.alloc));
     }
@@ -548,25 +545,21 @@ void RendererVulkan::BuildPipelines() {
 
 void RendererVulkan::ConfigureFramebufferTexture(TextureInfo& texture,
                                                  const GPU::Regs::FramebufferConfig& framebuffer) {
-    TextureInfo old_texture = texture;
-    texture = TextureInfo{
-        .alloc =
-            runtime.Allocate(framebuffer.width, framebuffer.height,
-                             VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format),
-                             VideoCore::TextureType::Texture2D),
-        .width = framebuffer.width,
-        .height = framebuffer.height,
-        .format = framebuffer.color_format,
-    };
+    TextureInfo old_texture = std::move(texture);
+    texture = TextureInfo{.alloc = runtime.Allocate(
+                              framebuffer.width, framebuffer.height,
+                              VideoCore::PixelFormatFromGPUPixelFormat(framebuffer.color_format),
+                              VideoCore::TextureType::Texture2D),
+                          .width = framebuffer.width,
+                          .height = framebuffer.height,
+                          .format = framebuffer.color_format};
 
     // Recyle the old texture after allocation to avoid having duplicates of the same allocation in
     // the recycler
     if (old_texture.width != 0 && old_texture.height != 0) {
-        const VideoCore::HostTextureTag tag = {
-            .format = VideoCore::PixelFormatFromGPUPixelFormat(old_texture.format),
-            .width = old_texture.width,
-            .height = old_texture.height,
-            .layers = 1};
+        const HostTextureTag tag = {.format = old_texture.alloc.format,
+                                    .width = old_texture.width,
+                                    .height = old_texture.height};
 
         runtime.Recycle(tag, std::move(old_texture.alloc));
     }

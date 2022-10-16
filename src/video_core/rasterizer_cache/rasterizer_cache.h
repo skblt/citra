@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #pragma once
+
 #include <algorithm>
 #include <optional>
 #include <unordered_map>
