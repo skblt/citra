@@ -100,6 +100,11 @@ public:
         return push_descriptors;
     }
 
+    /// Returns true when VK_EXT_custom_border_color is supported
+    bool IsCustomBorderColorSupported() const {
+        return custom_border_color;
+    }
+
     /// Returns the vendor ID of the physical device
     u32 GetVendorID() const {
         return device_properties.vendorID;
@@ -150,6 +155,7 @@ private:
     bool timeline_semaphores = false;
     bool extended_dynamic_state = false;
     bool push_descriptors = false;
+    bool custom_border_color = false;
 };
 
 } // namespace Vulkan
