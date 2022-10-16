@@ -147,6 +147,12 @@ public:
                   RenderpassCache& renderpass_cache);
     ~PipelineCache();
 
+    /// Loads the pipeline cache stored to disk
+    void LoadDiskCache();
+
+    /// Stores the generated pipeline cache to disk
+    void SaveDiskCache();
+
     /// Binds a pipeline using the provided information
     void BindPipeline(const PipelineInfo& info);
 
@@ -205,12 +211,6 @@ private:
 
     /// Builds descriptor sets that reference the currently bound resources
     void BindDescriptorSets();
-
-    /// Loads the pipeline cache stored to disk
-    void LoadDiskCache();
-
-    /// Stores the generated pipeline cache to disk
-    void SaveDiskCache();
 
     /// Returns true when the disk data can be used by the current driver
     bool IsCacheValid(const u8* data, u64 size) const;

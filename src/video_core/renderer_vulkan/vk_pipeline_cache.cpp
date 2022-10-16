@@ -6,6 +6,7 @@
 #include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
+#include "core/settings.h"
 #include "video_core/renderer_vulkan/pica_to_vk.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
@@ -118,7 +119,6 @@ PipelineCache::PipelineCache(const Instance& instance, TaskScheduler& scheduler,
     : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache} {
     descriptor_dirty.fill(true);
 
-    LoadDiskCache();
     BuildLayout();
     trivial_vertex_shader = Compile(GenerateTrivialVertexShader(), vk::ShaderStageFlagBits::eVertex,
                                     instance.GetDevice(), ShaderOptimization::Debug);
@@ -154,6 +154,61 @@ PipelineCache::~PipelineCache() {
     }
 
     graphics_pipelines.clear();
+}
+
+void PipelineCache::LoadDiskCache() {
+    if (!Settings::values.use_disk_shader_cache || !EnsureDirectories()) {
+        return;
+    }
+
+    const std::string cache_file_path = fmt::format("{}{:x}{:x}.bin", GetPipelineCacheDir(),
+                                                    instance.GetVendorID(), instance.GetDeviceID());
+    vk::PipelineCacheCreateInfo cache_info = {.initialDataSize = 0, .pInitialData = nullptr};
+
+    std::vector<u8> cache_data;
+    FileUtil::IOFile cache_file{cache_file_path, "r"};
+    if (cache_file.IsOpen()) {
+        LOG_INFO(Render_Vulkan, "Loading pipeline cache");
+
+        const u64 cache_file_size = cache_file.GetSize();
+        cache_data.resize(cache_file_size);
+        if (cache_file.ReadBytes(cache_data.data(), cache_file_size)) {
+            if (!IsCacheValid(cache_data.data(), cache_file_size)) {
+                LOG_WARNING(Render_Vulkan, "Pipeline cache provided invalid, ignoring");
+            } else {
+                cache_info.initialDataSize = cache_file_size;
+                cache_info.pInitialData = cache_data.data();
+            }
+        }
+
+        cache_file.Close();
+    }
+
+    vk::Device device = instance.GetDevice();
+    pipeline_cache = device.createPipelineCache(cache_info);
+}
+
+void PipelineCache::SaveDiskCache() {
+    if (!Settings::values.use_disk_shader_cache || !EnsureDirectories()) {
+        return;
+    }
+
+    const std::string cache_file_path = fmt::format("{}{:x}{:x}.bin", GetPipelineCacheDir(),
+                                                    instance.GetVendorID(), instance.GetDeviceID());
+    FileUtil::IOFile cache_file{cache_file_path, "wb"};
+    if (!cache_file.IsOpen()) {
+        LOG_INFO(Render_Vulkan, "Unable to open pipeline cache for writing");
+        return;
+    }
+
+    vk::Device device = instance.GetDevice();
+    auto cache_data = device.getPipelineCacheData(pipeline_cache);
+    if (!cache_file.WriteBytes(cache_data.data(), cache_data.size())) {
+        LOG_WARNING(Render_Vulkan, "Error during pipeline cache write");
+        return;
+    }
+
+    cache_file.Close();
 }
 
 void PipelineCache::BindPipeline(const PipelineInfo& info) {
@@ -623,61 +678,6 @@ void PipelineCache::BindDescriptorSets() {
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0,
                                       RASTERIZER_SET_COUNT, descriptor_sets.data(), 0, nullptr);
-}
-
-void PipelineCache::LoadDiskCache() {
-    if (!EnsureDirectories()) {
-        return;
-    }
-
-    const std::string cache_file_path = fmt::format("{}{:x}{:x}.bin", GetPipelineCacheDir(),
-                                                    instance.GetVendorID(), instance.GetDeviceID());
-    vk::PipelineCacheCreateInfo cache_info = {.initialDataSize = 0, .pInitialData = nullptr};
-
-    std::vector<u8> cache_data;
-    FileUtil::IOFile cache_file{cache_file_path, "r"};
-    if (cache_file.IsOpen()) {
-        LOG_INFO(Render_Vulkan, "Loading pipeline cache");
-
-        const u64 cache_file_size = cache_file.GetSize();
-        cache_data.resize(cache_file_size);
-        if (cache_file.ReadBytes(cache_data.data(), cache_file_size)) {
-            if (!IsCacheValid(cache_data.data(), cache_file_size)) {
-                LOG_WARNING(Render_Vulkan, "Pipeline cache provided invalid, ignoring");
-            } else {
-                cache_info.initialDataSize = cache_file_size;
-                cache_info.pInitialData = cache_data.data();
-            }
-        }
-
-        cache_file.Close();
-    }
-
-    vk::Device device = instance.GetDevice();
-    pipeline_cache = device.createPipelineCache(cache_info);
-}
-
-void PipelineCache::SaveDiskCache() {
-    if (!EnsureDirectories()) {
-        return;
-    }
-
-    const std::string cache_file_path = fmt::format("{}{:x}{:x}.bin", GetPipelineCacheDir(),
-                                                    instance.GetVendorID(), instance.GetDeviceID());
-    FileUtil::IOFile cache_file{cache_file_path, "wb"};
-    if (!cache_file.IsOpen()) {
-        LOG_INFO(Render_Vulkan, "Unable to open pipeline cache for writing");
-        return;
-    }
-
-    vk::Device device = instance.GetDevice();
-    auto cache_data = device.getPipelineCacheData(pipeline_cache);
-    if (!cache_file.WriteBytes(cache_data.data(), cache_data.size())) {
-        LOG_WARNING(Render_Vulkan, "Error during pipeline cache write");
-        return;
-    }
-
-    cache_file.Close();
 }
 
 bool PipelineCache::IsCacheValid(const u8* data, u64 size) const {
