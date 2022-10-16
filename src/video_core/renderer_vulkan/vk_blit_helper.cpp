@@ -2,36 +2,38 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#include "video_core/renderer_vulkan/vk_format_reinterpreter.h"
+#include "common/vector_math.h"
+#include "video_core/renderer_vulkan/vk_blit_helper.h"
+#include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_shader.h"
+#include "video_core/renderer_vulkan/vk_task_scheduler.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
 namespace Vulkan {
 
-D24S8toRGBA8::D24S8toRGBA8(const Instance& instance, TaskScheduler& scheduler,
-                           TextureRuntime& runtime)
-    : FormatReinterpreterBase{instance, scheduler, runtime}, device{instance.GetDevice()} {
+BlitHelper::BlitHelper(const Instance& instance, TaskScheduler& scheduler)
+    : scheduler{scheduler}, device{instance.GetDevice()} {
     constexpr std::string_view cs_source = R"(
 #version 450 core
 #extension GL_EXT_samplerless_texture_functions : require
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(set = 0, binding = 0) uniform highp texture2D depth;
 layout(set = 0, binding = 1) uniform lowp utexture2D stencil;
-layout(set = 0, binding = 2, rgba8) uniform highp writeonly image2D color;
+layout(set = 0, binding = 2, r32ui) uniform highp writeonly uimage2D color;
 
 layout(push_constant, std140) uniform ComputeInfo {
     mediump ivec2 src_offset;
 };
 
 void main() {
-    ivec2 tex_coord = src_offset + ivec2(gl_GlobalInvocationID.xy);
+    ivec2 dst_coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 tex_coord = src_offset + dst_coord;
 
     highp uint depth_val =
-        uint(texelFetch(depth, tex_coord, 0).x * (exp2(32.0) - 1.0));
+        uint(texelFetch(depth, tex_coord, 0).x * (exp2(24.0) - 1.0));
     lowp uint stencil_val = texelFetch(stencil, tex_coord, 0).x;
-    highp uvec4 components =
-        uvec4(stencil_val, (uvec3(depth_val) >> uvec3(24u, 16u, 8u)) & 0x000000FFu);
-    imageStore(color, tex_coord, vec4(components) / (exp2(8.0) - 1.0));
+    highp uint value = stencil_val | (depth_val << 8);
+    imageStore(color, dst_coord, uvec4(value));
 }
 
 )";
@@ -114,7 +116,7 @@ void main() {
     }
 }
 
-D24S8toRGBA8::~D24S8toRGBA8() {
+BlitHelper::~BlitHelper() {
     device.destroyPipeline(compute_pipeline);
     device.destroyPipelineLayout(compute_pipeline_layout);
     device.destroyDescriptorUpdateTemplate(update_template);
@@ -122,8 +124,8 @@ D24S8toRGBA8::~D24S8toRGBA8() {
     device.destroyShaderModule(compute_shader);
 }
 
-void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surface& dest,
-                               VideoCore::Rect2D dst_rect) {
+void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
+                                const VideoCore::TextureBlit& blit) {
     source.Transition(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 0, source.alloc.levels);
     dest.Transition(vk::ImageLayout::eGeneral, 0, dest.alloc.levels);
 
@@ -149,11 +151,11 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
                                       1, &descriptor_set, 0, nullptr);
     command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
 
-    const auto src_offset = Common::MakeVec(src_rect.left, src_rect.bottom);
+    const auto src_offset = Common::MakeVec(blit.src_rect.left, blit.src_rect.bottom);
     command_buffer.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
                                  sizeof(Common::Vec2i), src_offset.AsArray());
 
-    command_buffer.dispatch(src_rect.GetWidth() / 8, src_rect.GetHeight() / 8, 1);
+    command_buffer.dispatch(blit.src_rect.GetWidth() / 8, blit.src_rect.GetHeight() / 8, 1);
 }
 
 } // namespace Vulkan
