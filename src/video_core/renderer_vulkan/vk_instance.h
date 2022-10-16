@@ -32,7 +32,7 @@ struct FormatTraits {
 class Instance {
 public:
     Instance(); ///< Portable constructor used to query physical devices
-    Instance(Frontend::EmuWindow& window, u32 physical_device_index, bool enable_validation);
+    Instance(Frontend::EmuWindow& window, u32 physical_device_index);
     ~Instance();
 
     /// Returns the FormatTraits struct for the provided pixel format
@@ -87,6 +87,7 @@ public:
 
     /// Returns true when VK_KHR_timeline_semaphore is supported
     bool IsTimelineSemaphoreSupported() const {
+        return false;
         return timeline_semaphores;
     }
 

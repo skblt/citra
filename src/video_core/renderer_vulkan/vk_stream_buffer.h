@@ -48,9 +48,6 @@ public:
     /// Flushes staging memory to the GPU buffer
     void Flush();
 
-    /// Returns the current buffer offset
-    u32 GetBufferOffset() const;
-
     /// Returns the Vulkan buffer handle
     vk::Buffer GetHandle() const {
         return buffer;

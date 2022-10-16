@@ -4,6 +4,7 @@
 
 #include <span>
 #include "common/assert.h"
+#include "core/settings.h"
 #include "core/frontend/emu_window.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
@@ -66,7 +67,7 @@ Instance::Instance() {
     physical_devices = instance.enumeratePhysicalDevices();
 }
 
-Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index, bool enable_validation) {
+Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) {
     auto window_info = window.GetWindowInfo();
 
     // Fetch instance independant function pointers
@@ -90,8 +91,16 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index, bool 
                                                   .engineVersion = VK_MAKE_VERSION(1, 0, 0),
                                                   .apiVersion = available_version};
 
-    const std::array layers = {"VK_LAYER_KHRONOS_validation"};
-    const u32 layer_count = enable_validation ? 1u : 0u;
+    u32 layer_count = 0;
+    std::array<const char*, 2> layers;
+
+    if (Settings::values.renderer_debug) {
+        layers[layer_count++] = "VK_LAYER_KHRONOS_validation";
+    }
+    if (Settings::values.dump_command_buffers) {
+        layers[layer_count++] = "VK_LAYER_LUNARG_api_dump";
+    }
+
     const vk::InstanceCreateInfo instance_info = {.pApplicationInfo = &application_info,
                                                   .enabledLayerCount = layer_count,
                                                   .ppEnabledLayerNames = layers.data(),
