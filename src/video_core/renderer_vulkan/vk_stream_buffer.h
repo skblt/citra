@@ -75,12 +75,12 @@ private:
 
     const Instance& instance;
     TaskScheduler& scheduler;
+    u32 total_size = 0;
     StagingBuffer staging;
 
     vk::Buffer buffer{};
     VmaAllocation allocation{};
     vk::BufferUsageFlagBits usage;
-    u32 total_size = 0;
     std::array<vk::BufferView, MAX_BUFFER_VIEWS> views{};
     std::size_t view_count = 0;
 

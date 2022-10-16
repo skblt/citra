@@ -604,8 +604,8 @@ void PipelineCache::BindDescriptorSets() {
                 try {
                     batch = device.allocateDescriptorSets(alloc_info);
                 } catch (vk::OutOfPoolMemoryError& err) {
-                    LOG_CRITICAL(Render_Vulkan, "Run out of pool memory for layout {}: {}",
-                                 i, err.what());
+                    LOG_CRITICAL(Render_Vulkan, "Run out of pool memory for layout {}: {}", i,
+                                 err.what());
                     UNREACHABLE();
                 }
             }

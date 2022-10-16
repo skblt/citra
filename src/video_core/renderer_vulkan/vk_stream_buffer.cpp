@@ -67,9 +67,8 @@ StagingBuffer::~StagingBuffer() {
 
 StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u32 size,
                            vk::BufferUsageFlagBits usage, std::span<const vk::Format> view_formats)
-    : instance{instance}, scheduler{scheduler}, staging{instance, size,
-                                                        vk::BufferUsageFlagBits::eTransferSrc},
-      usage{usage}, total_size{size * SCHEDULER_COMMAND_COUNT} {
+    : instance{instance}, scheduler{scheduler}, total_size{size * SCHEDULER_COMMAND_COUNT},
+      staging{instance, total_size, vk::BufferUsageFlagBits::eTransferSrc}, usage{usage} {
 
     const vk::BufferCreateInfo buffer_info = {
         .size = total_size, .usage = usage | vk::BufferUsageFlagBits::eTransferDst};

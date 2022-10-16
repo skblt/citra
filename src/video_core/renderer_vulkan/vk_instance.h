@@ -87,7 +87,6 @@ public:
 
     /// Returns true when VK_KHR_timeline_semaphore is supported
     bool IsTimelineSemaphoreSupported() const {
-        return false;
         return timeline_semaphores;
     }
 
