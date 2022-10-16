@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <bit>
+#include "video_core/rasterizer_cache/morton_swizzle.h"
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
@@ -593,8 +594,8 @@ MICROPROFILE_DEFINE(Vulkan_Upload, "VulkanSurface", "Texture Upload", MP_RGB(128
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
     MICROPROFILE_SCOPE(Vulkan_Upload);
 
-    if (type == VideoCore::SurfaceType::DepthStencil) {
-        LOG_ERROR(Render_Vulkan, "Depth upload unimplemented, ignoring");
+    if (type == VideoCore::SurfaceType::DepthStencil && !traits.blit_support) {
+        LOG_ERROR(Render_Vulkan, "Depth blit unsupported by hardware, ignoring");
         return;
     }
 
@@ -626,7 +627,7 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
             copy_regions[region_count++] = copy_region;
 
             if (alloc.aspect & vk::ImageAspectFlagBits::eStencil) {
-                copy_region.bufferOffset += 4 * staging.size / 5;
+                copy_region.bufferOffset += UnpackDepthStencil(staging);
                 copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eStencil;
                 copy_regions[region_count++] = copy_region;
             }
@@ -811,6 +812,33 @@ void Surface::DepthStencilDownload(const VideoCore::BufferTextureCopy& download,
                                                        .texture_level = is_scaled ? 1u : 0u};
 
     r32_surface.Download(r32_download, staging);
+}
+
+u32 Surface::UnpackDepthStencil(const StagingData& data) {
+    u32 depth_offset = 0;
+    u32 stencil_offset = 4 * data.size / 5;
+    const auto& mapped = data.mapped;
+
+    switch (alloc.format) {
+    case vk::Format::eD24UnormS8Uint: {
+        for (; stencil_offset < data.size; depth_offset += 4) {
+            std::byte* ptr = mapped.data() + depth_offset;
+            const u32 d24s8 = VideoCore::MakeInt<u32>(ptr);
+            const u32 d24 = d24s8 >> 8;
+            mapped[stencil_offset] = static_cast<std::byte>(d24s8 & 0xFF);
+            std::memcpy(ptr, &d24, 4);
+            stencil_offset++;
+        }
+        break;
+    }
+    default:
+        LOG_ERROR(Render_Vulkan, "Unimplemtend convertion for depth format {}",
+                  vk::to_string(alloc.format));
+        UNREACHABLE();
+    }
+
+    ASSERT(depth_offset == 4 * data.size / 5);
+    return depth_offset;
 }
 
 } // namespace Vulkan
