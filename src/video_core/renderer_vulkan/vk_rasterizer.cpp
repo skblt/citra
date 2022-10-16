@@ -669,7 +669,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         auto surface = res_cache.GetTextureSurface(info);
 
         const u32 binding = static_cast<u32>(face);
-        if (surface != nullptr) {
+        if (surface) {
             pipeline_cache.BindStorageImage(binding, surface->GetImageView());
         } else {
             pipeline_cache.BindStorageImage(binding, null_storage_surface.GetImageView());
@@ -775,8 +775,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                         .dst_layer = 0,
                         .src_offset = VideoCore::Offset{0, 0},
                         .dst_offset = VideoCore::Offset{0, 0},
-                        .extent = VideoCore::Extent{temp.GetScaledWidth(),
-                                                    temp.GetScaledHeight()}};
+                        .extent = VideoCore::Extent{temp.GetScaledWidth(), temp.GetScaledHeight()}};
 
                     runtime.CopyTextures(*color_surface, temp, copy);
                     temp.Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0, temp.alloc.levels);
