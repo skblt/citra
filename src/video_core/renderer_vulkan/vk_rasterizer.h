@@ -249,8 +249,6 @@ private:
     /// Creates a new Vulkan framebuffer object
     vk::Framebuffer CreateFramebuffer(const FramebufferInfo& info);
 
-    void CreateDefaultTextures();
-
 private:
     const Instance& instance;
     TaskScheduler& scheduler;
@@ -280,8 +278,8 @@ private:
     std::vector<HardwareVertex> vertex_batch;
     std::array<u64, 16> binding_offsets{};
     vk::Sampler default_sampler;
-    ImageAlloc default_texture;
-    ImageAlloc default_storage_texture;
+    Surface null_surface;
+    Surface null_storage_surface;
 
     struct {
         Pica::Shader::UniformData data{};

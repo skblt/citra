@@ -48,7 +48,7 @@ class SurfaceBase : public SurfaceParams, public std::enable_shared_from_this<S>
     using Watcher = SurfaceWatcher<S>;
 
 public:
-    SurfaceBase(SurfaceParams& params) : SurfaceParams{params} {}
+    SurfaceBase(const SurfaceParams& params) : SurfaceParams{params} {}
     virtual ~SurfaceBase() = default;
 
     /// Returns true when this surface can be used to fill the fill_interval of dest_surface

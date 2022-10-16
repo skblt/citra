@@ -9,8 +9,10 @@
 #include <vulkan/vulkan_hash.hpp>
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/rasterizer_cache/surface_base.h"
+#include "video_core/renderer_vulkan/vk_blit_helper.h"
 #include "video_core/renderer_vulkan/vk_format_reinterpreter.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_layout_tracker.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
 
@@ -24,6 +26,14 @@ struct StagingData {
 };
 
 struct ImageAlloc {
+    ImageAlloc() = default;
+
+    ImageAlloc(const ImageAlloc&) = delete;
+    ImageAlloc& operator=(const ImageAlloc&) = delete;
+
+    ImageAlloc(ImageAlloc&&) = default;
+    ImageAlloc& operator=(ImageAlloc&&) = default;
+
     vk::Image image;
     vk::ImageView image_view;
     vk::ImageView base_view;
@@ -32,11 +42,37 @@ struct ImageAlloc {
     VmaAllocation allocation;
     vk::ImageUsageFlags usage;
     vk::Format format;
-    vk::ImageLayout layout = vk::ImageLayout::eUndefined;
     vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
     u32 levels = 1;
     u32 layers = 1;
+    LayoutTracker tracker;
 };
+
+struct HostTextureTag {
+    vk::Format format = vk::Format::eUndefined;
+    VideoCore::TextureType type = VideoCore::TextureType::Texture2D;
+    u32 width = 1;
+    u32 height = 1;
+
+    auto operator<=>(const HostTextureTag&) const noexcept = default;
+
+    const u64 Hash() const {
+        return Common::ComputeHash64(this, sizeof(HostTextureTag));
+    }
+};
+
+} // namespace Vulkan
+
+namespace std {
+template <>
+struct hash<Vulkan::HostTextureTag> {
+    std::size_t operator()(const Vulkan::HostTextureTag& tag) const noexcept {
+        return tag.Hash();
+    }
+};
+} // namespace std
+
+namespace Vulkan {
 
 class Instance;
 class RenderpassCache;
@@ -62,15 +98,14 @@ public:
                                       VideoCore::TextureType type);
 
     /// Allocates a vulkan image
-    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, u32 layers, u32 levels,
-                                      vk::Format format, vk::ImageUsageFlags usage,
-                                      vk::ImageCreateFlags flags);
+    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::TextureType type,
+                                      vk::Format format, vk::ImageUsageFlags usage);
 
     /// Causes a GPU command flush
     void Finish();
 
     /// Takes back ownership of the allocation for recycling
-    void Recycle(const VideoCore::HostTextureTag tag, ImageAlloc&& alloc);
+    void Recycle(const HostTextureTag tag, ImageAlloc&& alloc);
 
     /// Performs required format convertions on the staging data
     void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
@@ -78,7 +113,7 @@ public:
 
     /// Transitions the mip level range of the surface to new_layout
     void Transition(vk::CommandBuffer command_buffer, ImageAlloc& alloc, vk::ImageLayout new_layout,
-                    u32 level, u32 level_count, u32 layer = 0, u32 layer_count = 1);
+                    u32 level, u32 level_count);
 
     /// Fills the rectangle of the texture with the clear value provided
     bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
@@ -118,10 +153,11 @@ private:
     const Instance& instance;
     TaskScheduler& scheduler;
     RenderpassCache& renderpass_cache;
+    BlitHelper blit_helper;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
     std::array<std::unique_ptr<StagingBuffer>, SCHEDULER_COMMAND_COUNT> staging_buffers;
     std::array<u32, SCHEDULER_COMMAND_COUNT> staging_offsets{};
-    std::unordered_multimap<VideoCore::HostTextureTag, ImageAlloc> texture_recycler;
+    std::unordered_multimap<HostTextureTag, ImageAlloc> texture_recycler;
     std::unordered_map<vk::ImageView, vk::Framebuffer> clear_framebuffers;
 };
 
@@ -130,8 +166,13 @@ class Surface : public VideoCore::SurfaceBase<Surface> {
     friend class RasterizerVulkan;
 
 public:
-    Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
+    Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime);
+    Surface(const VideoCore::SurfaceParams& params, vk::Format format, vk::ImageUsageFlags usage,
+            TextureRuntime& runtime);
     ~Surface() override;
+
+    /// Transitions the mip level range of the surface to new_layout
+    void Transition(vk::ImageLayout new_layout, u32 level, u32 level_count);
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture
     void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
@@ -168,14 +209,15 @@ public:
     }
 
 private:
-    /// Downloads scaled image by downscaling the requested rectangle
-    void ScaledDownload(const VideoCore::BufferTextureCopy& download);
-
     /// Uploads pixel data to scaled texture
-    void ScaledUpload(const VideoCore::BufferTextureCopy& upload);
+    void ScaledUpload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
 
-    /// Overrides the image layout of the mip level range
-    void SetLayout(vk::ImageLayout new_layout, u32 level = 0, u32 level_count = 1);
+    /// Downloads scaled image by downscaling the requested rectangle
+    void ScaledDownload(const VideoCore::BufferTextureCopy& download, const StagingData& stagings);
+
+    /// Downloads scaled depth stencil data
+    void DepthStencilDownload(const VideoCore::BufferTextureCopy& download,
+                              const StagingData& staging);
 
 private:
     TextureRuntime& runtime;
@@ -183,7 +225,7 @@ private:
     TaskScheduler& scheduler;
 
 public:
-    ImageAlloc alloc{};
+    ImageAlloc alloc;
     FormatTraits traits;
 };
 
