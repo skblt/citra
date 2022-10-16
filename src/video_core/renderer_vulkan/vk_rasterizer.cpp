@@ -1588,8 +1588,21 @@ bool RasterizerVulkan::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
 }
 
 vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
+    const bool use_border_color = instance.IsCustomBorderColorSupported() &&
+            (info.wrap_s == SamplerInfo::TextureConfig::ClampToBorder ||
+            info.wrap_t == SamplerInfo::TextureConfig::ClampToBorder);
     auto properties = instance.GetPhysicalDevice().getProperties();
+
+    const auto color = PicaToVK::ColorRGBA8(info.border_color);
+    const vk::SamplerCustomBorderColorCreateInfoEXT border_color_info = {
+        .customBorderColor = vk::ClearColorValue{
+            .float32 = std::array{color[0], color[1], color[2], color[3]}
+        },
+        .format = vk::Format::eUndefined
+    };
+
     const vk::SamplerCreateInfo sampler_info = {
+        .pNext = use_border_color ? &border_color_info : nullptr,
         .magFilter = PicaToVK::TextureFilterMode(info.mag_filter),
         .minFilter = PicaToVK::TextureFilterMode(info.min_filter),
         .mipmapMode = PicaToVK::TextureMipFilterMode(info.mip_filter),
@@ -1602,7 +1615,8 @@ vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
         .compareOp = vk::CompareOp::eAlways,
         .minLod = info.lod_min,
         .maxLod = info.lod_max,
-        .borderColor = vk::BorderColor::eIntOpaqueBlack,
+        .borderColor = use_border_color ? vk::BorderColor::eFloatCustomEXT
+                                        : vk::BorderColor::eIntOpaqueBlack,
         .unnormalizedCoordinates = false};
 
     vk::Device device = instance.GetDevice();
