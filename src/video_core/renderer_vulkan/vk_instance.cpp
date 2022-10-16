@@ -4,8 +4,8 @@
 
 #include <span>
 #include "common/assert.h"
-#include "core/settings.h"
 #include "core/frontend/emu_window.h"
+#include "core/settings.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
 
