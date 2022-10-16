@@ -227,7 +227,8 @@ bool Instance::CreateDevice() {
     auto feature_chain =
         physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
                                      vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-                                     vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>();
+                                     vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR,
+                                     vk::PhysicalDeviceCustomBorderColorFeaturesEXT>();
 
     // Not having geometry shaders will cause issues with accelerated rendering.
     const vk::PhysicalDeviceFeatures available = feature_chain.get().features;
@@ -243,7 +244,7 @@ bool Instance::CreateDevice() {
     }
 
     // Helper lambda for adding extensions
-    std::array<const char*, 6> enabled_extensions;
+    std::array<const char*, 10> enabled_extensions;
     u32 enabled_extension_count = 0;
 
     auto AddExtension = [&](std::string_view name) -> bool {
@@ -267,6 +268,7 @@ bool Instance::CreateDevice() {
     timeline_semaphores = AddExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    custom_border_color = AddExtension(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
 
     // Search queue families for graphics and present queues
     auto family_properties = physical_device.getQueueFamilyProperties();
@@ -336,7 +338,8 @@ bool Instance::CreateDevice() {
         vk::PhysicalDeviceDepthClipControlFeaturesEXT{.depthClipControl = true},
         vk::PhysicalDeviceIndexTypeUint8FeaturesEXT{.indexTypeUint8 = true},
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
-        feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>()};
+        feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
+        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>()};
 
     // Create logical device
     try {
