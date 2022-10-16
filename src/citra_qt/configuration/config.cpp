@@ -328,7 +328,8 @@ void Config::ReadDebuggingValues() {
     Settings::values.use_gdbstub = ReadSetting(QStringLiteral("use_gdbstub"), false).toBool();
     Settings::values.gdbstub_port = ReadSetting(QStringLiteral("gdbstub_port"), 24689).toInt();
     Settings::values.renderer_debug = ReadSetting(QStringLiteral("renderer_debug"), false).toBool();
-    Settings::values.dump_command_buffers = ReadSetting(QStringLiteral("dump_command_buffers"), false).toBool();
+    Settings::values.dump_command_buffers =
+        ReadSetting(QStringLiteral("dump_command_buffers"), false).toBool();
 
     qt_config->beginGroup(QStringLiteral("LLE"));
     for (const auto& service_module : Service::service_module_map) {
@@ -890,7 +891,8 @@ void Config::SaveDebuggingValues() {
     WriteSetting(QStringLiteral("use_gdbstub"), Settings::values.use_gdbstub, false);
     WriteSetting(QStringLiteral("gdbstub_port"), Settings::values.gdbstub_port, 24689);
     WriteSetting(QStringLiteral("renderer_debug"), Settings::values.renderer_debug, false);
-    WriteSetting(QStringLiteral("dump_command_buffers"), Settings::values.dump_command_buffers, false);
+    WriteSetting(QStringLiteral("dump_command_buffers"), Settings::values.dump_command_buffers,
+                 false);
 
     qt_config->beginGroup(QStringLiteral("LLE"));
     for (const auto& service_module : Settings::values.lle_modules) {
