@@ -166,10 +166,14 @@ class Surface : public VideoCore::SurfaceBase<Surface> {
     friend class RasterizerVulkan;
 
 public:
+    Surface(TextureRuntime& runtime);
     Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime);
     Surface(const VideoCore::SurfaceParams& params, vk::Format format, vk::ImageUsageFlags usage,
             TextureRuntime& runtime);
     ~Surface() override;
+
+    Surface(Surface&&) = default;
+    Surface& operator=(Surface&&) = default;
 
     /// Transitions the mip level range of the surface to new_layout
     void Transition(vk::ImageLayout new_layout, u32 level, u32 level_count);

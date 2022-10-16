@@ -663,17 +663,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         uniform_block_data.dirty = true;
     }
 
-    auto CheckBarrier = [this, &color_surface = color_surface](vk::ImageView image_view,
-                                                               u32 texture_index) {
-        if (color_surface && color_surface->alloc.image_view == image_view) {
-            // auto temp_tex = backend->CreateTexture(texture->GetInfo());
-            // temp_tex->CopyFrom(texture);
-            pipeline_cache.BindTexture(texture_index, image_view);
-        } else {
-            pipeline_cache.BindTexture(texture_index, image_view);
-        }
-    };
-
     const auto BindCubeFace = [&](Pica::TexturingRegs::CubeFace face,
                                   Pica::Texture::TextureInfo& info) {
         info.physical_address = regs.texturing.GetCubePhysicalAddress(face);
@@ -715,7 +704,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     // Sync and bind the texture surfaces
     const auto pica_textures = regs.texturing.GetTextures();
-    for (unsigned texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
+    for (u32 texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
         const auto& texture = pica_textures[texture_index];
 
         if (texture.enabled) {
@@ -724,7 +713,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                 switch (texture.config.type.Value()) {
                 case TextureType::Shadow2D: {
                     auto surface = res_cache.GetTextureSurface(texture);
-                    if (surface != nullptr) {
+                    if (surface) {
                         pipeline_cache.BindStorageImage(0, surface->GetImageView());
                     } else {
                         pipeline_cache.BindStorageImage(0, null_storage_surface.GetImageView());
@@ -756,7 +745,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                         .format = texture.format};
 
                     auto surface = res_cache.GetTextureCube(config);
-                    if (surface != nullptr) {
+                    if (surface) {
                         surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
                                             surface->alloc.levels);
                         pipeline_cache.BindTexture(3, surface->GetImageView());
@@ -776,10 +765,29 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             BindSampler(texture_index, texture_samplers[texture_index], texture.config);
 
             auto surface = res_cache.GetTextureSurface(texture);
-            if (surface != nullptr) {
-                surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
-                                    surface->alloc.levels);
-                CheckBarrier(surface->alloc.image_view, texture_index);
+            if (surface) {
+                if (color_surface && color_surface->GetImageView() == surface->GetImageView()) {
+                    Surface temp{*color_surface, runtime};
+                    const VideoCore::TextureCopy copy = {
+                        .src_level = 0,
+                        .dst_level = 0,
+                        .src_layer = 0,
+                        .dst_layer = 0,
+                        .src_offset = VideoCore::Offset{0, 0},
+                        .dst_offset = VideoCore::Offset{0, 0},
+                        .extent = VideoCore::Extent{temp.GetScaledWidth(),
+                                                    temp.GetScaledHeight()}};
+
+                    runtime.CopyTextures(*color_surface, temp, copy);
+                    temp.Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0, temp.alloc.levels);
+
+                    pipeline_cache.BindTexture(texture_index, temp.GetImageView());
+                } else {
+                    surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
+                                        surface->alloc.levels);
+                    pipeline_cache.BindTexture(texture_index, surface->GetImageView());
+                }
+
             } else {
                 // Can occur when texture addr is null or its memory is unmapped/invalid
                 // HACK: In this case, the correct behaviour for the PICA is to use the last
@@ -823,14 +831,28 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     pipeline_cache.SetScissor(draw_rect.left, draw_rect.bottom, draw_rect.GetWidth(),
                               draw_rect.GetHeight());
 
-    auto valid_surface = color_surface ? color_surface : depth_surface;
+    // Sometimes the dimentions of the color and depth framebuffers might not be the same
+    // In that case select the minimum one to abide by the spec
+    u32 width = 0;
+    u32 height = 0;
+    if (color_surface && depth_surface) {
+        width = std::min(color_surface->GetScaledWidth(), depth_surface->GetScaledWidth());
+        height = std::min(color_surface->GetScaledHeight(), depth_surface->GetScaledHeight());
+    } else if (color_surface) {
+        width = color_surface->GetScaledWidth();
+        height = color_surface->GetScaledHeight();
+    } else if (depth_surface) {
+        width = depth_surface->GetScaledWidth();
+        height = depth_surface->GetScaledHeight();
+    }
+
     const FramebufferInfo framebuffer_info = {
         .color = color_surface ? color_surface->GetFramebufferView() : VK_NULL_HANDLE,
         .depth = depth_surface ? depth_surface->GetFramebufferView() : VK_NULL_HANDLE,
         .renderpass = renderpass_cache.GetRenderpass(pipeline_info.color_attachment,
                                                      pipeline_info.depth_attachment, false),
-        .width = valid_surface->GetScaledWidth(),
-        .height = valid_surface->GetScaledHeight()};
+        .width = width,
+        .height = height};
 
     auto [it, new_framebuffer] = framebuffers.try_emplace(framebuffer_info, vk::Framebuffer{});
     if (new_framebuffer) {
