@@ -551,6 +551,9 @@ void TextureRuntime::Transition(vk::CommandBuffer command_buffer, ImageAlloc& al
     }
 }
 
+Surface::Surface(TextureRuntime& runtime)
+    : runtime{runtime}, instance{runtime.GetInstance()}, scheduler{runtime.GetScheduler()} {}
+
 Surface::Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime)
     : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, instance{runtime.GetInstance()},
       scheduler{runtime.GetScheduler()}, traits{instance.GetTraits(pixel_format)} {
