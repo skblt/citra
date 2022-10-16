@@ -202,7 +202,7 @@ RasterizerVulkan::~RasterizerVulkan() {
 
 void RasterizerVulkan::LoadDiskResources(const std::atomic_bool& stop_loading,
                                          const VideoCore::DiskResourceLoadCallback& callback) {
-    // shader_program_manager->LoadDiskCache(stop_loading, callback);
+    pipeline_cache.LoadDiskCache();
 }
 
 void RasterizerVulkan::SyncEntireState() {
