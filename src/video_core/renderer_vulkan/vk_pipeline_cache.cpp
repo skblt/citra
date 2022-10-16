@@ -19,6 +19,7 @@ struct Bindings {
     u32 binding_count;
 };
 
+constexpr u32 DESCRIPTOR_BATCH_SIZE = 8;
 constexpr u32 RASTERIZER_SET_COUNT = 4;
 constexpr static std::array RASTERIZER_SETS = {
     Bindings{// Utility set
@@ -289,6 +290,9 @@ void PipelineCache::MarkDirty() {
     descriptor_dirty.fill(true);
     current_pipeline = VK_NULL_HANDLE;
     state_dirty = true;
+    for (auto& batch : descriptor_batch) {
+        batch.clear();
+    }
 }
 
 void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
@@ -585,18 +589,27 @@ static_assert(sizeof(vk::DescriptorBufferInfo) == sizeof(VkDescriptorBufferInfo)
 
 void PipelineCache::BindDescriptorSets() {
     vk::Device device = instance.GetDevice();
+    std::array<vk::DescriptorSetLayout, DESCRIPTOR_BATCH_SIZE> layouts;
+
     for (u32 i = 0; i < RASTERIZER_SET_COUNT; i++) {
         if (descriptor_dirty[i] || !descriptor_sets[i]) {
-            const vk::DescriptorSetAllocateInfo alloc_info = {
-                .descriptorPool = scheduler.GetDescriptorPool(),
-                .descriptorSetCount = 1,
-                .pSetLayouts = &descriptor_set_layouts[i]};
+            auto& batch = descriptor_batch[i];
+            if (batch.empty()) {
+                layouts.fill(descriptor_set_layouts[i]);
+                const vk::DescriptorSetAllocateInfo alloc_info = {
+                    .descriptorPool = scheduler.GetDescriptorPool(),
+                    .descriptorSetCount = DESCRIPTOR_BATCH_SIZE,
+                    .pSetLayouts = layouts.data()};
 
-            vk::DescriptorSet set = device.allocateDescriptorSets(alloc_info)[0];
+                batch = device.allocateDescriptorSets(alloc_info);
+            }
+
+            vk::DescriptorSet set = batch.back();
             device.updateDescriptorSetWithTemplate(set, update_templates[i], update_data[i][0]);
 
             descriptor_sets[i] = set;
             descriptor_dirty[i] = false;
+            batch.pop_back();
         }
     }
 

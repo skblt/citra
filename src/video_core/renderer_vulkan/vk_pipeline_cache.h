@@ -243,6 +243,7 @@ private:
     std::array<DescriptorSetData, MAX_DESCRIPTOR_SETS> update_data{};
     std::array<bool, MAX_DESCRIPTOR_SETS> descriptor_dirty{};
     std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> descriptor_sets;
+    std::array<std::vector<vk::DescriptorSet>, MAX_DESCRIPTOR_SETS> descriptor_batch;
     bool state_dirty = true;
 
     // Bound shader modules
