@@ -172,9 +172,6 @@ public:
             TextureRuntime& runtime);
     ~Surface() override;
 
-    Surface(Surface&&) = default;
-    Surface& operator=(Surface&&) = default;
-
     /// Transitions the mip level range of the surface to new_layout
     void Transition(vk::ImageLayout new_layout, u32 level, u32 level_count);
 
@@ -222,6 +219,9 @@ private:
     /// Downloads scaled depth stencil data
     void DepthStencilDownload(const VideoCore::BufferTextureCopy& download,
                               const StagingData& staging);
+
+    /// Unpacks packed D24S8 data to facilitate depth upload
+    u32 UnpackDepthStencil(const StagingData& data);
 
 private:
     TextureRuntime& runtime;
