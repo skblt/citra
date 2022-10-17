@@ -15,56 +15,6 @@
 
 namespace Vulkan {
 
-struct Bindings {
-    std::array<vk::DescriptorType, MAX_DESCRIPTORS> bindings;
-    u32 binding_count;
-};
-
-constexpr u32 DESCRIPTOR_BATCH_SIZE = 8;
-constexpr u32 RASTERIZER_SET_COUNT = 4;
-constexpr static std::array RASTERIZER_SETS = {
-    Bindings{// Utility set
-             .bindings = {vk::DescriptorType::eUniformBuffer, vk::DescriptorType::eUniformBuffer,
-                          vk::DescriptorType::eUniformTexelBuffer,
-                          vk::DescriptorType::eUniformTexelBuffer,
-                          vk::DescriptorType::eUniformTexelBuffer},
-             .binding_count = 5},
-    Bindings{// Texture set
-             .bindings = {vk::DescriptorType::eSampledImage, vk::DescriptorType::eSampledImage,
-                          vk::DescriptorType::eSampledImage, vk::DescriptorType::eSampledImage},
-             .binding_count = 4},
-    Bindings{// Sampler set
-             .bindings = {vk::DescriptorType::eSampler, vk::DescriptorType::eSampler,
-                          vk::DescriptorType::eSampler, vk::DescriptorType::eSampler},
-             .binding_count = 4},
-    Bindings{// Shadow set
-             .bindings = {vk::DescriptorType::eStorageImage, vk::DescriptorType::eStorageImage,
-                          vk::DescriptorType::eStorageImage, vk::DescriptorType::eStorageImage,
-                          vk::DescriptorType::eStorageImage, vk::DescriptorType::eStorageImage,
-                          vk::DescriptorType::eStorageImage},
-             .binding_count = 7}};
-
-constexpr vk::ShaderStageFlags ToVkStageFlags(vk::DescriptorType type) {
-    vk::ShaderStageFlags flags;
-    switch (type) {
-    case vk::DescriptorType::eSampler:
-    case vk::DescriptorType::eSampledImage:
-    case vk::DescriptorType::eUniformTexelBuffer:
-    case vk::DescriptorType::eStorageImage:
-        flags = vk::ShaderStageFlagBits::eFragment;
-        break;
-    case vk::DescriptorType::eUniformBuffer:
-    case vk::DescriptorType::eUniformBufferDynamic:
-        flags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex |
-                vk::ShaderStageFlagBits::eGeometry | vk::ShaderStageFlagBits::eCompute;
-        break;
-    default:
-        LOG_ERROR(Render_Vulkan, "Unknown descriptor type!");
-    }
-
-    return flags;
-}
-
 u32 AttribBytes(VertexAttribute attrib) {
     switch (attrib.type) {
     case AttribType::Float:
@@ -116,10 +66,9 @@ vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
 
 PipelineCache::PipelineCache(const Instance& instance, TaskScheduler& scheduler,
                              RenderpassCache& renderpass_cache)
-    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache} {
-    descriptor_dirty.fill(true);
-
-    BuildLayout();
+    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache}, desc_manager{
+                                                                                        instance,
+                                                                                        scheduler} {
     trivial_vertex_shader = Compile(GenerateTrivialVertexShader(), vk::ShaderStageFlagBits::eVertex,
                                     instance.GetDevice(), ShaderOptimization::Debug);
 }
@@ -129,13 +78,8 @@ PipelineCache::~PipelineCache() {
 
     SaveDiskCache();
 
-    device.destroyPipelineLayout(layout);
     device.destroyPipelineCache(pipeline_cache);
     device.destroyShaderModule(trivial_vertex_shader);
-    for (std::size_t i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
-        device.destroyDescriptorSetLayout(descriptor_set_layouts[i]);
-        device.destroyDescriptorUpdateTemplate(update_templates[i]);
-    }
 
     for (auto& [key, module] : programmable_vertex_shaders.shader_cache) {
         device.destroyShaderModule(module);
@@ -238,7 +182,7 @@ void PipelineCache::BindPipeline(const PipelineInfo& info) {
         current_pipeline = it->second;
     }
 
-    BindDescriptorSets();
+    desc_manager.BindDescriptorSets();
 }
 
 bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
@@ -291,34 +235,29 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
 void PipelineCache::BindTexture(u32 binding, vk::ImageView image_view) {
     const vk::DescriptorImageInfo image_info = {
         .imageView = image_view, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
-
-    SetBinding(1, binding, DescriptorData{image_info});
+    desc_manager.SetBinding(1, binding, DescriptorData{image_info});
 }
 
 void PipelineCache::BindStorageImage(u32 binding, vk::ImageView image_view) {
     const vk::DescriptorImageInfo image_info = {.imageView = image_view,
                                                 .imageLayout = vk::ImageLayout::eGeneral};
-
-    SetBinding(3, binding, DescriptorData{image_info});
+    desc_manager.SetBinding(3, binding, DescriptorData{image_info});
 }
 
 void PipelineCache::BindBuffer(u32 binding, vk::Buffer buffer, u32 offset, u32 size) {
     const DescriptorData data = {
         .buffer_info = vk::DescriptorBufferInfo{.buffer = buffer, .offset = offset, .range = size}};
-
-    SetBinding(0, binding, data);
+    desc_manager.SetBinding(0, binding, data);
 }
 
 void PipelineCache::BindTexelBuffer(u32 binding, vk::BufferView buffer_view) {
     const DescriptorData data = {.buffer_view = buffer_view};
-
-    SetBinding(0, binding, data);
+    desc_manager.SetBinding(0, binding, data);
 }
 
 void PipelineCache::BindSampler(u32 binding, vk::Sampler sampler) {
     const DescriptorData data = {.image_info = vk::DescriptorImageInfo{.sampler = sampler}};
-
-    SetBinding(2, binding, data);
+    desc_manager.SetBinding(2, binding, data);
 }
 
 void PipelineCache::SetViewport(float x, float y, float width, float height) {
@@ -342,12 +281,9 @@ void PipelineCache::SetScissor(s32 x, s32 y, u32 width, u32 height) {
 }
 
 void PipelineCache::MarkDirty() {
-    descriptor_dirty.fill(true);
+    desc_manager.MarkDirty();
     current_pipeline = VK_NULL_HANDLE;
     state_dirty = true;
-    for (auto& batch : descriptor_batch) {
-        batch.clear();
-    }
 }
 
 void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
@@ -426,60 +362,6 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
     state_dirty = false;
 }
 
-void PipelineCache::SetBinding(u32 set, u32 binding, DescriptorData data) {
-    if (update_data[set][binding] != data) {
-        update_data[set][binding] = data;
-        descriptor_dirty[set] = true;
-    }
-}
-
-void PipelineCache::BuildLayout() {
-    std::array<vk::DescriptorSetLayoutBinding, MAX_DESCRIPTORS> set_bindings;
-    std::array<vk::DescriptorUpdateTemplateEntry, MAX_DESCRIPTORS> update_entries;
-
-    vk::Device device = instance.GetDevice();
-    for (u32 i = 0; i < RASTERIZER_SET_COUNT; i++) {
-        const auto& set = RASTERIZER_SETS[i];
-        for (u32 j = 0; j < set.binding_count; j++) {
-            vk::DescriptorType type = set.bindings[j];
-            set_bindings[j] = vk::DescriptorSetLayoutBinding{.binding = j,
-                                                             .descriptorType = type,
-                                                             .descriptorCount = 1,
-                                                             .stageFlags = ToVkStageFlags(type)};
-
-            update_entries[j] =
-                vk::DescriptorUpdateTemplateEntry{.dstBinding = j,
-                                                  .dstArrayElement = 0,
-                                                  .descriptorCount = 1,
-                                                  .descriptorType = type,
-                                                  .offset = j * sizeof(DescriptorData),
-                                                  .stride = 0};
-        }
-
-        const vk::DescriptorSetLayoutCreateInfo layout_info = {.bindingCount = set.binding_count,
-                                                               .pBindings = set_bindings.data()};
-
-        // Create descriptor set layout
-        descriptor_set_layouts[i] = device.createDescriptorSetLayout(layout_info);
-
-        const vk::DescriptorUpdateTemplateCreateInfo template_info = {
-            .descriptorUpdateEntryCount = set.binding_count,
-            .pDescriptorUpdateEntries = update_entries.data(),
-            .templateType = vk::DescriptorUpdateTemplateType::eDescriptorSet,
-            .descriptorSetLayout = descriptor_set_layouts[i]};
-
-        // Create descriptor set update template
-        update_templates[i] = device.createDescriptorUpdateTemplate(template_info);
-    }
-
-    const vk::PipelineLayoutCreateInfo layout_info = {.setLayoutCount = RASTERIZER_SET_COUNT,
-                                                      .pSetLayouts = descriptor_set_layouts.data(),
-                                                      .pushConstantRangeCount = 0,
-                                                      .pPushConstantRanges = nullptr};
-
-    layout = device.createPipelineLayout(layout_info);
-}
-
 vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
     vk::Device device = instance.GetDevice();
 
@@ -495,12 +377,10 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
             .stage = ToVkShaderStage(i), .module = shader, .pName = "main"};
     }
 
-    /**
-     * Vulkan doesn't intuitively support fixed attributes. To avoid duplicating the data and
-     * increasing data upload, when the fixed flag is true, we specify VK_VERTEX_INPUT_RATE_INSTANCE
-     * as the input rate. Since one instance is all we render, the shader will always read the
-     * single attribute.
-     */
+    // Vulkan doesn't intuitively support fixed attributes. To avoid duplicating the data and
+    // increasing data upload, when the fixed flag is true, we specify VK_VERTEX_INPUT_RATE_INSTANCE
+    // as the input rate. Since one instance is all we render, the shader will always read the
+    // single attribute.
     std::array<vk::VertexInputBindingDescription, MAX_VERTEX_BINDINGS> bindings;
     for (u32 i = 0; i < info.vertex_layout.binding_count; i++) {
         const auto& binding = info.vertex_layout.bindings[i];
@@ -624,7 +504,7 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .pDepthStencilState = &depth_info,
         .pColorBlendState = &color_blending,
         .pDynamicState = &dynamic_info,
-        .layout = layout,
+        .layout = desc_manager.GetPipelineLayout(),
         .renderPass =
             renderpass_cache.GetRenderpass(info.color_attachment, info.depth_attachment, false)};
 
@@ -637,46 +517,6 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
     }
 
     return VK_NULL_HANDLE;
-}
-
-static_assert(sizeof(vk::DescriptorBufferInfo) == sizeof(VkDescriptorBufferInfo));
-
-void PipelineCache::BindDescriptorSets() {
-    vk::Device device = instance.GetDevice();
-    std::array<vk::DescriptorSetLayout, DESCRIPTOR_BATCH_SIZE> layouts;
-
-    for (u32 i = 0; i < RASTERIZER_SET_COUNT; i++) {
-        if (descriptor_dirty[i] || !descriptor_sets[i]) {
-            auto& batch = descriptor_batch[i];
-            if (batch.empty()) {
-                layouts.fill(descriptor_set_layouts[i]);
-                const vk::DescriptorSetAllocateInfo alloc_info = {
-                    .descriptorPool = scheduler.GetDescriptorPool(),
-                    .descriptorSetCount = DESCRIPTOR_BATCH_SIZE,
-                    .pSetLayouts = layouts.data()};
-
-                try {
-                    batch = device.allocateDescriptorSets(alloc_info);
-                } catch (vk::OutOfPoolMemoryError& err) {
-                    LOG_CRITICAL(Render_Vulkan, "Run out of pool memory for layout {}: {}", i,
-                                 err.what());
-                    UNREACHABLE();
-                }
-            }
-
-            vk::DescriptorSet set = batch.back();
-            device.updateDescriptorSetWithTemplate(set, update_templates[i], update_data[i][0]);
-
-            descriptor_sets[i] = set;
-            descriptor_dirty[i] = false;
-            batch.pop_back();
-        }
-    }
-
-    // Bind the descriptor sets
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0,
-                                      RASTERIZER_SET_COUNT, descriptor_sets.data(), 0, nullptr);
 }
 
 bool PipelineCache::IsCacheValid(const u8* data, u64 size) const {
