@@ -408,11 +408,17 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
                                                         .baseArrayLayer = blit.dst_layer,
                                                         .layerCount = 1},
                                      .dstOffsets = dest_offsets};
+    // Don't use linear filtering on depth attachments
+    const vk::Filter filtering =
+        blit_area.srcSubresource.aspectMask & vk::ImageAspectFlagBits::eDepth ||
+                blit_area.dstSubresource.aspectMask & vk::ImageAspectFlagBits::eDepth
+            ? vk::Filter::eNearest
+            : vk::Filter::eLinear;
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.blitImage(source.alloc.image, vk::ImageLayout::eTransferSrcOptimal,
                              dest.alloc.image, vk::ImageLayout::eTransferDstOptimal, blit_area,
-                             vk::Filter::eNearest);
+                             filtering);
 
     return true;
 }
