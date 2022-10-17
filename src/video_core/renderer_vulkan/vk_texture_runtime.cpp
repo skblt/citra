@@ -117,20 +117,26 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     const vk::Format vk_format = is_suitable ? traits.native : traits.fallback;
     const vk::ImageUsageFlags vk_usage = is_suitable ? traits.usage : GetImageUsage(aspect);
 
-    return Allocate(width, height, type, vk_format, vk_usage,
-                    format == VideoCore::PixelFormat::RGBA8);
+    return Allocate(width, height, format, type, vk_format, vk_usage);
 }
 
-ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::TextureType type,
-                                    vk::Format format, vk::ImageUsageFlags usage,
-                                    bool create_storage_view) {
+ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat pixel_format,
+                                    VideoCore::TextureType type, vk::Format format,
+                                    vk::ImageUsageFlags usage) {
     ImageAlloc alloc{};
     alloc.format = format;
     alloc.levels = std::bit_width(std::max(width, height));
     alloc.layers = type == VideoCore::TextureType::CubeMap ? 6 : 1;
     alloc.aspect = GetImageAspect(format);
 
-    const HostTextureTag key = {.format = format, .type = type, .width = width, .height = height};
+    // The internal format does not provide enough guarantee of texture uniqueness
+    // especially when many pixel formats fallback to RGBA8
+    ASSERT(pixel_format != VideoCore::PixelFormat::Invalid);
+    const HostTextureTag key = {.format = format,
+                                .pixel_format = pixel_format,
+                                .type = type,
+                                .width = width,
+                                .height = height};
 
     // Attempt to recycle an unused allocation
     if (auto it = texture_recycler.find(key); it != texture_recycler.end()) {
@@ -138,6 +144,8 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::TextureTyp
         texture_recycler.erase(it);
         return alloc;
     }
+
+    const bool create_storage_view = pixel_format == VideoCore::PixelFormat::RGBA8;
 
     vk::ImageCreateFlags flags;
     if (type == VideoCore::TextureType::CubeMap) {
@@ -598,13 +606,15 @@ Surface::Surface(const VideoCore::SurfaceParams& params, vk::Format format,
     : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, instance{runtime.GetInstance()},
       scheduler{runtime.GetScheduler()} {
     if (format != vk::Format::eUndefined) {
-        alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), texture_type, format, usage);
+        alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), pixel_format, texture_type,
+                                 format, usage);
     }
 }
 
 Surface::~Surface() {
     if (pixel_format != VideoCore::PixelFormat::Invalid) {
         const HostTextureTag tag = {.format = alloc.format,
+                                    .pixel_format = pixel_format,
                                     .type = texture_type,
                                     .width = GetScaledWidth(),
                                     .height = GetScaledHeight()};
@@ -800,7 +810,9 @@ void Surface::DepthStencilDownload(const VideoCore::BufferTextureCopy& download,
         VideoCore::Rect2D{0, scaled_rect.GetHeight(), scaled_rect.GetWidth(), 0};
 
     // For depth downloads create an R32UI surface and use a compute shader for convert.
-    // Then we blit and download that surface
+    // Then we blit and download that surface.
+    // NOTE: We don't need to set pixel format here since R32Uint automatically gives us
+    // a storage view. Also the D24S8 creates a unique cache key for it
     SurfaceParams r32_params = *this;
     r32_params.width = scaled_rect.GetWidth();
     r32_params.stride = scaled_rect.GetWidth();
