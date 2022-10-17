@@ -550,8 +550,7 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .srcAlphaBlendFactor = PicaToVK::BlendFunc(info.blending.src_alpha_blend_factor),
         .dstAlphaBlendFactor = PicaToVK::BlendFunc(info.blending.dst_alpha_blend_factor),
         .alphaBlendOp = PicaToVK::BlendEquation(info.blending.alpha_blend_eq),
-        .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
+        .colorWriteMask = static_cast<vk::ColorComponentFlags>(info.blending.color_write_mask)};
 
     const vk::PipelineColorBlendStateCreateInfo color_blending = {
         .logicOpEnable = !info.blending.blend_enable.Value(),

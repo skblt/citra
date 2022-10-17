@@ -124,7 +124,7 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
       renderpass_cache{renderpass_cache}, res_cache{*this, runtime},
       pipeline_cache{instance, scheduler, renderpass_cache},
       null_surface{NULL_PARAMS, vk::Format::eR8G8B8A8Unorm, NULL_USAGE, runtime},
-      null_storage_surface{NULL_PARAMS, vk::Format::eR8G8B8A8Uint, NULL_STORAGE_USAGE, runtime},
+      null_storage_surface{NULL_PARAMS, vk::Format::eR32Uint, NULL_STORAGE_USAGE, runtime},
       vertex_buffer{
           instance, scheduler, VERTEX_BUFFER_SIZE, vk::BufferUsageFlagBits::eVertexBuffer, {}},
       uniform_buffer{
@@ -714,7 +714,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                 case TextureType::Shadow2D: {
                     auto surface = res_cache.GetTextureSurface(texture);
                     if (surface) {
-                        pipeline_cache.BindStorageImage(0, surface->GetImageView());
+                        surface->Transition(vk::ImageLayout::eGeneral, 0, surface->alloc.levels);
+                        pipeline_cache.BindStorageImage(0, surface->GetStorageView());
                     } else {
                         pipeline_cache.BindStorageImage(0, null_storage_surface.GetImageView());
                     }

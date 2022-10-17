@@ -30,11 +30,11 @@ TaskScheduler::TaskScheduler(const Instance& instance, RendererVulkan& renderer)
     }
 
     constexpr std::array pool_sizes = {
-        vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 1024},
-        vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 1024},
+        vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 2048},
+        vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 2048},
         vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 2048},
-        vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 2048},
-        vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 1024},
+        vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 4096},
+        vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 2048},
         vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1024}};
 
     const vk::DescriptorPoolCreateInfo descriptor_pool_info = {
