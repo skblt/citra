@@ -69,6 +69,9 @@ TextureRuntime::~TextureRuntime() {
             device.destroyImageView(alloc.depth_view);
             device.destroyImageView(alloc.stencil_view);
         }
+        if (alloc.storage_view) {
+            device.destroyImageView(alloc.storage_view);
+        }
     }
 
     for (const auto& [key, framebuffer] : clear_framebuffers) {
@@ -114,11 +117,13 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     const vk::Format vk_format = is_suitable ? traits.native : traits.fallback;
     const vk::ImageUsageFlags vk_usage = is_suitable ? traits.usage : GetImageUsage(aspect);
 
-    return Allocate(width, height, type, vk_format, vk_usage);
+    return Allocate(width, height, type, vk_format, vk_usage,
+                    format == VideoCore::PixelFormat::RGBA8);
 }
 
 ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::TextureType type,
-                                    vk::Format format, vk::ImageUsageFlags usage) {
+                                    vk::Format format, vk::ImageUsageFlags usage,
+                                    bool create_storage_view) {
     ImageAlloc alloc{};
     alloc.format = format;
     alloc.levels = std::bit_width(std::max(width, height));
@@ -134,9 +139,13 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::TextureTyp
         return alloc;
     }
 
-    const vk::ImageCreateFlags flags = type == VideoCore::TextureType::CubeMap
-                                           ? vk::ImageCreateFlagBits::eCubeCompatible
-                                           : vk::ImageCreateFlags{};
+    vk::ImageCreateFlags flags;
+    if (type == VideoCore::TextureType::CubeMap) {
+        flags |= vk::ImageCreateFlagBits::eCubeCompatible;
+    }
+    if (create_storage_view) {
+        flags |= vk::ImageCreateFlagBits::eMutableFormat;
+    }
 
     const vk::ImageCreateInfo image_info = {.flags = flags,
                                             .imageType = vk::ImageType::e2D,
@@ -205,6 +214,19 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::TextureTyp
         alloc.depth_view = device.createImageView(view_info);
         view_info.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eStencil;
         alloc.stencil_view = device.createImageView(view_info);
+    }
+
+    if (create_storage_view) {
+        const vk::ImageViewCreateInfo storage_view_info = {
+            .image = alloc.image,
+            .viewType = view_type,
+            .format = vk::Format::eR32Uint,
+            .subresourceRange = {.aspectMask = alloc.aspect,
+                                 .baseMipLevel = 0,
+                                 .levelCount = alloc.levels,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = alloc.layers}};
+        alloc.storage_view = device.createImageView(storage_view_info);
     }
 
     return alloc;

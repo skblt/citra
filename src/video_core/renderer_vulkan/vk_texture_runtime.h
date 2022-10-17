@@ -39,6 +39,7 @@ struct ImageAlloc {
     vk::ImageView base_view;
     vk::ImageView depth_view;
     vk::ImageView stencil_view;
+    vk::ImageView storage_view;
     VmaAllocation allocation;
     vk::ImageUsageFlags usage;
     vk::Format format;
@@ -99,7 +100,8 @@ public:
 
     /// Allocates a vulkan image
     [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::TextureType type,
-                                      vk::Format format, vk::ImageUsageFlags usage);
+                                      vk::Format format, vk::ImageUsageFlags usage,
+                                      bool create_storage_view = false);
 
     /// Causes a GPU command flush
     void Finish();
@@ -202,6 +204,12 @@ public:
     /// Returns the stencil only image view of the surface, null otherwise
     vk::ImageView GetStencilView() const {
         return alloc.stencil_view;
+    }
+
+    /// Returns the R32 image view used for atomic load/store
+    vk::ImageView GetStorageView() const {
+        ASSERT(alloc.storage_view);
+        return alloc.storage_view;
     }
 
     /// Returns the internal format of the allocated texture
