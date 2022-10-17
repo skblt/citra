@@ -886,8 +886,8 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
             // If the region was created entirely on the GPU,
             // assume it was a developer mistake and skip flushing.
             if (boost::icl::contains(dirty_regions, interval)) {
-                LOG_INFO(HW_GPU, "Region created fully on GPU and reinterpretation is "
-                                 "invalid. Skipping validation");
+                LOG_DEBUG(HW_GPU, "Region created fully on GPU and reinterpretation is "
+                                  "invalid. Skipping validation");
                 validate_regions.erase(interval);
                 continue;
             }
