@@ -152,11 +152,11 @@ public:
     }
 
 private:
+    /// Uploads pixel data to scaled texture
+    void ScaledUpload(const VideoCore::BufferTextureCopy& upload, const StagingBuffer& staging);
+
     /// Downloads scaled image by downscaling the requested rectangle
     void ScaledDownload(const VideoCore::BufferTextureCopy& download);
-
-    /// Uploads pixel data to scaled texture
-    void ScaledUpload(const VideoCore::BufferTextureCopy& upload);
 
 private:
     TextureRuntime& runtime;

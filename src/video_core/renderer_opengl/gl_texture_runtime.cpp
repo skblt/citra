@@ -385,7 +385,7 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingBu
 
     const bool is_scaled = res_scale != 1;
     if (is_scaled) {
-        ScaledUpload(upload);
+        ScaledUpload(upload, staging);
     } else {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture.handle);
@@ -434,24 +434,66 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
     glPixelStorei(GL_PACK_ROW_LENGTH, 0);
 }
 
+void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload,
+                           const StagingBuffer& staging) {
+    const u32 rect_width = upload.texture_rect.GetWidth();
+    const u32 rect_height = upload.texture_rect.GetHeight();
+    const auto scaled_rect = upload.texture_rect * res_scale;
+    const auto unscaled_rect = VideoCore::Rect2D{0, rect_height, rect_width, 0};
+
+    SurfaceParams unscaled_params = *this;
+    unscaled_params.width = rect_width;
+    unscaled_params.stride = rect_width;
+    unscaled_params.height = rect_height;
+    unscaled_params.res_scale = 1;
+    Surface unscaled_surface{unscaled_params, runtime};
+
+    const VideoCore::BufferTextureCopy unscaled_upload = {.buffer_offset = upload.buffer_offset,
+                                                          .buffer_size = upload.buffer_size,
+                                                          .texture_rect = unscaled_rect};
+
+    unscaled_surface.Upload(unscaled_upload, staging);
+
+    const auto& filterer = runtime.GetFilterer();
+    if (!filterer.Filter(unscaled_surface.texture, unscaled_rect, texture, scaled_rect, type)) {
+        const VideoCore::TextureBlit blit = {.src_level = 0,
+                                             .dst_level = upload.texture_level,
+                                             .src_layer = 0,
+                                             .dst_layer = 0,
+                                             .src_rect = unscaled_rect,
+                                             .dst_rect = scaled_rect};
+
+        // If filtering fails, resort to normal blitting
+        runtime.BlitTextures(unscaled_surface, *this, blit);
+    }
+}
+
 void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download) {
     const u32 rect_width = download.texture_rect.GetWidth();
     const u32 rect_height = download.texture_rect.GetHeight();
+    const VideoCore::Rect2D scaled_rect = download.texture_rect * res_scale;
+    const VideoCore::Rect2D unscaled_rect = VideoCore::Rect2D{0, rect_height, rect_width, 0};
 
     // Allocate an unscaled texture that fits the download rectangle to use as a blit destination
-    OGLTexture unscaled_tex =
-        runtime.Allocate(rect_width, rect_height, pixel_format, VideoCore::TextureType::Texture2D);
-    runtime.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0, GL_TEXTURE_2D, type, unscaled_tex);
-    runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, download.texture_level, GL_TEXTURE_2D, type,
-                            texture);
+    SurfaceParams unscaled_params = *this;
+    unscaled_params.width = rect_width;
+    unscaled_params.stride = rect_width;
+    unscaled_params.height = rect_height;
+    unscaled_params.res_scale = 1;
+    Surface unscaled_surface{unscaled_params, runtime};
+
+    const VideoCore::TextureBlit blit = {.src_level = download.texture_level,
+                                         .dst_level = 0,
+                                         .src_layer = 0,
+                                         .dst_layer = 0,
+                                         .src_rect = scaled_rect,
+                                         .dst_rect = unscaled_rect};
 
     // Blit the scaled rectangle to the unscaled texture
-    const VideoCore::Rect2D scaled_rect = download.texture_rect * res_scale;
-    glBlitFramebuffer(scaled_rect.left, scaled_rect.bottom, scaled_rect.right, scaled_rect.top, 0,
-                      0, rect_width, rect_height, MakeBufferMask(type), GL_LINEAR);
+    runtime.BlitTextures(*this, unscaled_surface, blit);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, unscaled_tex.handle);
+    glBindTexture(GL_TEXTURE_2D, unscaled_surface.texture.handle);
 
     const auto& tuple = runtime.GetFormatTuple(pixel_format);
     if (driver.IsOpenGLES()) {
@@ -460,34 +502,6 @@ void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download) {
                                   rect_width, 0);
     } else {
         glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, 0);
-    }
-}
-
-void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload) {
-    const u32 rect_width = upload.texture_rect.GetWidth();
-    const u32 rect_height = upload.texture_rect.GetHeight();
-
-    OGLTexture unscaled_tex =
-        runtime.Allocate(rect_width, rect_height, pixel_format, VideoCore::TextureType::Texture2D);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, unscaled_tex.handle);
-
-    const auto& tuple = runtime.GetFormatTuple(pixel_format);
-    glTexSubImage2D(GL_TEXTURE_2D, upload.texture_level, 0, 0, rect_width, rect_height,
-                    tuple.format, tuple.type, 0);
-
-    const auto scaled_rect = upload.texture_rect * res_scale;
-    const auto unscaled_rect = VideoCore::Rect2D{0, rect_height, rect_width, 0};
-    const auto& filterer = runtime.GetFilterer();
-    if (!filterer.Filter(unscaled_tex, unscaled_rect, texture, scaled_rect, type)) {
-        runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, 0, GL_TEXTURE_2D, type, unscaled_tex);
-        runtime.BindFramebuffer(GL_DRAW_FRAMEBUFFER, upload.texture_level, GL_TEXTURE_2D, type,
-                                texture);
-
-        // If filtering fails, resort to normal blitting
-        glBlitFramebuffer(0, 0, rect_width, rect_height, upload.texture_rect.left,
-                          upload.texture_rect.bottom, upload.texture_rect.right,
-                          upload.texture_rect.top, MakeBufferMask(type), GL_LINEAR);
     }
 }
 
