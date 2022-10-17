@@ -9,7 +9,7 @@
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/regs.h"
-#include "video_core/renderer_vulkan/vk_common.h"
+#include "video_core/renderer_vulkan/vk_descriptor_manager.h"
 #include "video_core/renderer_vulkan/vk_shader.h"
 #include "video_core/renderer_vulkan/vk_shader_gen.h"
 #include "video_core/shader/shader_cache.h"
@@ -19,8 +19,6 @@ namespace Vulkan {
 constexpr u32 MAX_SHADER_STAGES = 3;
 constexpr u32 MAX_VERTEX_ATTRIBUTES = 16;
 constexpr u32 MAX_VERTEX_BINDINGS = 16;
-constexpr u32 MAX_DESCRIPTORS = 8;
-constexpr u32 MAX_DESCRIPTOR_SETS = 6;
 
 /**
  * The pipeline state is tightly packed with bitfields to reduce
@@ -109,18 +107,6 @@ struct PipelineInfo {
     }
 };
 
-union DescriptorData {
-    vk::DescriptorImageInfo image_info;
-    vk::DescriptorBufferInfo buffer_info;
-    vk::BufferView buffer_view;
-
-    bool operator!=(const DescriptorData& other) const {
-        return std::memcmp(this, &other, sizeof(DescriptorData)) != 0;
-    }
-};
-
-using DescriptorSetData = std::array<DescriptorData, MAX_DESCRIPTORS>;
-
 /**
  * Vulkan specialized PICA shader caches
  */
@@ -197,9 +183,6 @@ public:
     void MarkDirty();
 
 private:
-    /// Binds a resource to the provided binding
-    void SetBinding(u32 set, u32 binding, DescriptorData data);
-
     /// Applies dynamic pipeline state to the current command buffer
     void ApplyDynamic(const PipelineInfo& info);
 
@@ -208,9 +191,6 @@ private:
 
     /// Builds a rasterizer pipeline using the PipelineInfo struct
     vk::Pipeline BuildPipeline(const PipelineInfo& info);
-
-    /// Builds descriptor sets that reference the currently bound resources
-    void BindDescriptorSets();
 
     /// Returns true when the disk data can be used by the current driver
     bool IsCacheValid(const u8* data, u64 size) const;
@@ -225,6 +205,7 @@ private:
     const Instance& instance;
     TaskScheduler& scheduler;
     RenderpassCache& renderpass_cache;
+    DescriptorManager desc_manager;
 
     // Cached pipelines
     vk::PipelineCache pipeline_cache;
@@ -233,17 +214,6 @@ private:
     PipelineInfo current_info{};
     vk::Viewport current_viewport{};
     vk::Rect2D current_scissor{};
-
-    // Cached layouts for the rasterizer pipelines
-    vk::PipelineLayout layout;
-    std::array<vk::DescriptorSetLayout, MAX_DESCRIPTOR_SETS> descriptor_set_layouts;
-    std::array<vk::DescriptorUpdateTemplate, MAX_DESCRIPTOR_SETS> update_templates;
-
-    // Current data for the descriptor sets
-    std::array<DescriptorSetData, MAX_DESCRIPTOR_SETS> update_data{};
-    std::array<bool, MAX_DESCRIPTOR_SETS> descriptor_dirty{};
-    std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> descriptor_sets;
-    std::array<std::vector<vk::DescriptorSet>, MAX_DESCRIPTOR_SETS> descriptor_batch;
     bool state_dirty = true;
 
     // Bound shader modules
