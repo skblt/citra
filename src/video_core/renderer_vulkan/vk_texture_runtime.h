@@ -51,6 +51,7 @@ struct ImageAlloc {
 
 struct HostTextureTag {
     vk::Format format = vk::Format::eUndefined;
+    VideoCore::PixelFormat pixel_format = VideoCore::PixelFormat::Invalid;
     VideoCore::TextureType type = VideoCore::TextureType::Texture2D;
     u32 width = 1;
     u32 height = 1;
@@ -99,9 +100,9 @@ public:
                                       VideoCore::TextureType type);
 
     /// Allocates a vulkan image
-    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::TextureType type,
-                                      vk::Format format, vk::ImageUsageFlags usage,
-                                      bool create_storage_view = false);
+    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat pixel_format,
+                                      VideoCore::TextureType type, vk::Format format,
+                                      vk::ImageUsageFlags usage);
 
     /// Causes a GPU command flush
     void Finish();
@@ -208,7 +209,13 @@ public:
 
     /// Returns the R32 image view used for atomic load/store
     vk::ImageView GetStorageView() const {
-        ASSERT(alloc.storage_view);
+        if (!alloc.storage_view) {
+            LOG_CRITICAL(Render_Vulkan,
+                         "Surface with pixel format {} and internal format {} "
+                         "does not provide requested storage view!",
+                         VideoCore::PixelFormatAsString(pixel_format), vk::to_string(alloc.format));
+            UNREACHABLE();
+        }
         return alloc.storage_view;
     }
 
