@@ -38,7 +38,7 @@ TaskScheduler::TaskScheduler(const Instance& instance, RendererVulkan& renderer)
         vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1024}};
 
     const vk::DescriptorPoolCreateInfo descriptor_pool_info = {
-        .maxSets = 2048,
+        .maxSets = 8192,
         .poolSizeCount = static_cast<u32>(pool_sizes.size()),
         .pPoolSizes = pool_sizes.data()};
 
