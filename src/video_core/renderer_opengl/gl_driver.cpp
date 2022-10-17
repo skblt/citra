@@ -80,7 +80,7 @@ Driver::Driver(bool gles, bool enable_debug) : is_gles{gles} {
      * https://developer.qualcomm.com/comment/11845
      */
     if (!gles) {
-        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageCallback(DebugHandler, nullptr);
     }
 #endif
