@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include "common/common_types.h"
 
 // Include vulkan-hpp header
