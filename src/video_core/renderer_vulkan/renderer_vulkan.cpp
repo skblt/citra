@@ -962,11 +962,10 @@ void RendererVulkan::SwapBuffers() {
 void RendererVulkan::FlushBuffers() {
     vertex_buffer.Flush();
     rasterizer->FlushBuffers();
-    renderpass_cache.ExitRenderpass();
+    runtime.FlushBuffers();
 }
 
 void RendererVulkan::OnSlotSwitch() {
-    runtime.OnSlotSwitch(scheduler.GetCurrentSlotIndex());
     renderpass_cache.OnSlotSwitch();
     rasterizer->pipeline_cache.MarkDirty();
 }
