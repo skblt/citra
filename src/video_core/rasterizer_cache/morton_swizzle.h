@@ -23,7 +23,7 @@ inline T MakeInt(const std::byte* bytes) {
 }
 
 template <PixelFormat format, bool converted>
-inline void DecodePixel(const std::byte* source, std::byte* dest) {
+constexpr void DecodePixel(const std::byte* source, std::byte* dest) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
 
     if constexpr (format == PixelFormat::D24S8) {
@@ -69,7 +69,7 @@ inline void DecodePixel(const std::byte* source, std::byte* dest) {
 }
 
 template <PixelFormat format>
-inline void DecodePixel4(u32 x, u32 y, const std::byte* source_tile, std::byte* dest_pixel) {
+constexpr void DecodePixel4(u32 x, u32 y, const std::byte* source_tile, std::byte* dest_pixel) {
     const u32 morton_offset = VideoCore::MortonInterleave(x, y);
     const u8 value = static_cast<const u8>(source_tile[morton_offset >> 1]);
     const u8 pixel = Color::Convert4To8((morton_offset % 2) ? (value >> 4) : (value & 0xF));
@@ -84,7 +84,7 @@ inline void DecodePixel4(u32 x, u32 y, const std::byte* source_tile, std::byte* 
 }
 
 template <PixelFormat format>
-inline void DecodePixelETC1(u32 x, u32 y, const std::byte* source_tile, std::byte* dest_pixel) {
+constexpr void DecodePixelETC1(u32 x, u32 y, const std::byte* source_tile, std::byte* dest_pixel) {
     constexpr u32 subtile_width = 4;
     constexpr u32 subtile_height = 4;
     constexpr bool has_alpha = format == PixelFormat::ETC1A4;
@@ -114,7 +114,7 @@ inline void DecodePixelETC1(u32 x, u32 y, const std::byte* source_tile, std::byt
 }
 
 template <PixelFormat format, bool converted>
-inline void EncodePixel(const std::byte* source, std::byte* dest) {
+constexpr void EncodePixel(const std::byte* source, std::byte* dest) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
 
     if constexpr (format == PixelFormat::D24S8) {
@@ -146,8 +146,8 @@ inline void EncodePixel(const std::byte* source, std::byte* dest) {
 }
 
 template <bool morton_to_linear, PixelFormat format, bool converted>
-inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer,
-                           std::span<std::byte> linear_buffer) {
+constexpr void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer,
+                              std::span<std::byte> linear_buffer) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
     constexpr u32 linear_bytes_per_pixel = converted ? 4 : GetBytesPerPixel(format);
     constexpr bool is_compressed = format == PixelFormat::ETC1 || format == PixelFormat::ETC1A4;
@@ -200,8 +200,9 @@ inline void MortonCopyTile(u32 stride, std::span<std::byte> tile_buffer,
  * in the linear_buffer.
  */
 template <bool morton_to_linear, PixelFormat format, bool converted = false>
-static void MortonCopy(u32 width, u32 height, u32 start_offset, u32 end_offset,
-                       std::span<std::byte> linear_buffer, std::span<std::byte> tiled_buffer) {
+static constexpr void MortonCopy(u32 width, u32 height, u32 start_offset, u32 end_offset,
+                                 std::span<std::byte> linear_buffer,
+                                 std::span<std::byte> tiled_buffer) {
     constexpr u32 bytes_per_pixel = GetFormatBpp(format) / 8;
     constexpr u32 aligned_bytes_per_pixel = converted ? 4 : GetBytesPerPixel(format);
     constexpr u32 tile_size = GetFormatBpp(format) * 64 / 8;

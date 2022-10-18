@@ -40,14 +40,18 @@ inline auto ToVkAccessStageFlags(vk::BufferUsageFlagBits usage) {
     return result;
 }
 
-StagingBuffer::StagingBuffer(const Instance& instance, u32 size, vk::BufferUsageFlags usage)
+StagingBuffer::StagingBuffer(const Instance& instance, u32 size, bool readback)
     : instance{instance} {
+    const vk::BufferUsageFlags usage =
+        readback ? vk::BufferUsageFlagBits::eTransferDst : vk::BufferUsageFlagBits::eTransferSrc;
     const vk::BufferCreateInfo buffer_info = {.size = size, .usage = usage};
 
-    const VmaAllocationCreateInfo alloc_create_info = {
-        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                 VMA_ALLOCATION_CREATE_MAPPED_BIT,
-        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST};
+    const VmaAllocationCreateFlags flags =
+        readback ? VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
+                 : VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    const VmaAllocationCreateInfo alloc_create_info = {.flags =
+                                                           flags | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                                                       .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST};
 
     VkBuffer unsafe_buffer = VK_NULL_HANDLE;
     VkBufferCreateInfo unsafe_buffer_info = static_cast<VkBufferCreateInfo>(buffer_info);
@@ -66,9 +70,15 @@ StagingBuffer::~StagingBuffer() {
 }
 
 StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u32 size,
-                           vk::BufferUsageFlagBits usage, std::span<const vk::Format> view_formats)
+                           bool readback)
     : instance{instance}, scheduler{scheduler}, total_size{size * SCHEDULER_COMMAND_COUNT},
-      staging{instance, total_size, vk::BufferUsageFlagBits::eTransferSrc}, usage{usage} {
+      staging{instance, total_size, readback}, bucket_size{size} {}
+
+StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u32 size,
+                           vk::BufferUsageFlagBits usage, std::span<const vk::Format> view_formats,
+                           bool readback)
+    : instance{instance}, scheduler{scheduler}, total_size{size * SCHEDULER_COMMAND_COUNT},
+      staging{instance, total_size, readback}, usage{usage}, bucket_size{size} {
 
     const vk::BufferCreateInfo buffer_info = {
         .size = total_size, .usage = usage | vk::BufferUsageFlagBits::eTransferDst};
@@ -97,7 +107,6 @@ StreamBuffer::StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u
     }
 
     view_count = view_formats.size();
-    bucket_size = size;
 }
 
 StreamBuffer::~StreamBuffer() {
@@ -141,36 +150,60 @@ void StreamBuffer::Commit(u32 size) {
 
 void StreamBuffer::Flush() {
     const u32 current_bucket = scheduler.GetCurrentSlotIndex();
+    const u32 flush_start = current_bucket * bucket_size;
     const u32 flush_size = buckets[current_bucket].offset;
     ASSERT(flush_size <= bucket_size);
 
-    if (flush_size > 0) {
-        vk::CommandBuffer command_buffer = scheduler.GetUploadCommandBuffer();
+    if (flush_size > 0) [[likely]] {
+        // Ensure all staging writes are visible to the host memory domain
         VmaAllocator allocator = instance.GetAllocator();
+        vmaFlushAllocation(allocator, staging.allocation, flush_start, flush_size);
 
-        const u32 flush_start = current_bucket * bucket_size;
-        const vk::BufferCopy copy_region = {
-            .srcOffset = flush_start, .dstOffset = flush_start, .size = flush_size};
+        // Make the data available to the GPU if possible
+        if (buffer) {
+            const vk::BufferCopy copy_region = {
+                .srcOffset = flush_start, .dstOffset = flush_start, .size = flush_size};
 
-        vmaFlushAllocation(allocator, allocation, flush_start, flush_size);
-        command_buffer.copyBuffer(staging.buffer, buffer, copy_region);
+            vk::CommandBuffer command_buffer = scheduler.GetUploadCommandBuffer();
+            command_buffer.copyBuffer(staging.buffer, buffer, copy_region);
 
-        // Add pipeline barrier for the flushed region
-        auto [access_mask, stage_mask] = ToVkAccessStageFlags(usage);
-        const vk::BufferMemoryBarrier buffer_barrier = {
-            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
-            .dstAccessMask = access_mask,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = buffer,
-            .offset = flush_start,
-            .size = flush_size};
+            // Add pipeline barrier for the flushed region
+            auto [access_mask, stage_mask] = ToVkAccessStageFlags(usage);
+            const vk::BufferMemoryBarrier buffer_barrier = {
+                .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+                .dstAccessMask = access_mask,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = buffer,
+                .offset = flush_start,
+                .size = flush_size};
 
-        command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, stage_mask,
-                                       vk::DependencyFlagBits::eByRegion, {}, buffer_barrier, {});
+            command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, stage_mask,
+                                           vk::DependencyFlagBits::eByRegion, {}, buffer_barrier,
+                                           {});
+        }
     }
 
-    // Reset the offset of the next bucket
+    SwitchBucket();
+}
+
+void StreamBuffer::Invalidate() {
+    const u32 current_bucket = scheduler.GetCurrentSlotIndex();
+    const u32 flush_start = current_bucket * bucket_size;
+    const u32 flush_size = buckets[current_bucket].offset;
+    ASSERT(flush_size <= bucket_size);
+
+    if (flush_size > 0) [[likely]] {
+        // Ensure the staging memory can be read by the host
+        VmaAllocator allocator = instance.GetAllocator();
+        vmaInvalidateAllocation(allocator, staging.allocation, flush_start, flush_size);
+    }
+
+    SwitchBucket();
+}
+
+void StreamBuffer::SwitchBucket() {
+    const u32 current_bucket = scheduler.GetCurrentSlotIndex();
     const u32 next_bucket = (current_bucket + 1) % SCHEDULER_COMMAND_COUNT;
     buckets[next_bucket].offset = 0;
     buckets[next_bucket].invalid = true;
