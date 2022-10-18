@@ -32,19 +32,14 @@ vk::ImageAspectFlags ToVkAspect(VideoCore::SurfaceType type) {
     return vk::ImageAspectFlagBits::eColor;
 }
 
-constexpr u32 STAGING_BUFFER_SIZE = 64 * 1024 * 1024;
+constexpr u32 UPLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
+constexpr u32 DOWNLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 
 TextureRuntime::TextureRuntime(const Instance& instance, TaskScheduler& scheduler,
                                RenderpassCache& renderpass_cache)
-    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache}, blit_helper{
-                                                                                        instance,
-                                                                                        scheduler} {
-
-    for (auto& buffer : staging_buffers) {
-        buffer = std::make_unique<StagingBuffer>(instance, STAGING_BUFFER_SIZE,
-                                                 vk::BufferUsageFlagBits::eTransferSrc |
-                                                     vk::BufferUsageFlagBits::eTransferDst);
-    }
+    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache},
+      blit_helper{instance, scheduler}, upload_buffer{instance, scheduler, UPLOAD_BUFFER_SIZE},
+      download_buffer{instance, scheduler, DOWNLOAD_BUFFER_SIZE, true} {
 
     auto Register = [this](VideoCore::PixelFormat dest,
                            std::unique_ptr<FormatReinterpreterBase>&& obj) {
@@ -64,7 +59,9 @@ TextureRuntime::~TextureRuntime() {
     for (const auto& [key, alloc] : texture_recycler) {
         vmaDestroyImage(allocator, alloc.image, alloc.allocation);
         device.destroyImageView(alloc.image_view);
-        device.destroyImageView(alloc.base_view);
+        if (alloc.base_view) {
+            device.destroyImageView(alloc.base_view);
+        }
         if (alloc.depth_view) {
             device.destroyImageView(alloc.depth_view);
             device.destroyImageView(alloc.stencil_view);
@@ -82,29 +79,24 @@ TextureRuntime::~TextureRuntime() {
 }
 
 StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
-    const u32 current_slot = scheduler.GetCurrentSlotIndex();
-    u32& offset = staging_offsets[current_slot];
     // Depth uploads require 4 byte alignment, doesn't hurt to do it for everyone
-    offset = Common::AlignUp(offset, 4);
+    auto& buffer = upload ? upload_buffer : download_buffer;
+    auto [data, offset, invalidate] = buffer.Map(size, 4);
 
-    if (offset + size > STAGING_BUFFER_SIZE) {
-        LOG_CRITICAL(Render_Vulkan, "Staging buffer size exceeded!");
-        UNREACHABLE();
-    }
-
-    const auto& buffer = staging_buffers[current_slot];
-    return StagingData{.buffer = buffer->buffer,
+    return StagingData{.buffer = buffer.GetStagingHandle(),
                        .size = size,
-                       .mapped = buffer->mapped.subspan(offset, size),
+                       .mapped = std::span<std::byte>{reinterpret_cast<std::byte*>(data), size},
                        .buffer_offset = offset};
 }
 
-void TextureRuntime::Finish() {
-    scheduler.Submit(SubmitMode::Flush);
+void TextureRuntime::FlushBuffers() {
+    upload_buffer.Flush();
 }
 
-void TextureRuntime::OnSlotSwitch(u32 new_slot) {
-    staging_offsets[new_slot] = 0;
+void TextureRuntime::Finish() {
+    renderpass_cache.ExitRenderpass();
+    scheduler.Submit(SubmitMode::Flush);
+    download_buffer.Invalidate();
 }
 
 ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
@@ -112,6 +104,7 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     const FormatTraits traits = instance.GetTraits(format);
     const vk::ImageAspectFlags aspect = ToVkAspect(VideoCore::GetFormatType(format));
 
+    // Depth buffers are not supposed to support blit by the spec so don't require it.
     const bool is_suitable = traits.transfer_support && traits.attachment_support &&
                              (traits.blit_support || aspect & vk::ImageAspectFlagBits::eDepth);
     const vk::Format vk_format = is_suitable ? traits.native : traits.fallback;
@@ -416,12 +409,14 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
                                                         .baseArrayLayer = blit.dst_layer,
                                                         .layerCount = 1},
                                      .dstOffsets = dest_offsets};
+
     // Don't use linear filtering on depth attachments
-    const vk::Filter filtering =
-        blit_area.srcSubresource.aspectMask & vk::ImageAspectFlagBits::eDepth ||
-                blit_area.dstSubresource.aspectMask & vk::ImageAspectFlagBits::eDepth
-            ? vk::Filter::eNearest
-            : vk::Filter::eLinear;
+    const VideoCore::PixelFormat format = source.pixel_format;
+    const vk::Filter filtering = format == VideoCore::PixelFormat::D24S8 ||
+                                         format == VideoCore::PixelFormat::D24 ||
+                                         format == VideoCore::PixelFormat::D16
+                                     ? vk::Filter::eNearest
+                                     : vk::Filter::eLinear;
 
     vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
     command_buffer.blitImage(source.alloc.image, vk::ImageLayout::eTransferSrcOptimal,
@@ -682,8 +677,7 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
     InvalidateAllWatcher();
 
     // Lock this data until the next scheduler switch
-    const u32 current_slot = scheduler.GetCurrentSlotIndex();
-    runtime.staging_offsets[current_slot] += staging.size;
+    runtime.upload_buffer.Commit(staging.size);
 }
 
 MICROPROFILE_DEFINE(Vulkan_Download, "VulkanSurface", "Texture Download", MP_RGB(128, 192, 64));
@@ -724,8 +718,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
     }
 
     // Lock this data until the next scheduler switch
-    const u32 current_slot = scheduler.GetCurrentSlotIndex();
-    runtime.staging_offsets[current_slot] += staging.size;
+    runtime.download_buffer.Commit(staging.size);
 }
 
 u32 Surface::GetInternalBytesPerPixel() const {
@@ -811,8 +804,7 @@ void Surface::DepthStencilDownload(const VideoCore::BufferTextureCopy& download,
 
     // For depth downloads create an R32UI surface and use a compute shader for convert.
     // Then we blit and download that surface.
-    // NOTE: We don't need to set pixel format here since R32Uint automatically gives us
-    // a storage view. Also the D24S8 creates a unique cache key for it
+    // NOTE: We keep the pixel format to D24S8 to avoid linear filtering during scale
     SurfaceParams r32_params = *this;
     r32_params.width = scaled_rect.GetWidth();
     r32_params.stride = scaled_rect.GetWidth();

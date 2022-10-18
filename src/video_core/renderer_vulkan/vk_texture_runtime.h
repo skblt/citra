@@ -104,6 +104,9 @@ public:
                                       VideoCore::TextureType type, vk::Format format,
                                       vk::ImageUsageFlags usage);
 
+    /// Flushes staging buffers
+    void FlushBuffers();
+
     /// Causes a GPU command flush
     void Finish();
 
@@ -138,9 +141,6 @@ public:
     /// Returns true if the provided pixel format needs convertion
     [[nodiscard]] bool NeedsConvertion(VideoCore::PixelFormat format) const;
 
-    /// Performs operations that need to be done on every scheduler slot switch
-    void OnSlotSwitch(u32 new_slot);
-
 private:
     /// Returns the current Vulkan instance
     const Instance& GetInstance() const {
@@ -157,9 +157,9 @@ private:
     TaskScheduler& scheduler;
     RenderpassCache& renderpass_cache;
     BlitHelper blit_helper;
+    StreamBuffer upload_buffer;
+    StreamBuffer download_buffer;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
-    std::array<std::unique_ptr<StagingBuffer>, SCHEDULER_COMMAND_COUNT> staging_buffers;
-    std::array<u32, SCHEDULER_COMMAND_COUNT> staging_offsets{};
     std::unordered_multimap<HostTextureTag, ImageAlloc> texture_recycler;
     std::unordered_map<vk::ImageView, vk::Framebuffer> clear_framebuffers;
 };

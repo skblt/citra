@@ -948,22 +948,22 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
 
     surface->Download(download, staging);
 
-    download_queue.push_back(
-        [this, surface, flush_start, flush_end, flush_info, mapped = staging.mapped]() {
-            MemoryRef dest_ptr = VideoCore::g_memory->GetPhysicalRef(flush_start);
-            if (!dest_ptr) [[unlikely]] {
-                return;
-            }
+    MemoryRef dest_ptr = VideoCore::g_memory->GetPhysicalRef(flush_start);
+    if (!dest_ptr) [[unlikely]] {
+        return;
+    }
 
-            const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
+    const auto download_dest = dest_ptr.GetWriteBytes(flush_end - flush_start);
 
-            if (surface->is_tiled) {
-                SwizzleTexture(flush_info, flush_start, flush_end, mapped, download_dest,
-                               runtime.NeedsConvertion(surface->pixel_format));
-            } else {
-                runtime.FormatConvert(*surface, false, mapped, download_dest);
-            }
-        });
+    download_queue.push_back([this, surface, flush_start, flush_end, flush_info,
+                              mapped = staging.mapped, download_dest]() {
+        if (surface->is_tiled) {
+            SwizzleTexture(flush_info, flush_start, flush_end, mapped, download_dest,
+                           runtime.NeedsConvertion(surface->pixel_format));
+        } else {
+            runtime.FormatConvert(*surface, false, mapped, download_dest);
+        }
+    });
 }
 
 template <class T>

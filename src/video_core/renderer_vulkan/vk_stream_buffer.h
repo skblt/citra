@@ -19,13 +19,8 @@ class TaskScheduler;
 
 constexpr u32 MAX_BUFFER_VIEWS = 3;
 
-struct LockedRegion {
-    u32 size = 0;
-    u64 fence_counter = 0;
-};
-
 struct StagingBuffer {
-    StagingBuffer(const Instance& instance, u32 size, vk::BufferUsageFlags usage);
+    StagingBuffer(const Instance& instance, u32 size, bool readback);
     ~StagingBuffer();
 
     const Instance& instance;
@@ -36,10 +31,19 @@ struct StagingBuffer {
 
 class StreamBuffer {
 public:
+    /// Staging only constructor
     StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u32 size,
-                 vk::BufferUsageFlagBits usage, std::span<const vk::Format> views);
+                 bool readback = false);
+    /// Staging + GPU streaming constructor
+    StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u32 size,
+                 vk::BufferUsageFlagBits usage, std::span<const vk::Format> views,
+                 bool readback = false);
     ~StreamBuffer();
 
+    StreamBuffer(const StreamBuffer&) = delete;
+    StreamBuffer& operator=(const StreamBuffer&) = delete;
+
+    /// Maps aligned staging memory of size bytes
     std::tuple<u8*, u32, bool> Map(u32 size, u32 alignment = 0);
 
     /// Commits size bytes from the currently mapped staging memory
@@ -48,9 +52,20 @@ public:
     /// Flushes staging memory to the GPU buffer
     void Flush();
 
-    /// Returns the Vulkan buffer handle
+    /// Invalidates staging memory for reading
+    void Invalidate();
+
+    /// Switches to the next available bucket
+    void SwitchBucket();
+
+    /// Returns the GPU buffer handle
     vk::Buffer GetHandle() const {
         return buffer;
+    }
+
+    /// Returns the staging buffer handle
+    vk::Buffer GetStagingHandle() const {
+        return staging.buffer;
     }
 
     /// Returns an immutable reference to the requested buffer view
@@ -58,13 +73,6 @@ public:
         ASSERT(index < view_count);
         return views[index];
     }
-
-private:
-    /// Invalidates the buffer offsets
-    void Invalidate();
-
-    /// Removes the lock on regions whose fence counter has been reached by the GPU
-    bool UnlockFreeRegions(u32 target_size);
 
 private:
     struct Bucket {
