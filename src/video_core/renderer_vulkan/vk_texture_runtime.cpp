@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <bit>
+#include "common/microprofile.h"
 #include "video_core/rasterizer_cache/morton_swizzle.h"
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
@@ -93,7 +94,9 @@ void TextureRuntime::FlushBuffers() {
     upload_buffer.Flush();
 }
 
+MICROPROFILE_DEFINE(Vulkan_Finish, "Vulkan", "Scheduler Finish", MP_RGB(52, 192, 235));
 void TextureRuntime::Finish() {
+    MICROPROFILE_SCOPE(Vulkan_Finish);
     renderpass_cache.ExitRenderpass();
     scheduler.Submit(SubmitMode::Flush);
     download_buffer.Invalidate();
@@ -113,9 +116,12 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     return Allocate(width, height, format, type, vk_format, vk_usage);
 }
 
+MICROPROFILE_DEFINE(Vulkan_ImageAlloc, "Vulkan", "TextureRuntime Finish", MP_RGB(192, 52, 235));
 ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat pixel_format,
                                     VideoCore::TextureType type, vk::Format format,
                                     vk::ImageUsageFlags usage) {
+    MICROPROFILE_SCOPE(Vulkan_ImageAlloc);
+
     ImageAlloc alloc{};
     alloc.format = format;
     alloc.levels = std::bit_width(std::max(width, height));
