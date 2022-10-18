@@ -20,13 +20,6 @@
 
 namespace Vulkan {
 
-MICROPROFILE_DEFINE(OpenGL_VAO, "OpenGL", "Vertex Array Setup", MP_RGB(255, 128, 0));
-MICROPROFILE_DEFINE(OpenGL_VS, "OpenGL", "Vertex Shader Setup", MP_RGB(192, 128, 128));
-MICROPROFILE_DEFINE(OpenGL_GS, "OpenGL", "Geometry Shader Setup", MP_RGB(128, 192, 128));
-MICROPROFILE_DEFINE(OpenGL_Drawing, "OpenGL", "Drawing", MP_RGB(128, 128, 192));
-MICROPROFILE_DEFINE(OpenGL_Blits, "OpenGL", "Blits", MP_RGB(100, 100, 255));
-MICROPROFILE_DEFINE(OpenGL_CacheManagement, "OpenGL", "Cache Mgmt", MP_RGB(100, 255, 100));
-
 RasterizerVulkan::HardwareVertex::HardwareVertex(const Pica::Shader::OutputVertex& v,
                                                  bool flip_quaternion) {
     position[0] = v.pos.x.ToFloat32();
@@ -482,14 +475,16 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
                                      binding_offsets.data());
 }
 
+MICROPROFILE_DEFINE(Vulkan_VS, "Vulkan", "Vertex Shader Setup", MP_RGB(192, 128, 128));
 bool RasterizerVulkan::SetupVertexShader() {
-    MICROPROFILE_SCOPE(OpenGL_VS);
+    MICROPROFILE_SCOPE(Vulkan_VS);
     return pipeline_cache.UseProgrammableVertexShader(Pica::g_state.regs, Pica::g_state.vs,
                                                       pipeline_info.vertex_layout);
 }
 
+MICROPROFILE_DEFINE(Vulkan_GS, "Vulkan", "Geometry Shader Setup", MP_RGB(128, 192, 128));
 bool RasterizerVulkan::SetupGeometryShader() {
-    MICROPROFILE_SCOPE(OpenGL_GS);
+    MICROPROFILE_SCOPE(Vulkan_GS);
     const auto& regs = Pica::g_state.regs;
 
     if (regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
@@ -577,8 +572,9 @@ void RasterizerVulkan::DrawTriangles() {
     Draw(false, false);
 }
 
+MICROPROFILE_DEFINE(Vulkan_Drawing, "Vulkan", "Drawing", MP_RGB(128, 128, 192));
 bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
-    MICROPROFILE_SCOPE(OpenGL_Drawing);
+    MICROPROFILE_SCOPE(Vulkan_Drawing);
     const auto& regs = Pica::g_state.regs;
 
     const bool shadow_rendering = regs.framebuffer.output_merger.fragment_operation_mode ==
@@ -1420,29 +1416,31 @@ void RasterizerVulkan::NotifyPicaRegisterChanged(u32 id) {
     }
 }
 
+MICROPROFILE_DEFINE(Vulkan_CacheManagement, "Vulkan", "Cache Mgmt", MP_RGB(100, 255, 100));
 void RasterizerVulkan::FlushAll() {
-    MICROPROFILE_SCOPE(OpenGL_CacheManagement);
+    MICROPROFILE_SCOPE(Vulkan_CacheManagement);
     res_cache.FlushAll();
 }
 
 void RasterizerVulkan::FlushRegion(PAddr addr, u32 size) {
-    MICROPROFILE_SCOPE(OpenGL_CacheManagement);
+    MICROPROFILE_SCOPE(Vulkan_CacheManagement);
     res_cache.FlushRegion(addr, size);
 }
 
 void RasterizerVulkan::InvalidateRegion(PAddr addr, u32 size) {
-    MICROPROFILE_SCOPE(OpenGL_CacheManagement);
+    MICROPROFILE_SCOPE(Vulkan_CacheManagement);
     res_cache.InvalidateRegion(addr, size, nullptr);
 }
 
 void RasterizerVulkan::FlushAndInvalidateRegion(PAddr addr, u32 size) {
-    MICROPROFILE_SCOPE(OpenGL_CacheManagement);
+    MICROPROFILE_SCOPE(Vulkan_CacheManagement);
     res_cache.FlushRegion(addr, size);
     res_cache.InvalidateRegion(addr, size, nullptr);
 }
 
+MICROPROFILE_DEFINE(Vulkan_Blits, "Vulkan", "Blits", MP_RGB(100, 100, 255));
 bool RasterizerVulkan::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config) {
-    MICROPROFILE_SCOPE(OpenGL_Blits);
+    MICROPROFILE_SCOPE(Vulkan_Blits);
 
     VideoCore::SurfaceParams src_params;
     src_params.addr = config.GetPhysicalInputAddress();
@@ -1579,7 +1577,7 @@ bool RasterizerVulkan::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
     if (framebuffer_addr == 0) {
         return false;
     }
-    MICROPROFILE_SCOPE(OpenGL_CacheManagement);
+    MICROPROFILE_SCOPE(Vulkan_CacheManagement);
 
     VideoCore::SurfaceParams src_params;
     src_params.addr = framebuffer_addr;
