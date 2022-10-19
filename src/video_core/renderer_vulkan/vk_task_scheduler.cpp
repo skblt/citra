@@ -4,6 +4,7 @@
 
 #include "common/assert.h"
 #include "common/logging/log.h"
+#include "common/microprofile.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_task_scheduler.h"
@@ -86,12 +87,14 @@ TaskScheduler::~TaskScheduler() {
     device.destroyCommandPool(command_pool);
 }
 
+MICROPROFILE_DEFINE(Vulkan_Synchronize, "Vulkan", "Scheduler Synchronize", MP_RGB(100, 52, 235));
 void TaskScheduler::Synchronize(u32 slot) {
     const auto& command = commands[slot];
     vk::Device device = instance.GetDevice();
 
     const u64 completed_counter = GetFenceCounter();
     if (command.fence_counter > completed_counter) {
+        MICROPROFILE_SCOPE(Vulkan_Synchronize);
         if (instance.IsTimelineSemaphoreSupported()) {
             const vk::SemaphoreWaitInfo wait_info = {
                 .semaphoreCount = 1, .pSemaphores = &timeline, .pValues = &command.fence_counter};
@@ -113,6 +116,7 @@ void TaskScheduler::Synchronize(u32 slot) {
     device.resetDescriptorPool(command.descriptor_pool);
 }
 
+MICROPROFILE_DEFINE(Vulkan_Submit, "Vulkan", "Scheduler Queue Submit", MP_RGB(66, 245, 170));
 void TaskScheduler::Submit(SubmitMode mode) {
     if (False(mode & SubmitMode::Shutdown)) {
         renderer.FlushBuffers();
@@ -134,6 +138,8 @@ void TaskScheduler::Submit(SubmitMode mode) {
     command_buffers[command_buffer_count++] = command.render_command_buffer;
 
     const auto QueueSubmit = [this](const vk::SubmitInfo& info, vk::Fence fence) {
+        MICROPROFILE_SCOPE(Vulkan_Submit);
+
         try {
             vk::Queue queue = instance.GetGraphicsQueue();
             queue.submit(info, fence);

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include "common/logging/log.h"
+#include "common/microprofile.h"
 #include "core/settings.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
@@ -112,11 +113,13 @@ void Swapchain::Create(u32 width, u32 height) {
 // Wait for maximum of 1 second
 constexpr u64 ACQUIRE_TIMEOUT = 1000000000;
 
+MICROPROFILE_DEFINE(Vulkan_Acquire, "Vulkan", "Swapchain Acquire", MP_RGB(185, 66, 245));
 void Swapchain::AcquireNextImage(vk::Semaphore signal_acquired) {
     if (NeedsRecreation()) [[unlikely]] {
         return;
     }
 
+    MICROPROFILE_SCOPE(Vulkan_Acquire);
     vk::Device device = instance.GetDevice();
     vk::Result result = device.acquireNextImageKHR(swapchain, ACQUIRE_TIMEOUT, signal_acquired,
                                                    VK_NULL_HANDLE, &current_image);
@@ -135,11 +138,13 @@ void Swapchain::AcquireNextImage(vk::Semaphore signal_acquired) {
     }
 }
 
+MICROPROFILE_DEFINE(Vulkan_Present, "Vulkan", "Swapchain Present", MP_RGB(66, 185, 245));
 void Swapchain::Present(vk::Semaphore wait_for_present) {
     if (NeedsRecreation()) [[unlikely]] {
         return;
     }
 
+    MICROPROFILE_SCOPE(Vulkan_Present);
     const vk::PresentInfoKHR present_info = {.waitSemaphoreCount = 1,
                                              .pWaitSemaphores = &wait_for_present,
                                              .swapchainCount = 1,
@@ -185,11 +190,18 @@ void Swapchain::Configure(u32 width, u32 height) {
     // FIFO is guaranteed by the Vulkan standard to be available
     present_mode = vk::PresentModeKHR::eFifo;
     if (!Settings::values.use_vsync_new) {
-        auto iter = std::ranges::find_if(
-            modes, [](vk::PresentModeKHR mode) { return vk::PresentModeKHR::eMailbox == mode; });
+        const auto FindMode = [&modes](vk::PresentModeKHR requested) {
+            auto it =
+                std::find_if(modes.begin(), modes.end(),
+                             [&requested](vk::PresentModeKHR mode) { return mode == requested; });
 
-        // Prefer Mailbox when vsync is disabled for lowest latency
-        if (iter != modes.end()) {
+            return it != modes.end();
+        };
+
+        // Prefer Immediate when vsync is disabled for fastest acquire
+        if (FindMode(vk::PresentModeKHR::eImmediate)) {
+            present_mode = vk::PresentModeKHR::eImmediate;
+        } else if (FindMode(vk::PresentModeKHR::eMailbox)) {
             present_mode = vk::PresentModeKHR::eMailbox;
         }
     }
