@@ -158,7 +158,7 @@ void PipelineCache::SaveDiskCache() {
 void PipelineCache::BindPipeline(const PipelineInfo& info) {
     ApplyDynamic(info);
 
-    u64 shader_hash = 0;
+    std::size_t shader_hash = 0;
     for (u32 i = 0; i < MAX_SHADER_STAGES; i++) {
         shader_hash = Common::HashCombine(shader_hash, shader_hashes[i]);
     }
