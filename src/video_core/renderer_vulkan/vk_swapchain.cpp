@@ -81,8 +81,8 @@ void Swapchain::Create(u32 width, u32 height) {
     swapchain_images.clear();
     swapchain_images.resize(images.size());
 
-    std::ranges::transform(
-        images, swapchain_images.begin(), [device, this](vk::Image image) -> Image {
+    std::transform(
+        images.begin(), images.end(), swapchain_images.begin(), [device, this](vk::Image image) -> Image {
             const vk::ImageViewCreateInfo view_info = {
                 .image = image,
                 .viewType = vk::ImageViewType::e2D,
@@ -172,7 +172,7 @@ void Swapchain::Configure(u32 width, u32 height) {
     if (formats.size() == 1 && formats[0].format == vk::Format::eUndefined) {
         surface_format.format = vk::Format::eB8G8R8A8Unorm;
     } else {
-        auto it = std::ranges::find_if(formats, [](vk::SurfaceFormatKHR format) -> bool {
+        auto it = std::find_if(formats.begin(), formats.end(), [](vk::SurfaceFormatKHR format) -> bool {
             return format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear &&
                    format.format == vk::Format::eB8G8R8A8Unorm;
         });
