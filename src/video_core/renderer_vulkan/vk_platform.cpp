@@ -113,7 +113,7 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
     }
 
     for (const char* extension : extensions) {
-        const auto iter = std::ranges::find_if(properties, [extension](const auto& prop) {
+        const auto iter = std::find_if(properties.begin(), properties.end(), [extension](const auto& prop) {
             return std::strcmp(extension, prop.extensionName) == 0;
         });
 

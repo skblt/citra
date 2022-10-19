@@ -496,7 +496,7 @@ MemoryRef MemorySystem::GetPhysicalRef(PAddr address) const {
         std::make_pair(N3DS_EXTRA_RAM_PADDR, N3DS_EXTRA_RAM_SIZE),
     };
 
-    const auto area = std::ranges::find_if(memory_areas, [&](const auto& area) {
+    const auto area = std::find_if(memory_areas.begin(), memory_areas.end(), [&](const auto& area) {
         // Note: the region end check is inclusive because the user can pass in an address that
         // represents an open right bound
         return address >= area.first && address <= area.first + area.second;
