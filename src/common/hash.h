@@ -42,7 +42,7 @@ inline u64 HashCombine(std::size_t& seed, const u64 hash) {
     return seed ^= hash + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
-template <std::integral T>
+template <typename T>
 struct IdentityHash {
     T operator()(const T& value) const {
         return value;
