@@ -7,7 +7,7 @@
 #include <glslang/Public/ShaderLang.h>
 #include "common/assert.h"
 #include "common/logging/log.h"
-#include "video_core/renderer_vulkan/vk_shader.h"
+#include "video_core/renderer_vulkan/vk_shader_util.h"
 
 namespace Vulkan {
 

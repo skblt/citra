@@ -24,8 +24,9 @@ namespace Vulkan {
 struct ScreenInfo;
 
 class Instance;
-class TaskScheduler;
+class Scheduler;
 class RenderpassCache;
+class DescriptorManager;
 
 struct SamplerInfo {
     using TextureConfig = Pica::TexturingRegs::TextureConfig;
@@ -80,8 +81,8 @@ class RasterizerVulkan : public VideoCore::RasterizerAccelerated {
 
 public:
     explicit RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instance& instance,
-                              TaskScheduler& scheduler, TextureRuntime& runtime,
-                              RenderpassCache& renderpass_cache);
+                              Scheduler& scheduler, DescriptorManager& desc_manager,
+                              TextureRuntime& runtime, RenderpassCache& renderpass_cache);
     ~RasterizerVulkan() override;
 
     void LoadDiskResources(const std::atomic_bool& stop_loading,
@@ -251,9 +252,10 @@ private:
 
 private:
     const Instance& instance;
-    TaskScheduler& scheduler;
+    Scheduler& scheduler;
     TextureRuntime& runtime;
     RenderpassCache& renderpass_cache;
+    DescriptorManager& desc_manager;
     RasterizerCache res_cache;
     PipelineCache pipeline_cache;
     bool shader_dirty = true;

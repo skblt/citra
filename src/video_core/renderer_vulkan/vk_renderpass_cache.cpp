@@ -5,7 +5,7 @@
 #include "common/assert.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
-#include "video_core/renderer_vulkan/vk_task_scheduler.h"
+#include "video_core/renderer_vulkan/vk_scheduler.h"
 
 namespace Vulkan {
 
@@ -39,7 +39,7 @@ VideoCore::PixelFormat ToFormatDepth(u32 index) {
     }
 }
 
-RenderpassCache::RenderpassCache(const Instance& instance, TaskScheduler& scheduler)
+RenderpassCache::RenderpassCache(const Instance& instance, Scheduler& scheduler)
     : instance{instance}, scheduler{scheduler} {
     // Pre-create all needed renderpasses by the renderer
     for (u32 color = 0; color <= MAX_COLOR_FORMATS; color++) {
@@ -88,28 +88,46 @@ RenderpassCache::~RenderpassCache() {
     device.destroyRenderPass(present_renderpass);
 }
 
-void RenderpassCache::EnterRenderpass(const vk::RenderPassBeginInfo begin_info) {
-    if (active_begin == begin_info) {
+void RenderpassCache::EnterRenderpass(const RenderpassState& state) {
+    const bool is_dirty = scheduler.IsStateDirty(StateFlags::Renderpass);
+    if (current_state == state && !is_dirty) {
         return;
     }
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    if (active_begin.renderPass) {
-        command_buffer.endRenderPass();
+    scheduler.Record([should_end = bool(current_state.renderpass), state]
+                     (vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        if (should_end) {
+            render_cmdbuf.endRenderPass();
+        }
+
+        const vk::RenderPassBeginInfo renderpass_begin_info = {
+            .renderPass = state.renderpass,
+            .framebuffer = state.framebuffer,
+            .renderArea = state.render_area,
+            .clearValueCount = 1,
+            .pClearValues = &state.clear};
+
+        render_cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
+
+    });
+
+    if (is_dirty) {
+        scheduler.MarkStateNonDirty(StateFlags::Renderpass);
     }
 
-    command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
-    active_begin = begin_info;
+    current_state = state;
 }
 
 void RenderpassCache::ExitRenderpass() {
-    if (!active_begin.renderPass) {
+    if (!current_state.renderpass) {
         return;
     }
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.endRenderPass();
-    active_begin = vk::RenderPassBeginInfo{};
+    scheduler.Record([](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.endRenderPass();
+    });
+
+    current_state = {};
 }
 
 void RenderpassCache::CreatePresentRenderpass(vk::Format format) {
@@ -136,7 +154,6 @@ vk::RenderPass RenderpassCache::CreateRenderPass(vk::Format color, vk::Format de
                                                  vk::AttachmentLoadOp load_op,
                                                  vk::ImageLayout initial_layout,
                                                  vk::ImageLayout final_layout) const {
-    // Define attachments
     u32 attachment_count = 0;
     std::array<vk::AttachmentDescription, 2> attachments;
 
