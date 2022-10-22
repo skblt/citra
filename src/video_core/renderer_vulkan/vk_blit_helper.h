@@ -13,12 +13,14 @@ struct TextureBlit;
 namespace Vulkan {
 
 class Instance;
-class TaskScheduler;
+class DescriptorManager;
+class Scheduler;
 class Surface;
 
 class BlitHelper {
 public:
-    BlitHelper(const Instance& instance, TaskScheduler& scheduler);
+    BlitHelper(const Instance& instance, Scheduler& scheduler,
+               DescriptorManager& desc_manager);
     ~BlitHelper();
 
     /// Blits D24S8 pixel data to the provided buffer
@@ -26,12 +28,12 @@ public:
                         const VideoCore::TextureBlit& blit);
 
 private:
-    TaskScheduler& scheduler;
+    Scheduler& scheduler;
+    DescriptorManager& desc_manager;
     vk::Device device;
     vk::Pipeline compute_pipeline;
     vk::PipelineLayout compute_pipeline_layout;
     vk::DescriptorSetLayout descriptor_layout;
-    vk::DescriptorSet descriptor_set;
     vk::DescriptorUpdateTemplate update_template;
     vk::ShaderModule compute_shader;
 };

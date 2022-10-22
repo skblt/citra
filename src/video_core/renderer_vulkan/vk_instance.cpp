@@ -111,7 +111,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) {
     try {
         instance = vk::createInstance(instance_info);
     } catch (vk::LayerNotPresentError& err) {
-        LOG_CRITICAL(Render_Vulkan, "Validation requested but layer is not available!");
+        LOG_CRITICAL(Render_Vulkan, "Validation requested but layer is not available {}", err.what());
         UNREACHABLE();
     }
 
@@ -354,8 +354,7 @@ bool Instance::CreateDevice() {
     try {
         device = physical_device.createDevice(device_chain.get());
     } catch (vk::ExtensionNotPresentError& err) {
-        LOG_CRITICAL(Render_Vulkan, "Some required extensions are not available, "
-                                    "check extension log for details");
+        LOG_CRITICAL(Render_Vulkan, "Some required extensions are not available {}", err.what());
         UNREACHABLE();
     }
 

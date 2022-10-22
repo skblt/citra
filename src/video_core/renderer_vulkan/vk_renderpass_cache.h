@@ -4,24 +4,35 @@
 
 #pragma once
 
+#include <cstring>
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 
 namespace Vulkan {
 
 class Instance;
-class TaskScheduler;
+class Scheduler;
 
-constexpr u32 MAX_COLOR_FORMATS = 5;
-constexpr u32 MAX_DEPTH_FORMATS = 4;
+struct RenderpassState {
+    vk::RenderPass renderpass;
+    vk::Framebuffer framebuffer;
+    vk::Rect2D render_area;
+    vk::ClearValue clear;
+
+    [[nodiscard]] bool operator==(const RenderpassState& other) const {
+        return std::memcmp(this, &other, sizeof(RenderpassState)) == 0;
+    }
+};
 
 class RenderpassCache {
+    static constexpr u32 MAX_COLOR_FORMATS = 5;
+    static constexpr u32 MAX_DEPTH_FORMATS = 4;
 public:
-    RenderpassCache(const Instance& instance, TaskScheduler& scheduler);
+    RenderpassCache(const Instance& instance, Scheduler& scheduler);
     ~RenderpassCache();
 
     /// Begins a new renderpass only when no other renderpass is currently active
-    void EnterRenderpass(const vk::RenderPassBeginInfo begin_info);
+    void EnterRenderpass(const RenderpassState& state);
 
     /// Exits from any currently active renderpass instance
     void ExitRenderpass();
@@ -32,14 +43,10 @@ public:
     /// Returns the renderpass associated with the color-depth format pair
     [[nodiscard]] vk::RenderPass GetRenderpass(VideoCore::PixelFormat color,
                                                VideoCore::PixelFormat depth, bool is_clear) const;
+
     /// Returns the swapchain clear renderpass
     [[nodiscard]] vk::RenderPass GetPresentRenderpass() const {
         return present_renderpass;
-    }
-
-    /// Invalidates the currently active renderpass
-    void OnSlotSwitch() {
-        active_begin = vk::RenderPassBeginInfo{};
     }
 
 private:
@@ -50,9 +57,8 @@ private:
 
 private:
     const Instance& instance;
-    TaskScheduler& scheduler;
-
-    vk::RenderPassBeginInfo active_begin{};
+    Scheduler& scheduler;
+    RenderpassState current_state{};
     vk::RenderPass present_renderpass{};
     vk::RenderPass cached_renderpasses[MAX_COLOR_FORMATS + 1][MAX_DEPTH_FORMATS + 1][2];
 };

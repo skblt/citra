@@ -11,9 +11,11 @@
 #include "core/hw/gpu.h"
 #include "video_core/renderer_base.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_descriptor_manager.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_swapchain.h"
-#include "video_core/renderer_vulkan/vk_texture_runtime.h"
+#include "video_core/renderer_vulkan/vk_rasterizer.h"
+#include "video_core/renderer_vulkan/vk_scheduler.h"
 
 namespace Layout {
 struct FramebufferLayout;
@@ -73,7 +75,6 @@ public:
     void CleanupVideoDumping() override {}
     void Sync() override;
     void FlushBuffers();
-    void OnSlotSwitch();
 
 private:
     void ReloadSampler();
@@ -103,12 +104,13 @@ private:
 
 private:
     Instance instance;
-    TaskScheduler scheduler;
+    Scheduler scheduler;
     RenderpassCache renderpass_cache;
+    DescriptorManager desc_manager;
     TextureRuntime runtime;
     Swapchain swapchain;
-    std::unique_ptr<RasterizerVulkan> rasterizer;
     StreamBuffer vertex_buffer;
+    RasterizerVulkan rasterizer;
 
     // Present pipelines (Normal, Anaglyph, Interlaced)
     vk::PipelineLayout present_pipeline_layout;

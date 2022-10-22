@@ -20,8 +20,6 @@
 
 namespace Vulkan {
 
-constexpr u32 SCHEDULER_COMMAND_COUNT = 4;
-
 /// Return the image aspect associated on the provided format
 constexpr vk::ImageAspectFlags GetImageAspect(vk::Format format) {
     switch (format) {

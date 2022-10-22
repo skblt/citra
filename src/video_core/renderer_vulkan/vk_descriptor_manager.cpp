@@ -4,7 +4,8 @@
 
 #include "video_core/renderer_vulkan/vk_descriptor_manager.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
-#include "video_core/renderer_vulkan/vk_task_scheduler.h"
+#include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "vulkan/vulkan.hpp"
 
 namespace Vulkan {
 
@@ -13,8 +14,6 @@ struct Bindings {
     u32 binding_count;
 };
 
-constexpr u32 DESCRIPTOR_BATCH_SIZE = 8;
-constexpr u32 RASTERIZER_SET_COUNT = 4;
 constexpr static std::array RASTERIZER_SETS = {
     Bindings{// Utility set
              .bindings = {vk::DescriptorType::eUniformBuffer, vk::DescriptorType::eUniformBuffer,
@@ -58,71 +57,56 @@ constexpr vk::ShaderStageFlags ToVkStageFlags(vk::DescriptorType type) {
     return flags;
 }
 
-DescriptorManager::DescriptorManager(const Instance& instance, TaskScheduler& scheduler)
-    : instance{instance}, scheduler{scheduler} {
-    descriptor_dirty.fill(true);
+DescriptorManager::DescriptorManager(const Instance& instance, Scheduler& scheduler)
+    : instance{instance}, scheduler{scheduler}, pool_provider{instance, scheduler.GetMasterSemaphore()} {
     BuildLayouts();
+    descriptor_set_dirty.fill(true);
+    current_pool = pool_provider.Commit();
 }
 
 DescriptorManager::~DescriptorManager() {
     vk::Device device = instance.GetDevice();
-    device.destroyPipelineLayout(layout);
+    device.destroyPipelineLayout(pipeline_layout);
 
-    for (std::size_t i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
+    for (u32 i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
         device.destroyDescriptorSetLayout(descriptor_set_layouts[i]);
         device.destroyDescriptorUpdateTemplate(update_templates[i]);
     }
 }
 
 void DescriptorManager::SetBinding(u32 set, u32 binding, DescriptorData data) {
-    if (update_data[set][binding] != data) {
-        update_data[set][binding] = data;
-        descriptor_dirty[set] = true;
+    DescriptorData& current = update_data[set][binding];
+    if (current != data) {
+        current = data;
+        descriptor_set_dirty[set] = true;
     }
 }
 
 void DescriptorManager::BindDescriptorSets() {
-    vk::Device device = instance.GetDevice();
-    std::array<vk::DescriptorSetLayout, DESCRIPTOR_BATCH_SIZE> layouts;
-
-    for (u32 i = 0; i < RASTERIZER_SET_COUNT; i++) {
-        if (descriptor_dirty[i] || !descriptor_sets[i]) {
-            auto& batch = descriptor_batch[i];
-            if (batch.empty()) {
-                layouts.fill(descriptor_set_layouts[i]);
-                const vk::DescriptorSetAllocateInfo alloc_info = {
-                    .descriptorPool = scheduler.GetDescriptorPool(),
-                    .descriptorSetCount = DESCRIPTOR_BATCH_SIZE,
-                    .pSetLayouts = layouts.data()};
-
-                try {
-                    batch = device.allocateDescriptorSets(alloc_info);
-                } catch (vk::OutOfPoolMemoryError& err) {
-                    LOG_CRITICAL(Render_Vulkan, "Run out of pool memory for layout {}: {}", i,
-                                 err.what());
-                    UNREACHABLE();
-                }
-            }
-
-            vk::DescriptorSet set = batch.back();
-            device.updateDescriptorSetWithTemplate(set, update_templates[i], update_data[i][0]);
-
-            descriptor_sets[i] = set;
-            descriptor_dirty[i] = false;
-            batch.pop_back();
-        }
+    const bool is_dirty = scheduler.IsStateDirty(StateFlags::DescriptorSets);
+    if (is_dirty) {
+        descriptor_set_dirty.fill(true);
     }
 
-    // Bind the descriptor sets
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0,
-                                      RASTERIZER_SET_COUNT, descriptor_sets.data(), 0, nullptr);
-}
+    vk::Device device = instance.GetDevice();
+    std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> bound_sets;
+    for (u32 i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
+        if (descriptor_set_dirty[i]) {
+            vk::DescriptorSet set = AllocateSet(descriptor_set_layouts[i]);
+            device.updateDescriptorSetWithTemplate(set, update_templates[i], update_data[i][0]);
+            descriptor_sets[i] = set;
+        }
 
-void DescriptorManager::MarkDirty() {
-    descriptor_dirty.fill(true);
-    for (auto& batch : descriptor_batch) {
-        batch.clear();
+        bound_sets[i] = descriptor_sets[i];
+    }
+
+    scheduler.Record([this, bound_sets](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 0, bound_sets, {});
+    });
+
+    descriptor_set_dirty.fill(false);
+    if (is_dirty) {
+        scheduler.MarkStateNonDirty(StateFlags::DescriptorSets);
     }
 }
 
@@ -131,7 +115,7 @@ void DescriptorManager::BuildLayouts() {
     std::array<vk::DescriptorUpdateTemplateEntry, MAX_DESCRIPTORS> update_entries;
 
     vk::Device device = instance.GetDevice();
-    for (u32 i = 0; i < RASTERIZER_SET_COUNT; i++) {
+    for (u32 i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
         const auto& set = RASTERIZER_SETS[i];
         for (u32 j = 0; j < set.binding_count; j++) {
             vk::DescriptorType type = set.bindings[j];
@@ -151,8 +135,6 @@ void DescriptorManager::BuildLayouts() {
 
         const vk::DescriptorSetLayoutCreateInfo layout_info = {.bindingCount = set.binding_count,
                                                                .pBindings = set_bindings.data()};
-
-        // Create descriptor set layout
         descriptor_set_layouts[i] = device.createDescriptorSetLayout(layout_info);
 
         const vk::DescriptorUpdateTemplateCreateInfo template_info = {
@@ -161,16 +143,33 @@ void DescriptorManager::BuildLayouts() {
             .templateType = vk::DescriptorUpdateTemplateType::eDescriptorSet,
             .descriptorSetLayout = descriptor_set_layouts[i]};
 
-        // Create descriptor set update template
         update_templates[i] = device.createDescriptorUpdateTemplate(template_info);
     }
 
-    const vk::PipelineLayoutCreateInfo layout_info = {.setLayoutCount = RASTERIZER_SET_COUNT,
+    const vk::PipelineLayoutCreateInfo layout_info = {.setLayoutCount = MAX_DESCRIPTOR_SETS,
                                                       .pSetLayouts = descriptor_set_layouts.data(),
                                                       .pushConstantRangeCount = 0,
                                                       .pPushConstantRanges = nullptr};
 
-    layout = device.createPipelineLayout(layout_info);
+    pipeline_layout = device.createPipelineLayout(layout_info);
+}
+
+vk::DescriptorSet DescriptorManager::AllocateSet(vk::DescriptorSetLayout layout) {
+    vk::Device device = instance.GetDevice();
+
+    const vk::DescriptorSetAllocateInfo alloc_info = {
+        .descriptorPool = current_pool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &layout};
+
+    try {
+        return device.allocateDescriptorSets(alloc_info)[0];
+    } catch (vk::OutOfPoolMemoryError) {
+        pool_provider.RefreshTick();
+        current_pool = pool_provider.Commit();
+    }
+
+    return AllocateSet(layout);
 }
 
 } // namespace Vulkan
