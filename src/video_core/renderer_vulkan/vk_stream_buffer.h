@@ -15,9 +15,7 @@ VK_DEFINE_HANDLE(VmaAllocation)
 namespace Vulkan {
 
 class Instance;
-class TaskScheduler;
-
-constexpr u32 MAX_BUFFER_VIEWS = 3;
+class Scheduler;
 
 struct StagingBuffer {
     StagingBuffer(const Instance& instance, u32 size, bool readback);
@@ -30,12 +28,14 @@ struct StagingBuffer {
 };
 
 class StreamBuffer {
+    static constexpr u32 MAX_BUFFER_VIEWS = 3;
+    static constexpr u32 BUCKET_COUNT = 8;
 public:
     /// Staging only constructor
-    StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u32 size,
+    StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
                  bool readback = false);
     /// Staging + GPU streaming constructor
-    StreamBuffer(const Instance& instance, TaskScheduler& scheduler, u32 size,
+    StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
                  vk::BufferUsageFlagBits usage, std::span<const vk::Format> views,
                  bool readback = false);
     ~StreamBuffer();
@@ -55,45 +55,47 @@ public:
     /// Invalidates staging memory for reading
     void Invalidate();
 
-    /// Switches to the next available bucket
-    void SwitchBucket();
-
     /// Returns the GPU buffer handle
-    vk::Buffer GetHandle() const {
-        return buffer;
+    [[nodiscard]] vk::Buffer GetHandle() const {
+        return gpu_buffer;
     }
 
     /// Returns the staging buffer handle
-    vk::Buffer GetStagingHandle() const {
+    [[nodiscard]] vk::Buffer GetStagingHandle() const {
         return staging.buffer;
     }
 
     /// Returns an immutable reference to the requested buffer view
-    const vk::BufferView& GetView(u32 index = 0) const {
+    [[nodiscard]] const vk::BufferView& GetView(u32 index = 0) const {
         ASSERT(index < view_count);
         return views[index];
     }
 
 private:
+    /// Moves to the next bucket
+    void MoveNextBucket();
+
     struct Bucket {
-        bool invalid;
-        u32 fence_counter;
-        u32 offset;
+        bool invalid = false;
+        u32 gpu_tick = 0;
+        u32 cursor = 0;
+        u32 flush_cursor = 0;
     };
 
+private:
     const Instance& instance;
-    TaskScheduler& scheduler;
-    u32 total_size = 0;
+    Scheduler& scheduler;
     StagingBuffer staging;
-
-    vk::Buffer buffer{};
+    vk::Buffer gpu_buffer{};
     VmaAllocation allocation{};
     vk::BufferUsageFlagBits usage;
     std::array<vk::BufferView, MAX_BUFFER_VIEWS> views{};
-    std::size_t view_count = 0;
-
+    std::array<Bucket, BUCKET_COUNT> buckets;
+    u32 view_count = 0;
+    u32 total_size = 0;
     u32 bucket_size = 0;
-    std::array<Bucket, SCHEDULER_COMMAND_COUNT> buckets{};
+    u32 bucket_index = 0;
+    bool readback = false;
 };
 
 } // namespace Vulkan

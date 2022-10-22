@@ -3,14 +3,16 @@
 // Refer to the license.txt file included.
 
 #include "video_core/renderer_vulkan/vk_format_reinterpreter.h"
-#include "video_core/renderer_vulkan/vk_shader.h"
+#include "video_core/renderer_vulkan/vk_descriptor_manager.h"
+#include "video_core/renderer_vulkan/vk_shader_util.h"
+#include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
 namespace Vulkan {
 
-D24S8toRGBA8::D24S8toRGBA8(const Instance& instance, TaskScheduler& scheduler,
-                           TextureRuntime& runtime)
-    : FormatReinterpreterBase{instance, scheduler, runtime}, device{instance.GetDevice()} {
+D24S8toRGBA8::D24S8toRGBA8(const Instance& instance, Scheduler& scheduler,
+                           DescriptorManager& desc_manager, TextureRuntime& runtime)
+    : FormatReinterpreterBase{instance, scheduler, desc_manager, runtime}, device{instance.GetDevice()} {
     constexpr std::string_view cs_source = R"(
 #version 450 core
 #extension GL_EXT_samplerless_texture_functions : require
@@ -135,25 +137,19 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
         vk::DescriptorImageInfo{.imageView = dest.GetImageView(),
                                 .imageLayout = vk::ImageLayout::eGeneral}};
 
-    const vk::DescriptorSetAllocateInfo alloc_info = {.descriptorPool =
-                                                          scheduler.GetDescriptorPool(),
-                                                      .descriptorSetCount = 1,
-                                                      .pSetLayouts = &descriptor_layout};
+    vk::DescriptorSet set = desc_manager.AllocateSet(descriptor_layout);
+    device.updateDescriptorSetWithTemplate(set, update_template, textures[0]);
 
-    descriptor_set = device.allocateDescriptorSets(alloc_info)[0];
+    scheduler.Record([this, set, src_rect](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout, 0, set, {});
+        render_cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
 
-    device.updateDescriptorSetWithTemplate(descriptor_set, update_template, textures[0]);
+        const auto src_offset = Common::MakeVec(src_rect.left, src_rect.bottom);
+        render_cmdbuf.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
+                                     sizeof(Common::Vec2i), src_offset.AsArray());
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout, 0,
-                                      1, &descriptor_set, 0, nullptr);
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
-
-    const auto src_offset = Common::MakeVec(src_rect.left, src_rect.bottom);
-    command_buffer.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
-                                 sizeof(Common::Vec2i), src_offset.AsArray());
-
-    command_buffer.dispatch(src_rect.GetWidth() / 8, src_rect.GetHeight() / 8, 1);
+        render_cmdbuf.dispatch(src_rect.GetWidth() / 8, src_rect.GetHeight() / 8, 1);
+    });
 }
 
 } // namespace Vulkan

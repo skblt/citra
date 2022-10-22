@@ -9,8 +9,7 @@
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/regs.h"
-#include "video_core/renderer_vulkan/vk_descriptor_manager.h"
-#include "video_core/renderer_vulkan/vk_shader.h"
+#include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/renderer_vulkan/vk_shader_gen.h"
 #include "video_core/shader/shader_cache.h"
 
@@ -120,8 +119,9 @@ using FragmentShaders =
     Pica::Shader::ShaderCache<PicaFSConfig, vk::ShaderModule, &Compile, &GenerateFragmentShader>;
 
 class Instance;
-class TaskScheduler;
+class Scheduler;
 class RenderpassCache;
+class DescriptorManager;
 
 /**
  * Stores a collection of rasterizer pipelines used during rendering.
@@ -129,8 +129,8 @@ class RenderpassCache;
  */
 class PipelineCache {
 public:
-    PipelineCache(const Instance& instance, TaskScheduler& scheduler,
-                  RenderpassCache& renderpass_cache);
+    PipelineCache(const Instance& instance, Scheduler& scheduler,
+                  RenderpassCache& renderpass_cache, DescriptorManager& desc_manager);
     ~PipelineCache();
 
     /// Loads the pipeline cache stored to disk
@@ -179,9 +179,6 @@ public:
     /// Sets the scissor rectange to the provided values
     void SetScissor(s32 x, s32 y, u32 width, u32 height);
 
-    /// Marks all cached pipeline cache state as dirty
-    void MarkDirty();
-
 private:
     /// Applies dynamic pipeline state to the current command buffer
     void ApplyDynamic(const PipelineInfo& info);
@@ -203,9 +200,9 @@ private:
 
 private:
     const Instance& instance;
-    TaskScheduler& scheduler;
+    Scheduler& scheduler;
     RenderpassCache& renderpass_cache;
-    DescriptorManager desc_manager;
+    DescriptorManager& desc_manager;
 
     // Cached pipelines
     vk::PipelineCache pipeline_cache;
@@ -214,7 +211,6 @@ private:
     PipelineInfo current_info{};
     vk::Viewport current_viewport{};
     vk::Rect2D current_scissor{};
-    bool state_dirty = true;
 
     // Bound shader modules
     enum ProgramType : u32 { VS = 0, GS = 2, FS = 1 };

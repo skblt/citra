@@ -14,7 +14,6 @@
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_layout_tracker.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
-#include "video_core/renderer_vulkan/vk_task_scheduler.h"
 
 namespace Vulkan {
 
@@ -78,6 +77,7 @@ namespace Vulkan {
 
 class Instance;
 class RenderpassCache;
+class DescriptorManager;
 class Surface;
 
 /**
@@ -88,9 +88,15 @@ class TextureRuntime {
     friend class Surface;
 
 public:
-    TextureRuntime(const Instance& instance, TaskScheduler& scheduler,
-                   RenderpassCache& renderpass_cache);
+    TextureRuntime(const Instance& instance, Scheduler& scheduler,
+                   RenderpassCache& renderpass_cache, DescriptorManager& desc_manager);
     ~TextureRuntime();
+
+    /// Causes a GPU command flush
+    void Finish();
+
+    /// Takes back ownership of the allocation for recycling
+    void Recycle(const HostTextureTag tag, ImageAlloc&& alloc);
 
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
     [[nodiscard]] StagingData FindStaging(u32 size, bool upload);
@@ -104,22 +110,12 @@ public:
                                       VideoCore::TextureType type, vk::Format format,
                                       vk::ImageUsageFlags usage);
 
-    /// Flushes staging buffers
-    void FlushBuffers();
-
-    /// Causes a GPU command flush
-    void Finish();
-
-    /// Takes back ownership of the allocation for recycling
-    void Recycle(const HostTextureTag tag, ImageAlloc&& alloc);
-
     /// Performs required format convertions on the staging data
     void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
                        std::span<std::byte> dest);
 
     /// Transitions the mip level range of the surface to new_layout
-    void Transition(vk::CommandBuffer command_buffer, ImageAlloc& alloc, vk::ImageLayout new_layout,
-                    u32 level, u32 level_count);
+    void Transition(ImageAlloc& alloc, vk::ImageLayout new_layout, u32 level, u32 level_count);
 
     /// Fills the rectangle of the texture with the clear value provided
     bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
@@ -133,6 +129,9 @@ public:
 
     /// Generates mipmaps for all the available levels of the texture
     void GenerateMipmaps(Surface& surface, u32 max_level);
+
+    /// Flushes staging buffers
+    void FlushBuffers();
 
     /// Returns all source formats that support reinterpretation to the dest format
     [[nodiscard]] const ReinterpreterList& GetPossibleReinterpretations(
@@ -148,14 +147,15 @@ private:
     }
 
     /// Returns the current Vulkan scheduler
-    TaskScheduler& GetScheduler() const {
+    Scheduler& GetScheduler() const {
         return scheduler;
     }
 
 private:
     const Instance& instance;
-    TaskScheduler& scheduler;
+    Scheduler& scheduler;
     RenderpassCache& renderpass_cache;
+    DescriptorManager& desc_manager;
     BlitHelper blit_helper;
     StreamBuffer upload_buffer;
     StreamBuffer download_buffer;
@@ -236,12 +236,12 @@ private:
                               const StagingData& staging);
 
     /// Unpacks packed D24S8 data to facilitate depth upload
-    u32 UnpackDepthStencil(const StagingData& data);
+    u32 UnpackDepthStencil(const StagingData& data, vk::Format dest);
 
 private:
     TextureRuntime& runtime;
     const Instance& instance;
-    TaskScheduler& scheduler;
+    Scheduler& scheduler;
 
 public:
     ImageAlloc alloc;

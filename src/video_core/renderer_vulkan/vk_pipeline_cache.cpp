@@ -6,12 +6,14 @@
 #include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
+#include "common/microprofile.h"
 #include "core/settings.h"
 #include "video_core/renderer_vulkan/pica_to_vk.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
-#include "video_core/renderer_vulkan/vk_task_scheduler.h"
+#include "video_core/renderer_vulkan/vk_descriptor_manager.h"
+#include "video_core/renderer_vulkan/vk_scheduler.h"
 
 namespace Vulkan {
 
@@ -64,11 +66,9 @@ vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
     return vk::ShaderStageFlagBits::eVertex;
 }
 
-PipelineCache::PipelineCache(const Instance& instance, TaskScheduler& scheduler,
-                             RenderpassCache& renderpass_cache)
-    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache}, desc_manager{
-                                                                                        instance,
-                                                                                        scheduler} {
+PipelineCache::PipelineCache(const Instance& instance, Scheduler& scheduler,
+                             RenderpassCache& renderpass_cache, DescriptorManager& desc_manager)
+    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache}, desc_manager{desc_manager} {
     trivial_vertex_shader = Compile(GenerateTrivialVertexShader(), vk::ShaderStageFlagBits::eVertex,
                                     instance.GetDevice(), ShaderOptimization::Debug);
 }
@@ -158,29 +158,28 @@ void PipelineCache::SaveDiskCache() {
 void PipelineCache::BindPipeline(const PipelineInfo& info) {
     ApplyDynamic(info);
 
-    std::size_t shader_hash = 0;
-    for (u32 i = 0; i < MAX_SHADER_STAGES; i++) {
-        shader_hash = Common::HashCombine(shader_hash, shader_hashes[i]);
-    }
+    scheduler.Record([this, info](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        std::size_t shader_hash = 0;
+        for (u32 i = 0; i < MAX_SHADER_STAGES; i++) {
+            shader_hash = Common::HashCombine(shader_hash, shader_hashes[i]);
+        }
 
-    const u64 info_hash_size = instance.IsExtendedDynamicStateSupported()
-                                   ? offsetof(PipelineInfo, rasterization)
-                                   : offsetof(PipelineInfo, depth_stencil) +
-                                         offsetof(DepthStencilState, stencil_reference);
+        const u64 info_hash_size = instance.IsExtendedDynamicStateSupported()
+                                       ? offsetof(PipelineInfo, rasterization)
+                                       : offsetof(PipelineInfo, depth_stencil) +
+                                             offsetof(DepthStencilState, stencil_reference);
 
-    u64 info_hash = Common::ComputeHash64(&info, info_hash_size);
-    u64 pipeline_hash = Common::HashCombine(shader_hash, info_hash);
+        u64 info_hash = Common::ComputeHash64(&info, info_hash_size);
+        u64 pipeline_hash = Common::HashCombine(shader_hash, info_hash);
 
-    auto [it, new_pipeline] = graphics_pipelines.try_emplace(pipeline_hash, vk::Pipeline{});
-    if (new_pipeline) {
-        it->second = BuildPipeline(info);
-    }
+        auto [it, new_pipeline] = graphics_pipelines.try_emplace(pipeline_hash, vk::Pipeline{});
+        if (new_pipeline) {
+            it->second = BuildPipeline(info);
+        }
 
-    if (it->second != current_pipeline) {
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, it->second);
+        render_cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, it->second);
         current_pipeline = it->second;
-    }
+    });
 
     desc_manager.BindDescriptorSets();
 }
@@ -194,42 +193,56 @@ bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
         config.state.attrib_types[attrib.location.Value()] = attrib.type.Value();
     }
 
-    auto [handle, result] =
-        programmable_vertex_shaders.Get(config, setup, vk::ShaderStageFlagBits::eVertex,
-                                        instance.GetDevice(), ShaderOptimization::Debug);
-    if (!handle) {
-        return false;
-    }
+    scheduler.Record([this, config, setup = std::move(setup)](vk::CommandBuffer, vk::CommandBuffer) {
+        auto [handle, result] =
+            programmable_vertex_shaders.Get(config, setup, vk::ShaderStageFlagBits::eVertex,
+                                            instance.GetDevice(), ShaderOptimization::Debug);
+        if (!handle) {
+            LOG_ERROR(Render_Vulkan, "Failed to retrieve programmable vertex shader");
+            return;
+        }
 
-    current_shaders[ProgramType::VS] = handle;
-    shader_hashes[ProgramType::VS] = config.Hash();
+        current_shaders[ProgramType::VS] = handle;
+        shader_hashes[ProgramType::VS] = config.Hash();
+    });
+
     return true;
 }
 
 void PipelineCache::UseTrivialVertexShader() {
-    current_shaders[ProgramType::VS] = trivial_vertex_shader;
-    shader_hashes[ProgramType::VS] = 0;
+    scheduler.Record([this](vk::CommandBuffer, vk::CommandBuffer) {
+        current_shaders[ProgramType::VS] = trivial_vertex_shader;
+        shader_hashes[ProgramType::VS] = 0;
+    });
 }
 
 void PipelineCache::UseFixedGeometryShader(const Pica::Regs& regs) {
     const PicaFixedGSConfig gs_config{regs};
-    auto [handle, _] = fixed_geometry_shaders.Get(gs_config, vk::ShaderStageFlagBits::eGeometry,
-                                                  instance.GetDevice(), ShaderOptimization::Debug);
-    current_shaders[ProgramType::GS] = handle;
-    shader_hashes[ProgramType::GS] = gs_config.Hash();
+
+    scheduler.Record([this, gs_config](vk::CommandBuffer, vk::CommandBuffer) {
+        auto [handle, _] = fixed_geometry_shaders.Get(gs_config, vk::ShaderStageFlagBits::eGeometry,
+                                                      instance.GetDevice(), ShaderOptimization::Debug);
+        current_shaders[ProgramType::GS] = handle;
+        shader_hashes[ProgramType::GS] = gs_config.Hash();
+    });
 }
 
 void PipelineCache::UseTrivialGeometryShader() {
-    current_shaders[ProgramType::GS] = VK_NULL_HANDLE;
-    shader_hashes[ProgramType::GS] = 0;
+    scheduler.Record([this](vk::CommandBuffer, vk::CommandBuffer) {
+        current_shaders[ProgramType::GS] = VK_NULL_HANDLE;
+        shader_hashes[ProgramType::GS] = 0;
+    });
 }
 
 void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
     const PicaFSConfig config = PicaFSConfig::BuildFromRegs(regs);
-    auto [handle, result] = fragment_shaders.Get(config, vk::ShaderStageFlagBits::eFragment,
-                                                 instance.GetDevice(), ShaderOptimization::Debug);
-    current_shaders[ProgramType::FS] = handle;
-    shader_hashes[ProgramType::FS] = config.Hash();
+
+    scheduler.Record([this, config](vk::CommandBuffer, vk::CommandBuffer) {
+        auto [handle, result] = fragment_shaders.Get(config, vk::ShaderStageFlagBits::eFragment,
+                                                     instance.GetDevice(), ShaderOptimization::Debug);
+        current_shaders[ProgramType::FS] = handle;
+        shader_hashes[ProgramType::FS] = config.Hash();
+    });
 }
 
 void PipelineCache::BindTexture(u32 binding, vk::ImageView image_view) {
@@ -261,105 +274,108 @@ void PipelineCache::BindSampler(u32 binding, vk::Sampler sampler) {
 }
 
 void PipelineCache::SetViewport(float x, float y, float width, float height) {
+    const bool is_dirty = scheduler.IsStateDirty(StateFlags::Pipeline);
     const vk::Viewport viewport{x, y, width, height, 0.f, 1.f};
 
-    if (viewport != current_viewport || state_dirty) {
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        command_buffer.setViewport(0, vk::Viewport{x, y, width, height, 0.f, 1.f});
+    if (viewport != current_viewport || is_dirty) {
+        scheduler.Record([viewport](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+            render_cmdbuf.setViewport(0, viewport);
+        });
         current_viewport = viewport;
     }
 }
 
 void PipelineCache::SetScissor(s32 x, s32 y, u32 width, u32 height) {
+    const bool is_dirty = scheduler.IsStateDirty(StateFlags::Pipeline);
     const vk::Rect2D scissor{{x, y}, {width, height}};
 
-    if (scissor != current_scissor || state_dirty) {
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        command_buffer.setScissor(0, vk::Rect2D{{x, y}, {width, height}});
+    if (scissor != current_scissor || is_dirty) {
+        scheduler.Record([scissor](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+            render_cmdbuf.setScissor(0, scissor);
+        });
         current_scissor = scissor;
     }
 }
 
-void PipelineCache::MarkDirty() {
-    desc_manager.MarkDirty();
-    current_pipeline = VK_NULL_HANDLE;
-    state_dirty = true;
-}
-
 void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
+    const bool is_dirty = scheduler.IsStateDirty(StateFlags::Pipeline);
 
-    if (info.depth_stencil.stencil_compare_mask !=
-            current_info.depth_stencil.stencil_compare_mask ||
-        state_dirty) {
-        command_buffer.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                             info.depth_stencil.stencil_compare_mask);
-    }
-
-    if (info.depth_stencil.stencil_write_mask != current_info.depth_stencil.stencil_write_mask ||
-        state_dirty) {
-        command_buffer.setStencilWriteMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                           info.depth_stencil.stencil_write_mask);
-    }
-
-    if (info.depth_stencil.stencil_reference != current_info.depth_stencil.stencil_reference ||
-        state_dirty) {
-        command_buffer.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
-                                           info.depth_stencil.stencil_reference);
-    }
-
-    if (instance.IsExtendedDynamicStateSupported()) {
-        if (info.rasterization.cull_mode != current_info.rasterization.cull_mode || state_dirty) {
-            command_buffer.setCullModeEXT(PicaToVK::CullMode(info.rasterization.cull_mode));
-            command_buffer.setFrontFaceEXT(PicaToVK::FrontFace(info.rasterization.cull_mode));
+    PipelineInfo current = current_info;
+    scheduler.Record([this, info, is_dirty, current](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        if (info.depth_stencil.stencil_compare_mask !=
+                current.depth_stencil.stencil_compare_mask ||
+            is_dirty) {
+            render_cmdbuf.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack,
+                                                 info.depth_stencil.stencil_compare_mask);
         }
 
-        if (info.depth_stencil.depth_compare_op != current_info.depth_stencil.depth_compare_op ||
-            state_dirty) {
-            command_buffer.setDepthCompareOpEXT(
-                PicaToVK::CompareFunc(info.depth_stencil.depth_compare_op));
+        if (info.depth_stencil.stencil_write_mask != current.depth_stencil.stencil_write_mask ||
+            is_dirty) {
+            render_cmdbuf.setStencilWriteMask(vk::StencilFaceFlagBits::eFrontAndBack,
+                                               info.depth_stencil.stencil_write_mask);
         }
 
-        if (info.depth_stencil.depth_test_enable != current_info.depth_stencil.depth_test_enable ||
-            state_dirty) {
-            command_buffer.setDepthTestEnableEXT(info.depth_stencil.depth_test_enable);
+        if (info.depth_stencil.stencil_reference != current.depth_stencil.stencil_reference ||
+            is_dirty) {
+            render_cmdbuf.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
+                                               info.depth_stencil.stencil_reference);
         }
 
-        if (info.depth_stencil.depth_write_enable !=
-                current_info.depth_stencil.depth_write_enable ||
-            state_dirty) {
-            command_buffer.setDepthWriteEnableEXT(info.depth_stencil.depth_write_enable);
-        }
+        if (instance.IsExtendedDynamicStateSupported()) {
+            if (info.rasterization.cull_mode != current.rasterization.cull_mode || is_dirty) {
+                render_cmdbuf.setCullModeEXT(PicaToVK::CullMode(info.rasterization.cull_mode));
+                render_cmdbuf.setFrontFaceEXT(PicaToVK::FrontFace(info.rasterization.cull_mode));
+            }
 
-        if (info.rasterization.topology != current_info.rasterization.topology || state_dirty) {
-            command_buffer.setPrimitiveTopologyEXT(
-                PicaToVK::PrimitiveTopology(info.rasterization.topology));
-        }
+            if (info.depth_stencil.depth_compare_op != current.depth_stencil.depth_compare_op ||
+                is_dirty) {
+                render_cmdbuf.setDepthCompareOpEXT(
+                    PicaToVK::CompareFunc(info.depth_stencil.depth_compare_op));
+            }
 
-        if (info.depth_stencil.stencil_test_enable !=
-                current_info.depth_stencil.stencil_test_enable ||
-            state_dirty) {
-            command_buffer.setStencilTestEnableEXT(info.depth_stencil.stencil_test_enable);
-        }
+            if (info.depth_stencil.depth_test_enable != current.depth_stencil.depth_test_enable ||
+                is_dirty) {
+                render_cmdbuf.setDepthTestEnableEXT(info.depth_stencil.depth_test_enable);
+            }
 
-        if (info.depth_stencil.stencil_fail_op != current_info.depth_stencil.stencil_fail_op ||
-            info.depth_stencil.stencil_pass_op != current_info.depth_stencil.stencil_pass_op ||
-            info.depth_stencil.stencil_depth_fail_op !=
-                current_info.depth_stencil.stencil_depth_fail_op ||
-            info.depth_stencil.stencil_compare_op !=
-                current_info.depth_stencil.stencil_compare_op ||
-            state_dirty) {
-            command_buffer.setStencilOpEXT(
-                vk::StencilFaceFlagBits::eFrontAndBack,
-                PicaToVK::StencilOp(info.depth_stencil.stencil_fail_op),
-                PicaToVK::StencilOp(info.depth_stencil.stencil_pass_op),
-                PicaToVK::StencilOp(info.depth_stencil.stencil_depth_fail_op),
-                PicaToVK::CompareFunc(info.depth_stencil.stencil_compare_op));
+            if (info.depth_stencil.depth_write_enable !=
+                    current.depth_stencil.depth_write_enable ||
+                is_dirty) {
+                render_cmdbuf.setDepthWriteEnableEXT(info.depth_stencil.depth_write_enable);
+            }
+
+            if (info.rasterization.topology != current.rasterization.topology || is_dirty) {
+                render_cmdbuf.setPrimitiveTopologyEXT(
+                    PicaToVK::PrimitiveTopology(info.rasterization.topology));
+            }
+
+            if (info.depth_stencil.stencil_test_enable !=
+                    current.depth_stencil.stencil_test_enable ||
+                is_dirty) {
+                render_cmdbuf.setStencilTestEnableEXT(info.depth_stencil.stencil_test_enable);
+            }
+
+            if (info.depth_stencil.stencil_fail_op != current.depth_stencil.stencil_fail_op ||
+                info.depth_stencil.stencil_pass_op != current.depth_stencil.stencil_pass_op ||
+                info.depth_stencil.stencil_depth_fail_op !=
+                    current.depth_stencil.stencil_depth_fail_op ||
+                info.depth_stencil.stencil_compare_op !=
+                    current.depth_stencil.stencil_compare_op ||
+                is_dirty) {
+                render_cmdbuf.setStencilOpEXT(
+                    vk::StencilFaceFlagBits::eFrontAndBack,
+                    PicaToVK::StencilOp(info.depth_stencil.stencil_fail_op),
+                    PicaToVK::StencilOp(info.depth_stencil.stencil_pass_op),
+                    PicaToVK::StencilOp(info.depth_stencil.stencil_depth_fail_op),
+                    PicaToVK::CompareFunc(info.depth_stencil.stencil_compare_op));
+            }
         }
-    }
+    });
 
     current_info = info;
-    state_dirty = false;
+    if (is_dirty) {
+        scheduler.MarkStateNonDirty(StateFlags::Pipeline);
+    }
 }
 
 vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {

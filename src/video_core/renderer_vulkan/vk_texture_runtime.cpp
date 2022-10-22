@@ -8,7 +8,7 @@
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
-#include "video_core/renderer_vulkan/vk_task_scheduler.h"
+#include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
 #include <vk_mem_alloc.h>
@@ -36,10 +36,10 @@ vk::ImageAspectFlags ToVkAspect(VideoCore::SurfaceType type) {
 constexpr u32 UPLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 constexpr u32 DOWNLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 
-TextureRuntime::TextureRuntime(const Instance& instance, TaskScheduler& scheduler,
-                               RenderpassCache& renderpass_cache)
-    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache},
-      blit_helper{instance, scheduler}, upload_buffer{instance, scheduler, UPLOAD_BUFFER_SIZE},
+TextureRuntime::TextureRuntime(const Instance& instance, Scheduler& scheduler,
+                               RenderpassCache& renderpass_cache, DescriptorManager& desc_manager)
+    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache}, desc_manager{desc_manager},
+      blit_helper{instance, scheduler, desc_manager}, upload_buffer{instance, scheduler, UPLOAD_BUFFER_SIZE},
       download_buffer{instance, scheduler, DOWNLOAD_BUFFER_SIZE, true} {
 
     auto Register = [this](VideoCore::PixelFormat dest,
@@ -49,7 +49,7 @@ TextureRuntime::TextureRuntime(const Instance& instance, TaskScheduler& schedule
     };
 
     Register(VideoCore::PixelFormat::RGBA8,
-             std::make_unique<D24S8toRGBA8>(instance, scheduler, *this));
+             std::make_unique<D24S8toRGBA8>(instance, scheduler, desc_manager, *this));
 }
 
 TextureRuntime::~TextureRuntime() {
@@ -98,7 +98,7 @@ MICROPROFILE_DEFINE(Vulkan_Finish, "Vulkan", "Scheduler Finish", MP_RGB(52, 192,
 void TextureRuntime::Finish() {
     MICROPROFILE_SCOPE(Vulkan_Finish);
     renderpass_cache.ExitRenderpass();
-    scheduler.Submit(SubmitMode::Flush);
+    scheduler.Finish();
     download_buffer.Invalidate();
 }
 
@@ -295,36 +295,33 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
             vk::ClearDepthStencilValue{.depth = value.depth, .stencil = value.stencil};
     }
 
-    // For full clears we can use vkCmdClearColorImage/vkCmdClearDepthStencilImage
     if (clear.texture_rect == surface.GetScaledRect()) {
-        const vk::ImageSubresourceRange range = {.aspectMask = aspect,
-                                                 .baseMipLevel = clear.texture_level,
-                                                 .levelCount = 1,
-                                                 .baseArrayLayer = 0,
-                                                 .layerCount = 1};
+        scheduler.Record(
+            [aspect, image = surface.alloc.image, clear_value, clear](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+            const vk::ImageSubresourceRange range = {.aspectMask = aspect,
+                                                     .baseMipLevel = clear.texture_level,
+                                                     .levelCount = 1,
+                                                     .baseArrayLayer = 0,
+                                                     .layerCount = 1};
 
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        if (aspect & vk::ImageAspectFlagBits::eColor) {
-            command_buffer.clearColorImage(surface.alloc.image,
-                                           vk::ImageLayout::eTransferDstOptimal, clear_value.color,
-                                           range);
-        } else if (aspect & vk::ImageAspectFlagBits::eDepth ||
-                   aspect & vk::ImageAspectFlagBits::eStencil) {
-            command_buffer.clearDepthStencilImage(surface.alloc.image,
-                                                  vk::ImageLayout::eTransferDstOptimal,
-                                                  clear_value.depthStencil, range);
-        }
+            if (aspect & vk::ImageAspectFlagBits::eColor) {
+                render_cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, clear_value.color,
+                                               range);
+            } else if (aspect & vk::ImageAspectFlagBits::eDepth ||
+                       aspect & vk::ImageAspectFlagBits::eStencil) {
+                render_cmdbuf.clearDepthStencilImage(image, vk::ImageLayout::eTransferDstOptimal,
+                                                     clear_value.depthStencil, range);
+            }
+        });
     } else {
-        // For partial clears we begin a clear renderpass with the appropriate render area
-        vk::RenderPass clear_renderpass{};
+        vk::RenderPass clear_renderpass;
         if (aspect & vk::ImageAspectFlagBits::eColor) {
             clear_renderpass = renderpass_cache.GetRenderpass(
                 surface.pixel_format, VideoCore::PixelFormat::Invalid, true);
             surface.Transition(vk::ImageLayout::eColorAttachmentOptimal, 0, 1);
-        } else if (aspect & vk::ImageAspectFlagBits::eDepth ||
-                   aspect & vk::ImageAspectFlagBits::eStencil) {
-            clear_renderpass = renderpass_cache.GetRenderpass(VideoCore::PixelFormat::Invalid,
-                                                              surface.pixel_format, true);
+        } else if (aspect & vk::ImageAspectFlagBits::eDepth) {
+            clear_renderpass = renderpass_cache.GetRenderpass(
+                VideoCore::PixelFormat::Invalid, surface.pixel_format, true);
             surface.Transition(vk::ImageLayout::eDepthStencilAttachmentOptimal, 0, 1);
         }
 
@@ -344,17 +341,17 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
             it->second = device.createFramebuffer(framebuffer_info);
         }
 
-        const vk::RenderPassBeginInfo clear_begin_info = {
-            .renderPass = clear_renderpass,
+        const RenderpassState clear_info = {
+            .renderpass = clear_renderpass,
             .framebuffer = it->second,
-            .renderArea = vk::Rect2D{.offset = {static_cast<s32>(clear.texture_rect.left),
-                                                static_cast<s32>(clear.texture_rect.bottom)},
-                                     .extent = {clear.texture_rect.GetWidth(),
-                                                clear.texture_rect.GetHeight()}},
-            .clearValueCount = 1,
-            .pClearValues = &clear_value};
+            .render_area = vk::Rect2D{.offset = {static_cast<s32>(clear.texture_rect.left),
+                                                 static_cast<s32>(clear.texture_rect.bottom)},
+                                      .extent = {clear.texture_rect.GetWidth(),
+                                                 clear.texture_rect.GetHeight()}},
+            .clear = clear_value
+        };
 
-        renderpass_cache.EnterRenderpass(clear_begin_info);
+        renderpass_cache.EnterRenderpass(clear_info);
         renderpass_cache.ExitRenderpass();
     }
 
@@ -368,22 +365,24 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
     source.Transition(vk::ImageLayout::eTransferSrcOptimal, copy.src_level, 1);
     dest.Transition(vk::ImageLayout::eTransferDstOptimal, copy.dst_level, 1);
 
-    const vk::ImageCopy image_copy = {
-        .srcSubresource = {.aspectMask = ToVkAspect(source.type),
-                           .mipLevel = copy.src_level,
-                           .baseArrayLayer = 0,
-                           .layerCount = 1},
-        .srcOffset = {static_cast<s32>(copy.src_offset.x), static_cast<s32>(copy.src_offset.y), 0},
-        .dstSubresource = {.aspectMask = ToVkAspect(dest.type),
-                           .mipLevel = copy.dst_level,
-                           .baseArrayLayer = 0,
-                           .layerCount = 1},
-        .dstOffset = {static_cast<s32>(copy.dst_offset.x), static_cast<s32>(copy.dst_offset.y), 0},
-        .extent = {copy.extent.width, copy.extent.height, 1}};
+    scheduler.Record([src_image = source.alloc.image, src_type = source.type,
+                     dst_image = dest.alloc.image, dst_type = dest.type, copy](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        const vk::ImageCopy image_copy = {
+            .srcSubresource = {.aspectMask = ToVkAspect(src_type),
+                               .mipLevel = copy.src_level,
+                               .baseArrayLayer = 0,
+                               .layerCount = 1},
+            .srcOffset = {static_cast<s32>(copy.src_offset.x), static_cast<s32>(copy.src_offset.y), 0},
+            .dstSubresource = {.aspectMask = ToVkAspect(dst_type),
+                               .mipLevel = copy.dst_level,
+                               .baseArrayLayer = 0,
+                               .layerCount = 1},
+            .dstOffset = {static_cast<s32>(copy.dst_offset.x), static_cast<s32>(copy.dst_offset.y), 0},
+            .extent = {copy.extent.width, copy.extent.height, 1}};
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.copyImage(source.alloc.image, vk::ImageLayout::eTransferSrcOptimal,
-                             dest.alloc.image, vk::ImageLayout::eTransferDstOptimal, image_copy);
+        render_cmdbuf.copyImage(src_image, vk::ImageLayout::eTransferSrcOptimal,
+                                 dst_image, vk::ImageLayout::eTransferDstOptimal, image_copy);
+    });
 
     return true;
 }
@@ -395,45 +394,47 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
     source.Transition(vk::ImageLayout::eTransferSrcOptimal, blit.src_level, 1);
     dest.Transition(vk::ImageLayout::eTransferDstOptimal, blit.dst_level, 1);
 
-    const std::array source_offsets = {vk::Offset3D{static_cast<s32>(blit.src_rect.left),
-                                                    static_cast<s32>(blit.src_rect.bottom), 0},
-                                       vk::Offset3D{static_cast<s32>(blit.src_rect.right),
-                                                    static_cast<s32>(blit.src_rect.top), 1}};
+    scheduler.Record([src_iamge = source.alloc.image, src_type = source.type,
+                     dst_image = dest.alloc.image, dst_type = dest.type,
+                     format = source.pixel_format, blit](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        const std::array source_offsets = {vk::Offset3D{static_cast<s32>(blit.src_rect.left),
+                                                        static_cast<s32>(blit.src_rect.bottom), 0},
+                                           vk::Offset3D{static_cast<s32>(blit.src_rect.right),
+                                                        static_cast<s32>(blit.src_rect.top), 1}};
 
-    const std::array dest_offsets = {vk::Offset3D{static_cast<s32>(blit.dst_rect.left),
-                                                  static_cast<s32>(blit.dst_rect.bottom), 0},
-                                     vk::Offset3D{static_cast<s32>(blit.dst_rect.right),
-                                                  static_cast<s32>(blit.dst_rect.top), 1}};
+        const std::array dest_offsets = {vk::Offset3D{static_cast<s32>(blit.dst_rect.left),
+                                                      static_cast<s32>(blit.dst_rect.bottom), 0},
+                                         vk::Offset3D{static_cast<s32>(blit.dst_rect.right),
+                                                      static_cast<s32>(blit.dst_rect.top), 1}};
 
-    const vk::ImageBlit blit_area = {.srcSubresource = {.aspectMask = ToVkAspect(source.type),
-                                                        .mipLevel = blit.src_level,
-                                                        .baseArrayLayer = blit.src_layer,
-                                                        .layerCount = 1},
-                                     .srcOffsets = source_offsets,
-                                     .dstSubresource = {.aspectMask = ToVkAspect(dest.type),
-                                                        .mipLevel = blit.dst_level,
-                                                        .baseArrayLayer = blit.dst_layer,
-                                                        .layerCount = 1},
-                                     .dstOffsets = dest_offsets};
+        const vk::ImageBlit blit_area = {.srcSubresource = {.aspectMask = ToVkAspect(src_type),
+                                                            .mipLevel = blit.src_level,
+                                                            .baseArrayLayer = blit.src_layer,
+                                                            .layerCount = 1},
+                                         .srcOffsets = source_offsets,
+                                         .dstSubresource = {.aspectMask = ToVkAspect(dst_type),
+                                                            .mipLevel = blit.dst_level,
+                                                            .baseArrayLayer = blit.dst_layer,
+                                                            .layerCount = 1},
+                                         .dstOffsets = dest_offsets};
 
-    // Don't use linear filtering on depth attachments
-    const VideoCore::PixelFormat format = source.pixel_format;
-    const vk::Filter filtering = format == VideoCore::PixelFormat::D24S8 ||
-                                         format == VideoCore::PixelFormat::D24 ||
-                                         format == VideoCore::PixelFormat::D16
-                                     ? vk::Filter::eNearest
-                                     : vk::Filter::eLinear;
+        // Don't use linear filtering on depth attachments
+        const vk::Filter filtering = format == VideoCore::PixelFormat::D24S8 ||
+                                             format == VideoCore::PixelFormat::D24 ||
+                                             format == VideoCore::PixelFormat::D16
+                                         ? vk::Filter::eNearest
+                                         : vk::Filter::eLinear;
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.blitImage(source.alloc.image, vk::ImageLayout::eTransferSrcOptimal,
-                             dest.alloc.image, vk::ImageLayout::eTransferDstOptimal, blit_area,
-                             filtering);
+        render_cmdbuf.blitImage(src_iamge, vk::ImageLayout::eTransferSrcOptimal,
+                                 dst_image, vk::ImageLayout::eTransferDstOptimal, blit_area,
+                                 filtering);
+    });
 
     return true;
 }
 
 void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {
-    renderpass_cache.ExitRenderpass();
+    /*renderpass_cache.ExitRenderpass();
 
     // TODO: Investigate AMD single pass downsampler
     s32 current_width = surface.GetScaledWidth();
@@ -467,7 +468,7 @@ void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {
         command_buffer.blitImage(surface.alloc.image, vk::ImageLayout::eTransferSrcOptimal,
                                  surface.alloc.image, vk::ImageLayout::eTransferDstOptimal,
                                  blit_area, vk::Filter::eLinear);
-    }
+    }*/
 }
 
 const ReinterpreterList& TextureRuntime::GetPossibleReinterpretations(
@@ -483,8 +484,7 @@ bool TextureRuntime::NeedsConvertion(VideoCore::PixelFormat format) const {
             !traits.attachment_support);
 }
 
-void TextureRuntime::Transition(vk::CommandBuffer command_buffer, ImageAlloc& alloc,
-                                vk::ImageLayout new_layout, u32 level, u32 level_count) {
+void TextureRuntime::Transition(ImageAlloc& alloc, vk::ImageLayout new_layout, u32 level, u32 level_count) {
     LayoutTracker& tracker = alloc.tracker;
     if (tracker.IsRangeEqual(new_layout, level, level_count) || !alloc.image) {
         return;
@@ -566,22 +566,26 @@ void TextureRuntime::Transition(vk::CommandBuffer command_buffer, ImageAlloc& al
     LayoutInfo dest = GetLayoutInfo(new_layout);
     tracker.ForEachLayoutRange(
         level, level_count, new_layout, [&](u32 start, u32 count, vk::ImageLayout old_layout) {
+        scheduler.Record([old_layout, new_layout, dest, start, count,
+                         image = alloc.image, aspect = alloc.aspect,
+                         layers = alloc.layers, GetLayoutInfo](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
             LayoutInfo source = GetLayoutInfo(old_layout);
-            const vk::ImageMemoryBarrier barrier = {
-                .srcAccessMask = source.access,
-                .dstAccessMask = dest.access,
-                .oldLayout = old_layout,
-                .newLayout = new_layout,
-                .image = alloc.image,
-                .subresourceRange = {.aspectMask = alloc.aspect,
-                                     .baseMipLevel = start,
-                                     .levelCount = count,
-                                     .baseArrayLayer = 0,
-                                     .layerCount = alloc.layers}};
+                const vk::ImageMemoryBarrier barrier = {
+                    .srcAccessMask = source.access,
+                    .dstAccessMask = dest.access,
+                    .oldLayout = old_layout,
+                    .newLayout = new_layout,
+                    .image = image,
+                    .subresourceRange = {.aspectMask = aspect,
+                                         .baseMipLevel = start,
+                                         .levelCount = count,
+                                         .baseArrayLayer = 0,
+                                         .layerCount = layers}};
 
-            command_buffer.pipelineBarrier(source.stage, dest.stage,
-                                           vk::DependencyFlagBits::eByRegion, {}, {}, barrier);
-        });
+                render_cmdbuf.pipelineBarrier(source.stage, dest.stage,
+                                               vk::DependencyFlagBits::eByRegion, {}, {}, barrier);
+           });
+    });
 
     tracker.SetLayout(new_layout, level, level_count);
     for (u32 i = 0; i < level_count; i++) {
@@ -625,8 +629,7 @@ Surface::~Surface() {
 }
 
 void Surface::Transition(vk::ImageLayout new_layout, u32 level, u32 level_count) {
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    runtime.Transition(command_buffer, alloc, new_layout, level, level_count);
+    runtime.Transition(alloc, new_layout, level, level_count);
 }
 
 MICROPROFILE_DEFINE(Vulkan_Upload, "VulkanSurface", "Texture Upload", MP_RGB(128, 192, 64));
@@ -644,40 +647,40 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
     if (is_scaled) {
         ScaledUpload(upload, staging);
     } else {
-        u32 region_count = 0;
-        std::array<vk::BufferImageCopy, 2> copy_regions;
-
-        const VideoCore::Rect2D rect = upload.texture_rect;
-        vk::BufferImageCopy copy_region = {
-            .bufferOffset = staging.buffer_offset + upload.buffer_offset,
-            .bufferRowLength = rect.GetWidth(),
-            .bufferImageHeight = rect.GetHeight(),
-            .imageSubresource = {.aspectMask = alloc.aspect,
-                                 .mipLevel = upload.texture_level,
-                                 .baseArrayLayer = 0,
-                                 .layerCount = 1},
-            .imageOffset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom), 0},
-            .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1}};
-
-        if (alloc.aspect & vk::ImageAspectFlagBits::eColor) {
-            copy_regions[region_count++] = copy_region;
-        } else if (alloc.aspect & vk::ImageAspectFlagBits::eDepth) {
-            copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eDepth;
-            copy_regions[region_count++] = copy_region;
-
-            if (alloc.aspect & vk::ImageAspectFlagBits::eStencil) {
-                copy_region.bufferOffset += UnpackDepthStencil(staging);
-                copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eStencil;
-                copy_regions[region_count++] = copy_region;
-            }
-        }
-
         Transition(vk::ImageLayout::eTransferDstOptimal, upload.texture_level, 1);
+        scheduler.Record([this, aspect = alloc.aspect, image = alloc.image,
+                         format = alloc.format, staging, upload](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+            u32 region_count = 0;
+            std::array<vk::BufferImageCopy, 2> copy_regions;
 
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        command_buffer.copyBufferToImage(staging.buffer, alloc.image,
-                                         vk::ImageLayout::eTransferDstOptimal, region_count,
-                                         copy_regions.data());
+            const VideoCore::Rect2D rect = upload.texture_rect;
+            vk::BufferImageCopy copy_region = {
+                .bufferOffset = staging.buffer_offset + upload.buffer_offset,
+                .bufferRowLength = rect.GetWidth(),
+                .bufferImageHeight = rect.GetHeight(),
+                .imageSubresource = {.aspectMask = aspect,
+                                     .mipLevel = upload.texture_level,
+                                     .baseArrayLayer = 0,
+                                     .layerCount = 1},
+                .imageOffset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom), 0},
+                .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1}};
+
+            if (aspect & vk::ImageAspectFlagBits::eColor) {
+                copy_regions[region_count++] = copy_region;
+            } else if (aspect & vk::ImageAspectFlagBits::eDepth) {
+                copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eDepth;
+                copy_regions[region_count++] = copy_region;
+
+                if (aspect & vk::ImageAspectFlagBits::eStencil) {
+                    copy_region.bufferOffset += UnpackDepthStencil(staging, format);
+                    copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eStencil;
+                    copy_regions[region_count++] = copy_region;
+                }
+            }
+
+            render_cmdbuf.copyBufferToImage(staging.buffer, image, vk::ImageLayout::eTransferDstOptimal,
+                                            region_count, copy_regions.data());
+        });
     }
 
     InvalidateAllWatcher();
@@ -703,24 +706,24 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
     if (is_scaled) {
         ScaledDownload(download, staging);
     } else {
-        const VideoCore::Rect2D rect = download.texture_rect;
-        const vk::BufferImageCopy copy_region = {
-            .bufferOffset = staging.buffer_offset + download.buffer_offset,
-            .bufferRowLength = rect.GetWidth(),
-            .bufferImageHeight = rect.GetHeight(),
-            .imageSubresource = {.aspectMask = alloc.aspect,
-                                 .mipLevel = download.texture_level,
-                                 .baseArrayLayer = 0,
-                                 .layerCount = 1},
-            .imageOffset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom), 0},
-            .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1}};
-
         Transition(vk::ImageLayout::eTransferSrcOptimal, download.texture_level, 1);
+        scheduler.Record([aspect = alloc.aspect, image = alloc.image,
+                         staging, download](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer){
+            const VideoCore::Rect2D rect = download.texture_rect;
+            const vk::BufferImageCopy copy_region = {
+                .bufferOffset = staging.buffer_offset + download.buffer_offset,
+                .bufferRowLength = rect.GetWidth(),
+                .bufferImageHeight = rect.GetHeight(),
+                .imageSubresource = {.aspectMask = aspect,
+                                     .mipLevel = download.texture_level,
+                                     .baseArrayLayer = 0,
+                                     .layerCount = 1},
+                .imageOffset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom), 0},
+                .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1}};
 
-        // Copy pixel data to the staging buffer
-        vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-        command_buffer.copyImageToBuffer(alloc.image, vk::ImageLayout::eTransferSrcOptimal,
-                                         staging.buffer, copy_region);
+            render_cmdbuf.copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal,
+                                             staging.buffer, copy_region);
+        });
     }
 
     // Lock this data until the next scheduler switch
@@ -852,12 +855,12 @@ void Surface::DepthStencilDownload(const VideoCore::BufferTextureCopy& download,
     r32_surface.Download(r32_download, staging);
 }
 
-u32 Surface::UnpackDepthStencil(const StagingData& data) {
+u32 Surface::UnpackDepthStencil(const StagingData& data, vk::Format dest) {
     u32 depth_offset = 0;
     u32 stencil_offset = 4 * data.size / 5;
     const auto& mapped = data.mapped;
 
-    switch (alloc.format) {
+    switch (dest) {
     case vk::Format::eD24UnormS8Uint: {
         for (; stencil_offset < data.size; depth_offset += 4) {
             std::byte* ptr = mapped.data() + depth_offset;
@@ -871,7 +874,7 @@ u32 Surface::UnpackDepthStencil(const StagingData& data) {
     }
     default:
         LOG_ERROR(Render_Vulkan, "Unimplemtend convertion for depth format {}",
-                  vk::to_string(alloc.format));
+                  vk::to_string(dest));
         UNREACHABLE();
     }
 
