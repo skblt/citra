@@ -16,9 +16,7 @@
 #include "core/tracer/recorder.h"
 #include "video_core/debug_utils/debug_utils.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
-#include "video_core/renderer_vulkan/vk_rasterizer.h"
-#include "video_core/renderer_vulkan/vk_shader.h"
-#include "video_core/renderer_vulkan/vk_task_scheduler.h"
+#include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/video_core.h"
 
 namespace Vulkan {
@@ -154,14 +152,12 @@ struct ScreenRectVertex {
 constexpr u32 VERTEX_BUFFER_SIZE = sizeof(ScreenRectVertex) * 8192;
 
 RendererVulkan::RendererVulkan(Frontend::EmuWindow& window)
-    : RendererBase{window}, instance{window, Settings::values.physical_device}, scheduler{instance,
-                                                                                          *this},
-      renderpass_cache{instance, scheduler}, runtime{instance, scheduler, renderpass_cache},
-      swapchain{instance, renderpass_cache}, vertex_buffer{instance,
-                                                           scheduler,
-                                                           VERTEX_BUFFER_SIZE,
-                                                           vk::BufferUsageFlagBits::eVertexBuffer,
-                                                           {}} {
+    : RendererBase{window}, instance{window, Settings::values.physical_device}, scheduler{instance, *this},
+      renderpass_cache{instance, scheduler}, desc_manager{instance, scheduler},
+      runtime{instance, scheduler, renderpass_cache, desc_manager},
+      swapchain{instance, scheduler, renderpass_cache},
+      vertex_buffer{instance, scheduler, VERTEX_BUFFER_SIZE, vk::BufferUsageFlagBits::eVertexBuffer, {}},
+      rasterizer{render_window, instance, scheduler, desc_manager, runtime, renderpass_cache} {
 
     auto& telemetry_session = Core::System::GetInstance().TelemetrySession();
     constexpr auto user_system = Common::Telemetry::FieldType::UserSystem;
@@ -197,30 +193,23 @@ RendererVulkan::~RendererVulkan() {
 
         runtime.Recycle(tag, std::move(info.texture.alloc));
     }
-
-    rasterizer.reset();
 }
 
 VideoCore::ResultStatus RendererVulkan::Init() {
     CompileShaders();
     BuildLayouts();
     BuildPipelines();
-
-    // Create the rasterizer
-    rasterizer = std::make_unique<RasterizerVulkan>(render_window, instance, scheduler, runtime,
-                                                    renderpass_cache);
-
     return VideoCore::ResultStatus::Success;
 }
 
 VideoCore::RasterizerInterface* RendererVulkan::Rasterizer() {
-    return rasterizer.get();
+    return &rasterizer;
 }
 
 void RendererVulkan::ShutDown() {}
 
 void RendererVulkan::Sync() {
-    rasterizer->SyncEntireState();
+    rasterizer.SyncEntireState();
 }
 
 void RendererVulkan::PrepareRendertarget() {
@@ -236,24 +225,26 @@ void RendererVulkan::PrepareRendertarget() {
         LCD::Read(color_fill.raw, lcd_color_addr);
 
         if (color_fill.is_enabled) {
-            const vk::ClearColorValue clear_color = {
-                .float32 = std::array{color_fill.color_r / 255.0f, color_fill.color_g / 255.0f,
-                                      color_fill.color_b / 255.0f, 1.0f}};
-
-            const vk::ImageSubresourceRange range = {
-                .aspectMask = vk::ImageAspectFlagBits::eColor,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            };
-
-            vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
             TextureInfo& texture = screen_infos[i].texture;
-            runtime.Transition(command_buffer, texture.alloc, vk::ImageLayout::eTransferDstOptimal,
+            runtime.Transition(texture.alloc, vk::ImageLayout::eTransferDstOptimal,
                                0, texture.alloc.levels);
-            command_buffer.clearColorImage(
-                texture.alloc.image, vk::ImageLayout::eTransferDstOptimal, clear_color, range);
+
+            scheduler.Record([image = texture.alloc.image,
+                             color_fill](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+                const vk::ClearColorValue clear_color = {
+                    .float32 = std::array{color_fill.color_r / 255.0f, color_fill.color_g / 255.0f,
+                                          color_fill.color_b / 255.0f, 1.0f}};
+
+                const vk::ImageSubresourceRange range = {
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                };
+
+                render_cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, clear_color, range);
+            });
         } else {
             TextureInfo& texture = screen_infos[i].texture;
             if (texture.width != framebuffer.width || texture.height != framebuffer.height ||
@@ -275,9 +266,7 @@ void RendererVulkan::PrepareRendertarget() {
 }
 
 void RendererVulkan::BeginRendering() {
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
-                                present_pipelines[current_pipeline]);
+    vk::Device device = instance.GetDevice();
 
     std::array<vk::DescriptorImageInfo, 4> present_textures;
     for (std::size_t i = 0; i < screen_infos.size(); i++) {
@@ -290,29 +279,24 @@ void RendererVulkan::BeginRendering() {
 
     present_textures[3] = vk::DescriptorImageInfo{.sampler = present_samplers[current_sampler]};
 
-    const vk::DescriptorSetAllocateInfo alloc_info = {.descriptorPool =
-                                                          scheduler.GetDescriptorPool(),
-                                                      .descriptorSetCount = 1,
-                                                      .pSetLayouts = &present_descriptor_layout};
-
-    vk::Device device = instance.GetDevice();
-    vk::DescriptorSet set = device.allocateDescriptorSets(alloc_info)[0];
+    vk::DescriptorSet set = desc_manager.AllocateSet(present_descriptor_layout);
     device.updateDescriptorSetWithTemplate(set, present_update_template, present_textures[0]);
 
-    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, present_pipeline_layout, 0,
-                                      1, &set, 0, nullptr);
+    scheduler.Record([this, set, pipeline_index = current_pipeline](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                    present_pipelines[pipeline_index]);
 
-    const vk::ClearValue clear_value = {.color = clear_color};
+        render_cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, present_pipeline_layout, 0, set, {});
+    });
 
-    const vk::RenderPassBeginInfo begin_info = {
-        .renderPass = renderpass_cache.GetPresentRenderpass(),
+    const RenderpassState renderpass_info = {
+        .renderpass = renderpass_cache.GetPresentRenderpass(),
         .framebuffer = swapchain.GetFramebuffer(),
-        .renderArea = vk::Rect2D{.offset = {0, 0}, .extent = swapchain.GetExtent()},
-        .clearValueCount = 1,
-        .pClearValues = &clear_value,
+        .render_area = vk::Rect2D{.offset = {0, 0}, .extent = swapchain.GetExtent()},
+        .clear = vk::ClearValue{.color = clear_color}
     };
 
-    renderpass_cache.EnterRenderpass(begin_info);
+    renderpass_cache.EnterRenderpass(renderpass_info);
 }
 
 void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& framebuffer,
@@ -340,7 +324,7 @@ void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
     // only allows rows to have a memory alignement of 4.
     ASSERT(pixel_stride % 4 == 0);
 
-    if (!rasterizer->AccelerateDisplay(framebuffer, framebuffer_addr,
+    if (!rasterizer.AccelerateDisplay(framebuffer, framebuffer_addr,
                                        static_cast<u32>(pixel_stride), screen_info)) {
         ASSERT(false);
         // Reset the screen info's display texture to its own permanent texture
@@ -618,14 +602,16 @@ void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, fl
     draw_info.o_resolution = Common::Vec4f{h, w, 1.0f / h, 1.0f / w};
     draw_info.screen_id_l = screen_id;
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.pushConstants(present_pipeline_layout,
-                                 vk::ShaderStageFlagBits::eFragment |
-                                     vk::ShaderStageFlagBits::eVertex,
-                                 0, sizeof(draw_info), &draw_info);
+    scheduler.Record([this, offset = offset,
+                     info = draw_info](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.pushConstants(present_pipeline_layout,
+                                     vk::ShaderStageFlagBits::eFragment |
+                                         vk::ShaderStageFlagBits::eVertex,
+                                     0, sizeof(info), &info);
 
-    command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
-    command_buffer.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
+        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
+        render_cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
+    });
 }
 
 void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, float h) {
@@ -655,25 +641,16 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
     draw_info.o_resolution = Common::Vec4f{h, w, 1.0f / h, 1.0f / w};
     draw_info.screen_id_l = screen_id;
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.pushConstants(present_pipeline_layout,
-                                 vk::ShaderStageFlagBits::eFragment |
-                                     vk::ShaderStageFlagBits::eVertex,
-                                 0, sizeof(draw_info), &draw_info);
+    scheduler.Record([this, offset = offset,
+                     info = draw_info](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.pushConstants(present_pipeline_layout,
+                                     vk::ShaderStageFlagBits::eFragment |
+                                         vk::ShaderStageFlagBits::eVertex,
+                                     0, sizeof(info), &info);
 
-    const vk::ClearValue clear_value = {.color = clear_color};
-
-    const vk::RenderPassBeginInfo begin_info = {
-        .renderPass = renderpass_cache.GetPresentRenderpass(),
-        .framebuffer = swapchain.GetFramebuffer(),
-        .clearValueCount = 1,
-        .pClearValues = &clear_value,
-    };
-
-    command_buffer.beginRenderPass(begin_info, vk::SubpassContents::eInline);
-
-    command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
-    command_buffer.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
+        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
+        render_cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
+    });
 }
 
 void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_id_r, float x,
@@ -704,14 +681,16 @@ void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_i
     draw_info.screen_id_l = screen_id_l;
     draw_info.screen_id_r = screen_id_r;
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.pushConstants(present_pipeline_layout,
-                                 vk::ShaderStageFlagBits::eFragment |
-                                     vk::ShaderStageFlagBits::eVertex,
-                                 0, sizeof(draw_info), &draw_info);
+    scheduler.Record([this, offset = offset,
+                     info = draw_info](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.pushConstants(present_pipeline_layout,
+                                     vk::ShaderStageFlagBits::eFragment |
+                                         vk::ShaderStageFlagBits::eVertex,
+                                     0, sizeof(info), &info);
 
-    command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
-    command_buffer.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
+        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
+        render_cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
+    });
 }
 
 void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, float x, float y,
@@ -744,14 +723,16 @@ void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, fl
     draw_info.screen_id_l = screen_id_l;
     draw_info.screen_id_r = screen_id_r;
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.pushConstants(present_pipeline_layout,
-                                 vk::ShaderStageFlagBits::eFragment |
-                                     vk::ShaderStageFlagBits::eVertex,
-                                 0, sizeof(draw_info), &draw_info);
+    scheduler.Record([this, offset = offset,
+                     info = draw_info](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.pushConstants(present_pipeline_layout,
+                                     vk::ShaderStageFlagBits::eFragment |
+                                         vk::ShaderStageFlagBits::eVertex,
+                                     0, sizeof(info), &info);
 
-    command_buffer.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
-    command_buffer.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
+        render_cmdbuf.bindVertexBuffers(0, vertex_buffer.GetHandle(), {0});
+        render_cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
+    });
 }
 
 void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool flipped) {
@@ -908,41 +889,53 @@ void RendererVulkan::SwapBuffers() {
     const auto& layout = render_window.GetFramebufferLayout();
     PrepareRendertarget();
 
-    // Create swapchain if needed
-    if (swapchain.NeedsRecreation()) {
+    const auto RecreateSwapchain = [&] {
+        scheduler.Finish();
+        const Layout::FramebufferLayout layout = render_window.GetFramebufferLayout();
         swapchain.Create(layout.width, layout.height);
+    };
+
+    if (swapchain.NeedsRecreation()) {
+        RecreateSwapchain();
     }
 
-    // Calling Submit will change the slot so get the required semaphores now
-    const vk::Semaphore image_acquired = scheduler.GetImageAcquiredSemaphore();
-    const vk::Semaphore present_ready = scheduler.GetPresentReadySemaphore();
-    swapchain.AcquireNextImage(image_acquired);
+    do {
+        scheduler.WaitWorker();
+        swapchain.AcquireNextImage();
+        if (swapchain.NeedsRecreation()) {
+            RecreateSwapchain();
+        }
+    } while (swapchain.NeedsRecreation());
 
-    const vk::Viewport viewport = {.x = 0.0f,
-                                   .y = 0.0f,
-                                   .width = static_cast<float>(layout.width),
-                                   .height = static_cast<float>(layout.height),
-                                   .minDepth = 0.0f,
-                                   .maxDepth = 1.0f};
+    scheduler.Record([layout](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        const vk::Viewport viewport = {.x = 0.0f,
+                                       .y = 0.0f,
+                                       .width = static_cast<float>(layout.width),
+                                       .height = static_cast<float>(layout.height),
+                                       .minDepth = 0.0f,
+                                       .maxDepth = 1.0f};
 
-    const vk::Rect2D scissor = {.offset = {0, 0}, .extent = {layout.width, layout.height}};
+        const vk::Rect2D scissor = {.offset = {0, 0}, .extent = {layout.width, layout.height}};
 
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    command_buffer.setViewport(0, viewport);
-    command_buffer.setScissor(0, scissor);
+        render_cmdbuf.setViewport(0, viewport);
+        render_cmdbuf.setScissor(0, scissor);
+    });
 
     renderpass_cache.ExitRenderpass();
 
     for (auto& info : screen_infos) {
-        auto alloc = info.display_texture ? info.display_texture : &info.texture.alloc;
-        runtime.Transition(command_buffer, *alloc, vk::ImageLayout::eShaderReadOnlyOptimal, 0,
+        ImageAlloc* alloc = info.display_texture ? info.display_texture : &info.texture.alloc;
+        runtime.Transition(*alloc, vk::ImageLayout::eShaderReadOnlyOptimal, 0,
                            alloc->levels);
     }
 
     DrawScreens(layout, false);
 
-    scheduler.Submit(SubmitMode::SwapchainSynced);
-    swapchain.Present(present_ready);
+    const vk::Semaphore image_acquired = swapchain.GetImageAcquiredSemaphore();
+    const VkSemaphore present_ready = swapchain.GetPresentReadySemaphore();
+    scheduler.Flush(present_ready, image_acquired);
+    //scheduler.WaitWorker();
+    swapchain.Present();
 
     m_current_frame++;
 
@@ -961,13 +954,8 @@ void RendererVulkan::SwapBuffers() {
 
 void RendererVulkan::FlushBuffers() {
     vertex_buffer.Flush();
-    rasterizer->FlushBuffers();
+    rasterizer.FlushBuffers();
     runtime.FlushBuffers();
-}
-
-void RendererVulkan::OnSlotSwitch() {
-    renderpass_cache.OnSlotSwitch();
-    rasterizer->pipeline_cache.MarkDirty();
 }
 
 } // namespace Vulkan

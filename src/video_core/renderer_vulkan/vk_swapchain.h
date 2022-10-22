@@ -11,77 +11,97 @@
 namespace Vulkan {
 
 class Instance;
+class Scheduler;
 class RenderpassCache;
 
 class Swapchain {
 public:
-    Swapchain(const Instance& instance, RenderpassCache& renderpass_cache);
+    Swapchain(const Instance& instance, Scheduler& scheduler,
+              RenderpassCache& renderpass_cache);
     ~Swapchain();
 
     /// Creates (or recreates) the swapchain with a given size.
     void Create(u32 width, u32 height);
 
     /// Acquires the next image in the swapchain.
-    void AcquireNextImage(vk::Semaphore signal_acquired);
+    void AcquireNextImage();
 
     /// Presents the current image and move to the next one
-    void Present(vk::Semaphore wait_for_present);
+    void Present();
+
+    /// Returns true when the swapchain should be recreated
+    [[nodiscard]] bool NeedsRecreation() const {
+        return is_suboptimal || is_outdated;
+    }
 
     /// Returns current swapchain state
-    vk::Extent2D GetExtent() const {
+    [[nodiscard]] vk::Extent2D GetExtent() const {
         return extent;
     }
 
     /// Returns the swapchain surface
-    vk::SurfaceKHR GetSurface() const {
+    [[nodiscard]] vk::SurfaceKHR GetSurface() const {
         return surface;
     }
 
     /// Returns the current framebuffe
-    vk::Framebuffer GetFramebuffer() const {
-        return swapchain_images[current_image].framebuffer;
+    [[nodiscard]] vk::Framebuffer GetFramebuffer() const {
+        return framebuffers[frame_index];
     }
 
     /// Returns the swapchain format
-    vk::SurfaceFormatKHR GetSurfaceFormat() const {
+    [[nodiscard]] vk::SurfaceFormatKHR GetSurfaceFormat() const {
         return surface_format;
     }
 
     /// Returns the Vulkan swapchain handle
-    vk::SwapchainKHR GetHandle() const {
+    [[nodiscard]] vk::SwapchainKHR GetHandle() const {
         return swapchain;
     }
 
-    /// Returns true when the swapchain should be recreated
-    bool NeedsRecreation() const {
-        return is_suboptimal || is_outdated;
+    [[nodiscard]] vk::Semaphore GetImageAcquiredSemaphore() const {
+        return image_acquired[frame_index];
+    }
+
+    [[nodiscard]] vk::Semaphore GetPresentReadySemaphore() const {
+        return present_ready[image_index];
     }
 
 private:
-    void Configure(u32 width, u32 height);
+    /// Selects the best available swapchain image format
+    void FindPresentFormat();
+
+    /// Sets the best available present mode
+    void SetPresentMode();
+
+    /// Sets the surface properties according to device capabilities
+    void SetSurfaceProperties(u32 width, u32 height);
+
+    /// Destroys current swapchain resources
+    void Destroy();
+
+    /// Performs creation of image views and framebuffers from the swapchain images
+    void SetupImages();
 
 private:
     const Instance& instance;
+    Scheduler& scheduler;
     RenderpassCache& renderpass_cache;
     vk::SwapchainKHR swapchain{};
     vk::SurfaceKHR surface{};
-
-    // Swapchain properties
     vk::SurfaceFormatKHR surface_format;
     vk::PresentModeKHR present_mode;
     vk::Extent2D extent;
     vk::SurfaceTransformFlagBitsKHR transform;
-    u32 image_count;
-
-    struct Image {
-        vk::Image image;
-        vk::ImageView image_view;
-        vk::Framebuffer framebuffer;
-    };
-
-    // Swapchain state
-    std::vector<Image> swapchain_images;
-    u32 current_image = 0;
+    std::vector<vk::Image> images;
+    std::vector<vk::ImageView> image_views;
+    std::vector<vk::Framebuffer> framebuffers;
+    std::vector<u64> resource_ticks;
+    std::vector<vk::Semaphore> image_acquired;
+    std::vector<vk::Semaphore> present_ready;
+    u32 image_count = 0;
+    u32 image_index = 0;
+    u32 frame_index = 0;
     bool is_outdated = true;
     bool is_suboptimal = true;
 };
