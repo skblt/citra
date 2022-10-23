@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <QApplication>
+#include <QDir>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QHBoxLayout>
@@ -31,6 +32,8 @@
 #include "core/file_sys/archive_extsavedata.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/hle/service/fs/archive.h"
+#include "core/settings.h"
+#include "qcursor.h"
 
 GameListSearchField::KeyReleaseEater::KeyReleaseEater(GameList* gamelist, QObject* parent)
     : QObject(parent), gamelist{gamelist} {}
@@ -462,6 +465,7 @@ void GameList::PopupContextMenu(const QPoint& menu_location) {
     default:
         break;
     }
+
     context_menu.exec(tree_view->viewport()->mapToGlobal(menu_location));
 }
 
@@ -477,17 +481,23 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
     QAction* open_mods_location = context_menu.addAction(tr("Open Mods Location"));
     QAction* dump_romfs = context_menu.addAction(tr("Dump RomFS"));
     QAction* navigate_to_gamedb_entry = context_menu.addAction(tr("Navigate to GameDB entry"));
+    QMenu* shader_menu = context_menu.addMenu(tr("Disk Shader Cache"));
+
+    QAction* open_shader_cache_location = shader_menu->addAction(tr("Open Shader Cache Location"));
+    shader_menu->addSeparator();
+    QAction* delete_opengl_disk_shader_cache = shader_menu->addAction(tr("Delete OpenGL Shader Cache"));
+    QAction* delete_vulkan_disk_shader_cache = shader_menu->addAction(tr("Delete Vulkan Shader Cache"));
 
     const bool is_application =
         0x0004000000000000 <= program_id && program_id <= 0x00040000FFFFFFFF;
 
     std::string sdmc_dir = FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir);
-    open_save_location->setVisible(
+    open_save_location->setEnabled(
         is_application && FileUtil::Exists(FileSys::ArchiveSource_SDSaveData::GetSaveDataPathFor(
                               sdmc_dir, program_id)));
 
     if (extdata_id) {
-        open_extdata_location->setVisible(
+        open_extdata_location->setEnabled(
             is_application &&
             FileUtil::Exists(FileSys::GetExtDataPathFromId(sdmc_dir, extdata_id)));
     } else {
@@ -495,14 +505,15 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
     }
 
     auto media_type = Service::AM::GetTitleMediaType(program_id);
-    open_application_location->setVisible(path.toStdString() ==
+    open_application_location->setEnabled(path.toStdString() ==
                                           Service::AM::GetTitleContentPath(media_type, program_id));
-    open_update_location->setVisible(
+    open_update_location->setEnabled(
         is_application && FileUtil::Exists(Service::AM::GetTitlePath(Service::FS::MediaType::SDMC,
                                                                      program_id + 0xe00000000) +
                                            "content/"));
     auto it = FindMatchingCompatibilityEntry(compatibility_list, program_id);
 
+    shader_menu->setVisible(is_application);
     open_texture_dump_location->setVisible(is_application);
     open_texture_load_location->setVisible(is_application);
     open_mods_location->setVisible(is_application);
@@ -536,6 +547,13 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
             emit OpenFolderRequested(program_id, GameListOpenTarget::TEXTURE_LOAD);
         }
     });
+    connect(open_texture_load_location, &QAction::triggered, this, [this, program_id] {
+        if (FileUtil::CreateFullPath(fmt::format("{}textures/{:016X}/",
+                                                 FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
+                                                 program_id))) {
+            emit OpenFolderRequested(program_id, GameListOpenTarget::TEXTURE_LOAD);
+        }
+    });
     connect(open_mods_location, &QAction::triggered, this, [this, program_id] {
         if (FileUtil::CreateFullPath(fmt::format("{}mods/{:016X}/",
                                                  FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
@@ -547,6 +565,26 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
             [this, path, program_id] { emit DumpRomFSRequested(path, program_id); });
     connect(navigate_to_gamedb_entry, &QAction::triggered, this, [this, program_id]() {
         emit NavigateToGamedbEntryRequested(program_id, compatibility_list);
+    });
+    connect(open_shader_cache_location, &QAction::triggered, this, [this, program_id] {
+        if (FileUtil::CreateFullPath(FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir))) {
+            emit OpenFolderRequested(program_id, GameListOpenTarget::SHADER_CACHE);
+        }
+    });
+    connect(delete_opengl_disk_shader_cache, &QAction::triggered, this, [program_id] {
+        const std::string_view cache_type =
+                Settings::values.separable_shader ? "separable" : "conventional";
+        const std::string path =
+                fmt::format("{}opengl/precompiled/{}/{:016X}.bin",
+                            FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir), cache_type, program_id);
+        QFile file{QString::fromStdString(path)};
+        file.remove();
+    });
+    connect(delete_vulkan_disk_shader_cache, &QAction::triggered, this, [] {
+        const std::string path =
+                fmt::format("{}vulkan", FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir));
+        QDir dir{QString::fromStdString(path)};
+        dir.removeRecursively();
     });
 };
 
