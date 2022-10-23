@@ -26,6 +26,7 @@ ConfigureGraphics::ConfigureGraphics(QWidget* parent)
     ui->graphics_api_combo->setEnabled(not_running);
     ui->toggle_shader_jit->setEnabled(not_running);
     ui->toggle_disk_shader_cache->setEnabled(hw_renderer_enabled && not_running);
+    ui->toggle_async_recording->setEnabled(hw_renderer_enabled && not_running);
     ui->physical_device_combo->setEnabled(not_running);
     SetPhysicalDeviceComboVisibility(ui->graphics_api_combo->currentIndex());
 

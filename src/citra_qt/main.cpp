@@ -1340,26 +1340,35 @@ void GMainWindow::OnGameListOpenFolder(u64 data_id, GameListOpenTarget target) {
         path = Service::AM::GetTitlePath(media_type, data_id) + "content/";
         break;
     }
-    case GameListOpenTarget::UPDATE_DATA:
+    case GameListOpenTarget::UPDATE_DATA: {
         open_target = "Update Data";
         path = Service::AM::GetTitlePath(Service::FS::MediaType::SDMC, data_id + 0xe00000000) +
                "content/";
         break;
-    case GameListOpenTarget::TEXTURE_DUMP:
+    }
+    case GameListOpenTarget::TEXTURE_DUMP: {
         open_target = "Dumped Textures";
         path = fmt::format("{}textures/{:016X}/",
                            FileUtil::GetUserPath(FileUtil::UserPath::DumpDir), data_id);
         break;
-    case GameListOpenTarget::TEXTURE_LOAD:
+    }
+    case GameListOpenTarget::TEXTURE_LOAD: {
         open_target = "Custom Textures";
         path = fmt::format("{}textures/{:016X}/",
                            FileUtil::GetUserPath(FileUtil::UserPath::LoadDir), data_id);
         break;
-    case GameListOpenTarget::MODS:
+    }
+    case GameListOpenTarget::MODS: {
         open_target = "Mods";
         path = fmt::format("{}mods/{:016X}/", FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
                            data_id);
         break;
+    }
+    case GameListOpenTarget::SHADER_CACHE: {
+        open_target = "Shader Cache";
+        path = FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir);
+        break;
+    }
     default:
         LOG_ERROR(Frontend, "Unexpected target {}", static_cast<int>(target));
         return;
