@@ -23,6 +23,14 @@ Swapchain::Swapchain(const Instance& instance, Scheduler& scheduler, RenderpassC
 
 Swapchain::~Swapchain() {
     Destroy();
+
+    vk::Device device = instance.GetDevice();
+    for (const vk::Semaphore semaphore : image_acquired) {
+        device.destroySemaphore(semaphore);
+    }
+    for (const vk::Semaphore semaphore : present_ready) {
+        device.destroySemaphore(semaphore);
+    }
 }
 
 void Swapchain::Create(u32 width, u32 height) {
@@ -102,22 +110,24 @@ void Swapchain::Present() {
         return;
     }
 
-    MICROPROFILE_SCOPE(Vulkan_Present);
-    const vk::PresentInfoKHR present_info = {.waitSemaphoreCount = 1,
-                                             .pWaitSemaphores = &present_ready[image_index],
-                                             .swapchainCount = 1,
-                                             .pSwapchains = &swapchain,
-                                             .pImageIndices = &image_index};
+    scheduler.Record([this, index = image_index](vk::CommandBuffer, vk::CommandBuffer) {
+        MICROPROFILE_SCOPE(Vulkan_Present);
+        const vk::PresentInfoKHR present_info = {.waitSemaphoreCount = 1,
+                                                 .pWaitSemaphores = &present_ready[index],
+                                                 .swapchainCount = 1,
+                                                 .pSwapchains = &swapchain,
+                                                 .pImageIndices = &index};
 
-    vk::Queue present_queue = instance.GetPresentQueue();
-    try {
-        [[maybe_unused]] vk::Result result = present_queue.presentKHR(present_info);
-    } catch (vk::OutOfDateKHRError err) {
-        is_outdated = true;
-    } catch (vk::SystemError err) {
-        LOG_CRITICAL(Render_Vulkan, "Swapchain presentation failed");
-        UNREACHABLE();
-    }
+        vk::Queue present_queue = instance.GetPresentQueue();
+        try {
+            [[maybe_unused]] vk::Result result = present_queue.presentKHR(present_info);
+        } catch (vk::OutOfDateKHRError err) {
+            is_outdated = true;
+        } catch (vk::SystemError err) {
+            LOG_CRITICAL(Render_Vulkan, "Swapchain presentation failed");
+            UNREACHABLE();
+        }
+    });
 
     frame_index = (frame_index + 1) % image_count;
 }
@@ -197,12 +207,6 @@ void Swapchain::Destroy() {
     vk::Device device = instance.GetDevice();
     if (swapchain) {
         device.destroySwapchainKHR(swapchain);
-    }
-    for (const vk::Semaphore semaphore : image_acquired) {
-        device.destroySemaphore(semaphore);
-    }
-    for (const vk::Semaphore semaphore : present_ready) {
-        device.destroySemaphore(semaphore);
     }
     for (const vk::ImageView view : image_views) {
         device.destroyImageView(view);

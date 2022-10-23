@@ -474,9 +474,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     });
 }
 
-MICROPROFILE_DEFINE(Vulkan_VS, "Vulkan", "Vertex Shader Setup", MP_RGB(192, 128, 128));
 bool RasterizerVulkan::SetupVertexShader() {
-    MICROPROFILE_SCOPE(Vulkan_VS);
     return pipeline_cache.UseProgrammableVertexShader(Pica::g_state.regs, Pica::g_state.vs,
                                                       pipeline_info.vertex_layout);
 }

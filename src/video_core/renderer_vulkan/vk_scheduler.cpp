@@ -69,8 +69,6 @@ void Scheduler::DispatchWork() {
 }
 
 void Scheduler::WorkerThread(std::stop_token stop_token) {
-    Common::SetCurrentThreadName("Vulkan Worker Thread");
-
     do {
         std::unique_ptr<CommandChunk> work;
         bool has_submit{false};
@@ -109,6 +107,7 @@ void Scheduler::AllocateWorkerCommandBuffers() {
     render_cmdbuf.begin(begin_info);
 }
 
+MICROPROFILE_DEFINE(Vulkan_Submit, "Vulkan", "Submit Exectution", MP_RGB(255, 192, 255));
 void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wait_semaphore) {
     renderer.FlushBuffers();
     const u64 signal_value = master_semaphore.NextTick();
@@ -116,6 +115,7 @@ void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wa
 
     Record([signal_semaphore, wait_semaphore, signal_value, this]
            (vk::CommandBuffer render_cmdbuf, vk::CommandBuffer upload_cmdbuf) {
+        MICROPROFILE_SCOPE(Vulkan_Submit);
         upload_cmdbuf.end();
         render_cmdbuf.end();
 

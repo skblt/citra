@@ -889,12 +889,22 @@ void RendererVulkan::SwapBuffers() {
     const auto& layout = render_window.GetFramebufferLayout();
     PrepareRendertarget();
 
-    // Create swapchain if needed
-    if (swapchain.NeedsRecreation()) {
+    const auto RecreateSwapchain = [&] {
+        scheduler.Finish();
+        const Layout::FramebufferLayout layout = render_window.GetFramebufferLayout();
         swapchain.Create(layout.width, layout.height);
+    };
+
+    if (swapchain.NeedsRecreation()) {
+        RecreateSwapchain();
     }
 
-    swapchain.AcquireNextImage();
+    do {
+        swapchain.AcquireNextImage();
+        if (swapchain.NeedsRecreation()) {
+            RecreateSwapchain();
+        }
+    } while (swapchain.NeedsRecreation());
 
     scheduler.Record([layout](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         const vk::Viewport viewport = {.x = 0.0f,
@@ -923,7 +933,6 @@ void RendererVulkan::SwapBuffers() {
     const vk::Semaphore image_acquired = swapchain.GetImageAcquiredSemaphore();
     const VkSemaphore present_ready = swapchain.GetPresentReadySemaphore();
     scheduler.Flush(present_ready, image_acquired);
-    scheduler.WaitWorker();
     swapchain.Present();
 
     m_current_frame++;

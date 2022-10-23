@@ -91,7 +91,7 @@ private:
     vk::BufferUsageFlagBits usage;
     std::array<vk::BufferView, MAX_BUFFER_VIEWS> views{};
     std::array<Bucket, BUCKET_COUNT> buckets;
-    u32 view_count = 0;
+    std::size_t view_count = 0;
     u32 total_size = 0;
     u32 bucket_size = 0;
     u32 bucket_index = 0;

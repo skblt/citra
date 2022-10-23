@@ -184,26 +184,29 @@ void PipelineCache::BindPipeline(const PipelineInfo& info) {
     desc_manager.BindDescriptorSets();
 }
 
+MICROPROFILE_DEFINE(Vulkan_VS, "Vulkan", "Vertex Shader Setup", MP_RGB(192, 128, 128));
 bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
                                                 Pica::Shader::ShaderSetup& setup,
                                                 const VertexLayout& layout) {
+    MICROPROFILE_SCOPE(Vulkan_VS);
+
     PicaVSConfig config{regs.vs, setup};
     for (u32 i = 0; i < layout.attribute_count; i++) {
         const auto& attrib = layout.attributes[i];
         config.state.attrib_types[attrib.location.Value()] = attrib.type.Value();
     }
 
-    scheduler.Record([this, config, setup = std::move(setup)](vk::CommandBuffer, vk::CommandBuffer) {
-        auto [handle, result] =
-            programmable_vertex_shaders.Get(config, setup, vk::ShaderStageFlagBits::eVertex,
-                                            instance.GetDevice(), ShaderOptimization::Debug);
-        if (!handle) {
-            LOG_ERROR(Render_Vulkan, "Failed to retrieve programmable vertex shader");
-            return;
-        }
+    auto [handle, result] =
+        programmable_vertex_shaders.Get(config, setup, vk::ShaderStageFlagBits::eVertex,
+                                        instance.GetDevice(), ShaderOptimization::Debug);
+    if (!handle) {
+        LOG_ERROR(Render_Vulkan, "Failed to retrieve programmable vertex shader");
+        return false;
+    }
 
+    scheduler.Record([this, handle = handle, hash = config.Hash()](vk::CommandBuffer, vk::CommandBuffer) {
         current_shaders[ProgramType::VS] = handle;
-        shader_hashes[ProgramType::VS] = config.Hash();
+        shader_hashes[ProgramType::VS] = hash;
     });
 
     return true;
