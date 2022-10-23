@@ -156,7 +156,7 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 
     // Initialize Logger
     Log::Filter log_filter;
-    log_filter.ParseFilterString(Settings::values.log_filter);
+    log_filter.ParseFilterString(Settings::values.log_filter.GetValue());
     Log::SetGlobalFilter(log_filter);
     Log::AddBackend(std::make_unique<Log::LogcatBackend>());
     FileUtil::CreateFullPath(FileUtil::GetUserPath(FileUtil::UserPath::LogDir));

@@ -238,7 +238,7 @@ static Core::System::ResultStatus RunCitra(const std::string& filepath) {
             }
         } else {
             // Ensure no audio bleeds out while game is paused
-            const float volume = Settings::values.volume;
+            const float volume = Settings::values.volume.GetValue();
             SCOPE_EXIT({ Settings::values.volume = volume; });
             Settings::values.volume = 0;
 
