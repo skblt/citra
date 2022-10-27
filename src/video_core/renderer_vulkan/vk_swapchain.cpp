@@ -19,6 +19,12 @@ Swapchain::Swapchain(const Instance& instance, Scheduler& scheduler, RenderpassC
     FindPresentFormat();
     SetPresentMode();
     renderpass_cache.CreatePresentRenderpass(surface_format.format);
+
+    vk::Device device = instance.GetDevice();
+    for (u32 i = 0; i < PREFERRED_IMAGE_COUNT; i++) {
+        image_acquired.push_back(device.createSemaphore({}));
+        present_ready.push_back(device.createSemaphore({}));
+    }
 }
 
 Swapchain::~Swapchain() {
@@ -60,13 +66,15 @@ void Swapchain::Create(u32 width, u32 height) {
         .pQueueFamilyIndices = queue_family_indices.data(),
         .preTransform = transform,
         .presentMode = present_mode,
-        .clipped = true};
+        .clipped = true,
+        .oldSwapchain = swapchain};
 
     vk::Device device = instance.GetDevice();
+    vk::SwapchainKHR new_swapchain = device.createSwapchainKHR(swapchain_info);
     device.waitIdle();
     Destroy();
 
-    swapchain = device.createSwapchainKHR(swapchain_info);
+    swapchain = new_swapchain;
     SetupImages();
 
     resource_ticks.clear();
@@ -75,14 +83,11 @@ void Swapchain::Create(u32 width, u32 height) {
 
 MICROPROFILE_DEFINE(Vulkan_Acquire, "Vulkan", "Swapchain Acquire", MP_RGB(185, 66, 245));
 void Swapchain::AcquireNextImage() {
-    if (NeedsRecreation()) [[unlikely]] {
-        return;
-    }
-
     MICROPROFILE_SCOPE(Vulkan_Acquire);
     vk::Device device = instance.GetDevice();
     vk::Result result = device.acquireNextImageKHR(swapchain, UINT64_MAX, image_acquired[frame_index],
                                                    VK_NULL_HANDLE, &image_index);
+
     switch (result) {
     case vk::Result::eSuccess:
         break;
@@ -103,10 +108,6 @@ void Swapchain::AcquireNextImage() {
 
 MICROPROFILE_DEFINE(Vulkan_Present, "Vulkan", "Swapchain Present", MP_RGB(66, 185, 245));
 void Swapchain::Present() {
-    if (NeedsRecreation()) [[unlikely]] {
-        return;
-    }
-
     scheduler.Record([this, index = image_index](vk::CommandBuffer, vk::CommandBuffer) {
         const vk::PresentInfoKHR present_info = {.waitSemaphoreCount = 1,
                                                  .pWaitSemaphores = &present_ready[index],
@@ -119,7 +120,7 @@ void Swapchain::Present() {
             [[maybe_unused]] vk::Result result = present_queue.presentKHR(present_info);
         } catch (vk::OutOfDateKHRError& err) {
             is_outdated = true;
-        } catch (vk::SystemError& err) {
+        } catch (...) {
             LOG_CRITICAL(Render_Vulkan, "Swapchain presentation failed");
             UNREACHABLE();
         }
@@ -187,9 +188,10 @@ void Swapchain::SetSurfaceProperties(u32 width, u32 height) {
     }
 
     // Select number of images in swap chain, we prefer one buffer in the background to work on
-    image_count = capabilities.minImageCount + 1;
+    image_count = PREFERRED_IMAGE_COUNT;
     if (capabilities.maxImageCount > 0) {
-        image_count = std::min(image_count, capabilities.maxImageCount);
+        image_count = std::clamp(PREFERRED_IMAGE_COUNT, capabilities.minImageCount + 1,
+                                 capabilities.maxImageCount);
     }
 
     // Prefer identity transform if possible
@@ -211,8 +213,6 @@ void Swapchain::Destroy() {
         device.destroyFramebuffer(framebuffer);
     }
 
-    frame_index = 0;
-    image_acquired.clear();
     framebuffers.clear();
     image_views.clear();
 }
@@ -222,9 +222,6 @@ void Swapchain::SetupImages() {
     images = device.getSwapchainImagesKHR(swapchain);
 
     for (const vk::Image image : images) {
-        image_acquired.push_back(device.createSemaphore({}));
-        present_ready.push_back(device.createSemaphore({}));
-
         const vk::ImageViewCreateInfo view_info = {
             .image = image,
             .viewType = vk::ImageViewType::e2D,
