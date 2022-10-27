@@ -90,6 +90,7 @@ void LogSettings() {
     log_setting("Core_UseCpuJit", values.use_cpu_jit);
     log_setting("Core_CPUClockPercentage", values.cpu_clock_percentage);
     log_setting("Renderer_GraphicsAPI", GetAPIName(values.graphics_api));
+    log_setting("Renderer_AsyncRecording", values.async_command_recording);
     log_setting("Renderer_UseHwRenderer", values.use_hw_renderer);
     log_setting("Renderer_UseHwShader", values.use_hw_shader);
     log_setting("Renderer_SeparableShader", values.separable_shader);
