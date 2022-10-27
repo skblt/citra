@@ -4,7 +4,7 @@
 #include <mutex>
 #include <utility>
 #include "common/microprofile.h"
-#include "common/thread.h"
+#include "core/settings.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
@@ -16,7 +16,7 @@ void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer render_cmdbuf, vk::Co
     while (command != nullptr) {
         auto next = command->GetNext();
         command->Execute(render_cmdbuf, upload_cmdbuf);
-        command->~Command();
+        std::destroy_at(command);
         command = next;
     }
     submit = false;
@@ -26,10 +26,13 @@ void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer render_cmdbuf, vk::Co
 }
 
 Scheduler::Scheduler(const Instance& instance, RendererVulkan& renderer)
-    : instance{instance}, renderer{renderer}, master_semaphore{instance}, command_pool{instance, master_semaphore} {
-    AcquireNewChunk();
+    : instance{instance}, renderer{renderer}, master_semaphore{instance}, command_pool{instance, master_semaphore},
+      use_worker_thread{Settings::values.async_command_recording} {
     AllocateWorkerCommandBuffers();
-    worker_thread = std::jthread([this](std::stop_token token) { WorkerThread(token); });
+    if (use_worker_thread) {
+        AcquireNewChunk();
+        worker_thread = std::jthread([this](std::stop_token token) { WorkerThread(token); });
+    }
 }
 
 Scheduler::~Scheduler() = default;
@@ -47,6 +50,10 @@ void Scheduler::Finish(vk::Semaphore signal, vk::Semaphore wait) {
 
 MICROPROFILE_DEFINE(Vulkan_WaitForWorker, "Vulkan", "Wait for worker", MP_RGB(255, 192, 192));
 void Scheduler::WaitWorker() {
+    if (!use_worker_thread) {
+        return;
+    }
+
     MICROPROFILE_SCOPE(Vulkan_WaitForWorker);
     DispatchWork();
 
@@ -162,8 +169,12 @@ void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wa
         }
     });
 
-    chunk->MarkSubmit();
-    DispatchWork();
+    if (!use_worker_thread) {
+        AllocateWorkerCommandBuffers();
+    } else {
+        chunk->MarkSubmit();
+        DispatchWork();
+    }
 }
 
 void Scheduler::AcquireNewChunk() {

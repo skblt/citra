@@ -485,6 +485,7 @@ void Config::ReadRendererValues() {
         ReadSetting(QStringLiteral("graphics_api"), static_cast<u32>(Settings::GraphicsAPI::OpenGL))
             .toUInt());
     Settings::values.physical_device = ReadSetting(QStringLiteral("physical_device"), 0).toUInt();
+    Settings::values.async_command_recording = ReadSetting(QStringLiteral("async_command_recording"), true).toBool();
     Settings::values.use_hw_renderer =
         ReadSetting(QStringLiteral("use_hw_renderer"), true).toBool();
     Settings::values.use_hw_shader = ReadSetting(QStringLiteral("use_hw_shader"), true).toBool();
@@ -1004,6 +1005,7 @@ void Config::SaveRendererValues() {
     WriteSetting(QStringLiteral("graphics_api"), static_cast<u32>(Settings::values.graphics_api),
                  static_cast<u32>(Settings::GraphicsAPI::OpenGL));
     WriteSetting(QStringLiteral("physical_device"), Settings::values.physical_device, 0);
+    WriteSetting(QStringLiteral("async_command_recording"), Settings::values.async_command_recording, true);
     WriteSetting(QStringLiteral("use_hw_renderer"), Settings::values.use_hw_renderer, true);
     WriteSetting(QStringLiteral("use_hw_shader"), Settings::values.use_hw_shader, true);
 #ifdef __APPLE__
