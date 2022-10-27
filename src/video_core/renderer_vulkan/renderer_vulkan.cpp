@@ -915,20 +915,18 @@ void RendererVulkan::SwapBuffers() {
     PrepareRendertarget();
 
     const auto RecreateSwapchain = [&] {
+        renderpass_cache.ExitRenderpass();
+        scheduler.Finish();
         const Layout::FramebufferLayout layout = render_window.GetFramebufferLayout();
         swapchain.Create(layout.width, layout.height);
     };
 
-    if (swapchain.NeedsRecreation()) {
-        RecreateSwapchain();
-    }
-
     do {
-        scheduler.WaitWorker();
-        swapchain.AcquireNextImage();
         if (swapchain.NeedsRecreation()) {
             RecreateSwapchain();
         }
+        scheduler.WaitWorker();
+        swapchain.AcquireNextImage();
     } while (swapchain.NeedsRecreation());
 
     scheduler.Record([layout](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {

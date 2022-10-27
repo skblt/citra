@@ -47,7 +47,7 @@ public:
 
     /// Returns the current framebuffe
     [[nodiscard]] vk::Framebuffer GetFramebuffer() const {
-        return framebuffers[frame_index];
+        return framebuffers[image_index];
     }
 
     /// Returns the swapchain format

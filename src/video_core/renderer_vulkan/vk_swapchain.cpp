@@ -83,14 +83,11 @@ void Swapchain::Create(u32 width, u32 height) {
 
 MICROPROFILE_DEFINE(Vulkan_Acquire, "Vulkan", "Swapchain Acquire", MP_RGB(185, 66, 245));
 void Swapchain::AcquireNextImage() {
-    if (NeedsRecreation()) [[unlikely]] {
-        return;
-    }
-
     MICROPROFILE_SCOPE(Vulkan_Acquire);
     vk::Device device = instance.GetDevice();
     vk::Result result = device.acquireNextImageKHR(swapchain, UINT64_MAX, image_acquired[frame_index],
                                                    VK_NULL_HANDLE, &image_index);
+
     switch (result) {
     case vk::Result::eSuccess:
         break;
@@ -111,10 +108,6 @@ void Swapchain::AcquireNextImage() {
 
 MICROPROFILE_DEFINE(Vulkan_Present, "Vulkan", "Swapchain Present", MP_RGB(66, 185, 245));
 void Swapchain::Present() {
-    if (NeedsRecreation()) [[unlikely]] {
-        return;
-    }
-
     scheduler.Record([this, index = image_index](vk::CommandBuffer, vk::CommandBuffer) {
         const vk::PresentInfoKHR present_info = {.waitSemaphoreCount = 1,
                                                  .pWaitSemaphores = &present_ready[index],
@@ -127,7 +120,7 @@ void Swapchain::Present() {
             [[maybe_unused]] vk::Result result = present_queue.presentKHR(present_info);
         } catch (vk::OutOfDateKHRError& err) {
             is_outdated = true;
-        } catch (vk::SystemError& err) {
+        } catch (...) {
             LOG_CRITICAL(Render_Vulkan, "Swapchain presentation failed");
             UNREACHABLE();
         }
@@ -220,7 +213,6 @@ void Swapchain::Destroy() {
         device.destroyFramebuffer(framebuffer);
     }
 
-    frame_index = 0;
     framebuffers.clear();
     image_views.clear();
 }
