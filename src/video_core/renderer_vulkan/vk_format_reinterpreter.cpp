@@ -6,6 +6,7 @@
 #include "video_core/renderer_vulkan/vk_descriptor_manager.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
 namespace Vulkan {
@@ -126,9 +127,6 @@ D24S8toRGBA8::~D24S8toRGBA8() {
 
 void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surface& dest,
                                VideoCore::Rect2D dst_rect) {
-    source.Transition(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 0, source.alloc.levels);
-    dest.Transition(vk::ImageLayout::eGeneral, 0, dest.alloc.levels);
-
     const std::array textures = {
         vk::DescriptorImageInfo{.imageView = source.GetDepthView(),
                                 .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal},
@@ -140,7 +138,69 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
     vk::DescriptorSet set = desc_manager.AllocateSet(descriptor_layout);
     device.updateDescriptorSetWithTemplate(set, update_template, textures[0]);
 
-    scheduler.Record([this, set, src_rect](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+    runtime.GetRenderpassCache().ExitRenderpass();
+    scheduler.Record([this, set, src_rect,
+                     src_image = source.alloc.image,
+                     dst_image = dest.alloc.image](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        const vk::ImageMemoryBarrier pre_barrier = {
+            .srcAccessMask = vk::AccessFlagBits::eShaderWrite |
+                             vk::AccessFlagBits::eDepthStencilAttachmentWrite |
+                             vk::AccessFlagBits::eDepthStencilAttachmentRead,
+            .dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
+            .oldLayout = vk::ImageLayout::eGeneral,
+            .newLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = src_image,
+            .subresourceRange{
+                .aspectMask = vk::ImageAspectFlagBits::eDepth |
+                              vk::ImageAspectFlagBits::eStencil,
+                .baseMipLevel = 0,
+                .levelCount = VK_REMAINING_MIP_LEVELS,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+        const std::array post_barriers = {
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eShaderRead,
+                .dstAccessMask = vk::AccessFlagBits::eShaderWrite |
+                                 vk::AccessFlagBits::eDepthStencilAttachmentWrite,
+                .oldLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+                .newLayout = vk::ImageLayout::eGeneral,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = src_image,
+                .subresourceRange{
+                    .aspectMask = vk::ImageAspectFlagBits::eDepth |
+                                  vk::ImageAspectFlagBits::eStencil,
+                    .baseMipLevel = 0,
+                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            },
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
+                .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+                .oldLayout = vk::ImageLayout::eGeneral,
+                .newLayout = vk::ImageLayout::eGeneral,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = dst_image,
+                .subresourceRange{
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            }
+        };
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::PipelineStageFlagBits::eComputeShader,
+                                      vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
+
         render_cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout, 0, set, {});
         render_cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
 
@@ -149,6 +209,10 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
                                      sizeof(Common::Vec2i), src_offset.AsArray());
 
         render_cmdbuf.dispatch(src_rect.GetWidth() / 8, src_rect.GetHeight() / 8, 1);
+
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
+                                      vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
     });
 }
 

@@ -10,6 +10,7 @@ namespace Vulkan {
 
 constexpr u32 MAX_DESCRIPTORS = 8;
 constexpr u32 MAX_DESCRIPTOR_SETS = 4;
+constexpr u32 MAX_DYNAMIC_OFFSETS = 2;
 
 union DescriptorData {
     vk::DescriptorImageInfo image_info;

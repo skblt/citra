@@ -19,6 +19,12 @@ Swapchain::Swapchain(const Instance& instance, Scheduler& scheduler, RenderpassC
     FindPresentFormat();
     SetPresentMode();
     renderpass_cache.CreatePresentRenderpass(surface_format.format);
+
+    vk::Device device = instance.GetDevice();
+    for (u32 i = 0; i < PREFERRED_IMAGE_COUNT; i++) {
+        image_acquired.push_back(device.createSemaphore({}));
+        present_ready.push_back(device.createSemaphore({}));
+    }
 }
 
 Swapchain::~Swapchain() {
@@ -60,13 +66,15 @@ void Swapchain::Create(u32 width, u32 height) {
         .pQueueFamilyIndices = queue_family_indices.data(),
         .preTransform = transform,
         .presentMode = present_mode,
-        .clipped = true};
+        .clipped = true,
+        .oldSwapchain = swapchain};
 
     vk::Device device = instance.GetDevice();
+    vk::SwapchainKHR new_swapchain = device.createSwapchainKHR(swapchain_info);
     device.waitIdle();
     Destroy();
 
-    swapchain = device.createSwapchainKHR(swapchain_info);
+    swapchain = new_swapchain;
     SetupImages();
 
     resource_ticks.clear();
@@ -187,9 +195,10 @@ void Swapchain::SetSurfaceProperties(u32 width, u32 height) {
     }
 
     // Select number of images in swap chain, we prefer one buffer in the background to work on
-    image_count = capabilities.minImageCount + 1;
+    image_count = PREFERRED_IMAGE_COUNT;
     if (capabilities.maxImageCount > 0) {
-        image_count = std::min(image_count, capabilities.maxImageCount);
+        image_count = std::clamp(PREFERRED_IMAGE_COUNT, capabilities.minImageCount + 1,
+                                 capabilities.maxImageCount);
     }
 
     // Prefer identity transform if possible
@@ -212,7 +221,6 @@ void Swapchain::Destroy() {
     }
 
     frame_index = 0;
-    image_acquired.clear();
     framebuffers.clear();
     image_views.clear();
 }
@@ -222,9 +230,6 @@ void Swapchain::SetupImages() {
     images = device.getSwapchainImagesKHR(swapchain);
 
     for (const vk::Image image : images) {
-        image_acquired.push_back(device.createSemaphore({}));
-        present_ready.push_back(device.createSemaphore({}));
-
         const vk::ImageViewCreateInfo view_info = {
             .image = image,
             .viewType = vk::ImageViewType::e2D,

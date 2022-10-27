@@ -12,7 +12,6 @@
 #include "video_core/renderer_vulkan/vk_blit_helper.h"
 #include "video_core/renderer_vulkan/vk_format_reinterpreter.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
-#include "video_core/renderer_vulkan/vk_layout_tracker.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 
 namespace Vulkan {
@@ -43,9 +42,6 @@ struct ImageAlloc {
     vk::ImageUsageFlags usage;
     vk::Format format;
     vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
-    u32 levels = 1;
-    u32 layers = 1;
-    LayoutTracker tracker;
 };
 
 struct HostTextureTag {
@@ -114,9 +110,6 @@ public:
     void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
                        std::span<std::byte> dest);
 
-    /// Transitions the mip level range of the surface to new_layout
-    void Transition(ImageAlloc& alloc, vk::ImageLayout new_layout, u32 level, u32 level_count);
-
     /// Fills the rectangle of the texture with the clear value provided
     bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
                       VideoCore::ClearValue value);
@@ -133,14 +126,23 @@ public:
     /// Flushes staging buffers
     void FlushBuffers();
 
+    /// Returns true if the provided pixel format needs convertion
+    [[nodiscard]] bool NeedsConvertion(VideoCore::PixelFormat format) const;
+
     /// Returns all source formats that support reinterpretation to the dest format
     [[nodiscard]] const ReinterpreterList& GetPossibleReinterpretations(
         VideoCore::PixelFormat dest_format) const;
 
-    /// Returns true if the provided pixel format needs convertion
-    [[nodiscard]] bool NeedsConvertion(VideoCore::PixelFormat format) const;
+    /// Returns a reference to the renderpass cache
+    [[nodiscard]] RenderpassCache& GetRenderpassCache() {
+        return renderpass_cache;
+    }
 
 private:
+    /// Clears a partial texture rect using a clear rectangle
+    void ClearTextureWithRenderpass(Surface& surface, const VideoCore::TextureClear& clear,
+                                    VideoCore::ClearValue value);
+
     /// Returns the current Vulkan instance
     const Instance& GetInstance() const {
         return instance;
@@ -175,9 +177,6 @@ public:
             TextureRuntime& runtime);
     ~Surface() override;
 
-    /// Transitions the mip level range of the surface to new_layout
-    void Transition(vk::ImageLayout new_layout, u32 level, u32 level_count);
-
     /// Uploads pixel data in staging to a rectangle region of the surface texture
     void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
 
@@ -187,28 +186,33 @@ public:
     /// Returns the bpp of the internal surface format
     u32 GetInternalBytesPerPixel() const;
 
+    /// Returns the image handle
+    [[nodiscard]] vk::Image GetImage() const {
+        return alloc.image;
+    }
+
     /// Returns an image view used to sample the surface from a shader
-    vk::ImageView GetImageView() const {
+    [[nodiscard]] vk::ImageView GetImageView() const {
         return alloc.image_view;
     }
 
     /// Returns an image view used to create a framebuffer
-    vk::ImageView GetFramebufferView() {
+    [[nodiscard]] vk::ImageView GetFramebufferView() {
         return alloc.base_view;
     }
 
     /// Returns the depth only image view of the surface, null otherwise
-    vk::ImageView GetDepthView() const {
+    [[nodiscard]] vk::ImageView GetDepthView() const {
         return alloc.depth_view;
     }
 
     /// Returns the stencil only image view of the surface, null otherwise
-    vk::ImageView GetStencilView() const {
+    [[nodiscard]] vk::ImageView GetStencilView() const {
         return alloc.stencil_view;
     }
 
     /// Returns the R32 image view used for atomic load/store
-    vk::ImageView GetStorageView() const {
+    [[nodiscard]] vk::ImageView GetStorageView() {
         if (!alloc.storage_view) {
             LOG_CRITICAL(Render_Vulkan,
                          "Surface with pixel format {} and internal format {} "
@@ -220,7 +224,7 @@ public:
     }
 
     /// Returns the internal format of the allocated texture
-    vk::Format GetInternalFormat() const {
+    [[nodiscard]] vk::Format GetInternalFormat() const {
         return alloc.format;
     }
 
@@ -235,11 +239,15 @@ private:
     void DepthStencilDownload(const VideoCore::BufferTextureCopy& download,
                               const StagingData& staging);
 
+    /// Unpacks D24S8 pixel data to separate depth/stencil aspects
+    static u32 UnpackDepthStencil(const StagingData& data, vk::Format dest);
+
 private:
     TextureRuntime& runtime;
     const Instance& instance;
     Scheduler& scheduler;
-
+    bool is_framebuffer = false;
+    bool is_storage = false;
 public:
     ImageAlloc alloc;
     FormatTraits traits;

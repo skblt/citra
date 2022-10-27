@@ -717,19 +717,19 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
         using_depth_fb = false;
     }
 
-    Common::Rectangle<u32> color_rect{};
+    Rect2D color_rect{};
     Surface color_surface = nullptr;
     if (using_color_fb)
         std::tie(color_surface, color_rect) =
             GetSurfaceSubRect(color_params, ScaleMatch::Exact, false);
 
-    Common::Rectangle<u32> depth_rect{};
+    Rect2D depth_rect{};
     Surface depth_surface = nullptr;
     if (using_depth_fb)
         std::tie(depth_surface, depth_rect) =
             GetSurfaceSubRect(depth_params, ScaleMatch::Exact, false);
 
-    Common::Rectangle<u32> fb_rect{};
+    Rect2D fb_rect{};
     if (color_surface != nullptr && depth_surface != nullptr) {
         fb_rect = color_rect;
         // Color and Depth surfaces must have the same dimensions and offsets

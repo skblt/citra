@@ -281,7 +281,6 @@ private:
     std::array<u64, 16> binding_offsets{};
     vk::Sampler default_sampler;
     Surface null_surface;
-    Surface null_storage_surface;
 
     struct {
         Pica::Shader::UniformData data{};

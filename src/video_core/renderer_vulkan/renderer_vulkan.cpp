@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include "vulkan/vulkan_core.h"
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtc/matrix_transform.hpp>
 #include "common/assert.h"
@@ -225,40 +226,15 @@ void RendererVulkan::PrepareRendertarget() {
         LCD::Read(color_fill.raw, lcd_color_addr);
 
         if (color_fill.is_enabled) {
-            TextureInfo& texture = screen_infos[i].texture;
-            runtime.Transition(texture.alloc, vk::ImageLayout::eTransferDstOptimal,
-                               0, texture.alloc.levels);
-
-            scheduler.Record([image = texture.alloc.image,
-                             color_fill](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-                const vk::ClearColorValue clear_color = {
-                    .float32 = std::array{color_fill.color_r / 255.0f, color_fill.color_g / 255.0f,
-                                          color_fill.color_b / 255.0f, 1.0f}};
-
-                const vk::ImageSubresourceRange range = {
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                };
-
-                render_cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, clear_color, range);
-            });
+            LoadColorToActiveVkTexture(color_fill.color_r, color_fill.color_g, color_fill.color_b, screen_infos[i].texture);
         } else {
             TextureInfo& texture = screen_infos[i].texture;
             if (texture.width != framebuffer.width || texture.height != framebuffer.height ||
                 texture.format != framebuffer.color_format) {
-
-                // Reallocate texture if the framebuffer size has changed.
-                // This is expected to not happen very often and hence should not be a
-                // performance problem.
                 ConfigureFramebufferTexture(texture, framebuffer);
             }
 
             LoadFBToScreenInfo(framebuffer, screen_infos[i], i == 1);
-
-            // Resize the texture in case the framebuffer size has changed
             texture.width = framebuffer.width;
             texture.height = framebuffer.height;
         }
@@ -274,7 +250,7 @@ void RendererVulkan::BeginRendering() {
         present_textures[i] = vk::DescriptorImageInfo{
             .imageView = info.display_texture ? info.display_texture->image_view
                                               : info.texture.alloc.image_view,
-            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+            .imageLayout = vk::ImageLayout::eGeneral};
     }
 
     present_textures[3] = vk::DescriptorImageInfo{.sampler = present_samplers[current_sampler]};
@@ -344,13 +320,13 @@ void RendererVulkan::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
 void RendererVulkan::CompileShaders() {
     vk::Device device = instance.GetDevice();
     present_vertex_shader =
-        Compile(vertex_shader, vk::ShaderStageFlagBits::eVertex, device, ShaderOptimization::Debug);
+        Compile(vertex_shader, vk::ShaderStageFlagBits::eVertex, device, ShaderOptimization::High);
     present_shaders[0] = Compile(fragment_shader, vk::ShaderStageFlagBits::eFragment, device,
-                                 ShaderOptimization::Debug);
+                                 ShaderOptimization::High);
     present_shaders[1] = Compile(fragment_shader_anaglyph, vk::ShaderStageFlagBits::eFragment,
-                                 device, ShaderOptimization::Debug);
+                                 device, ShaderOptimization::High);
     present_shaders[2] = Compile(fragment_shader_interlaced, vk::ShaderStageFlagBits::eFragment,
-                                 device, ShaderOptimization::Debug);
+                                 device, ShaderOptimization::High);
 
     auto properties = instance.GetPhysicalDevice().getProperties();
     for (std::size_t i = 0; i < present_samplers.size(); i++) {
@@ -549,6 +525,55 @@ void RendererVulkan::ConfigureFramebufferTexture(TextureInfo& texture,
 
         runtime.Recycle(tag, std::move(old_texture.alloc));
     }
+}
+
+void RendererVulkan::LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture) {
+    const vk::ClearColorValue clear_color = {
+        .float32 = std::array{color_r / 255.0f, color_g / 255.0f, color_b / 255.0f, 1.0f}};
+
+    renderpass_cache.ExitRenderpass();
+    scheduler.Record([image = texture.alloc.image,
+                     clear_color](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        const vk::ImageSubresourceRange range = {.aspectMask = vk::ImageAspectFlagBits::eColor,
+                                                 .baseMipLevel = 0,
+                                                 .levelCount = VK_REMAINING_MIP_LEVELS,
+                                                 .baseArrayLayer = 0,
+                                                 .layerCount = VK_REMAINING_ARRAY_LAYERS};
+
+        const vk::ImageMemoryBarrier pre_barrier = {
+            .srcAccessMask = vk::AccessFlagBits::eShaderRead |
+                             vk::AccessFlagBits::eTransferRead,
+            .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .oldLayout = vk::ImageLayout::eGeneral,
+            .newLayout = vk::ImageLayout::eTransferDstOptimal,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image,
+            .subresourceRange = range
+        };
+
+        const vk::ImageMemoryBarrier post_barrier = {
+            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = vk::AccessFlagBits::eShaderRead |
+                             vk::AccessFlagBits::eTransferRead,
+            .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+            .newLayout = vk::ImageLayout::eGeneral,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image,
+            .subresourceRange = range
+        };
+
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::PipelineStageFlagBits::eTransfer,
+                                      vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
+
+        render_cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, clear_color, range);
+
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                      vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
+    });
 }
 
 void RendererVulkan::ReloadSampler() {
@@ -890,7 +915,6 @@ void RendererVulkan::SwapBuffers() {
     PrepareRendertarget();
 
     const auto RecreateSwapchain = [&] {
-        scheduler.Finish();
         const Layout::FramebufferLayout layout = render_window.GetFramebufferLayout();
         swapchain.Create(layout.width, layout.height);
     };
@@ -921,20 +945,11 @@ void RendererVulkan::SwapBuffers() {
         render_cmdbuf.setScissor(0, scissor);
     });
 
-    renderpass_cache.ExitRenderpass();
-
-    for (auto& info : screen_infos) {
-        ImageAlloc* alloc = info.display_texture ? info.display_texture : &info.texture.alloc;
-        runtime.Transition(*alloc, vk::ImageLayout::eShaderReadOnlyOptimal, 0,
-                           alloc->levels);
-    }
-
     DrawScreens(layout, false);
 
     const vk::Semaphore image_acquired = swapchain.GetImageAcquiredSemaphore();
-    const VkSemaphore present_ready = swapchain.GetPresentReadySemaphore();
+    const vk::Semaphore present_ready = swapchain.GetPresentReadySemaphore();
     scheduler.Flush(present_ready, image_acquired);
-    //scheduler.WaitWorker();
     swapchain.Present();
 
     m_current_frame++;

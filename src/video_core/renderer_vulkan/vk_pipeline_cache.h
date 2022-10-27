@@ -165,7 +165,7 @@ public:
     void BindStorageImage(u32 binding, vk::ImageView image_view);
 
     /// Binds a buffer to the specified binding
-    void BindBuffer(u32 binding, vk::Buffer buffer, u32 offset, u32 size);
+    void BindUniformBuffer(u32 binding, vk::Buffer buffer, u32 offset, u32 size);
 
     /// Binds a buffer to the specified binding
     void BindTexelBuffer(u32 binding, vk::BufferView buffer_view);

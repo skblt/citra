@@ -70,7 +70,7 @@ PipelineCache::PipelineCache(const Instance& instance, Scheduler& scheduler,
                              RenderpassCache& renderpass_cache, DescriptorManager& desc_manager)
     : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache}, desc_manager{desc_manager} {
     trivial_vertex_shader = Compile(GenerateTrivialVertexShader(), vk::ShaderStageFlagBits::eVertex,
-                                    instance.GetDevice(), ShaderOptimization::Debug);
+                                    instance.GetDevice(), ShaderOptimization::High);
 }
 
 PipelineCache::~PipelineCache() {
@@ -198,7 +198,7 @@ bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
 
     auto [handle, result] =
         programmable_vertex_shaders.Get(config, setup, vk::ShaderStageFlagBits::eVertex,
-                                        instance.GetDevice(), ShaderOptimization::Debug);
+                                        instance.GetDevice(), ShaderOptimization::High);
     if (!handle) {
         LOG_ERROR(Render_Vulkan, "Failed to retrieve programmable vertex shader");
         return false;
@@ -250,7 +250,7 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
 
 void PipelineCache::BindTexture(u32 binding, vk::ImageView image_view) {
     const vk::DescriptorImageInfo image_info = {
-        .imageView = image_view, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+        .imageView = image_view, .imageLayout = vk::ImageLayout::eGeneral};
     desc_manager.SetBinding(1, binding, DescriptorData{image_info});
 }
 
@@ -260,7 +260,7 @@ void PipelineCache::BindStorageImage(u32 binding, vk::ImageView image_view) {
     desc_manager.SetBinding(3, binding, DescriptorData{image_info});
 }
 
-void PipelineCache::BindBuffer(u32 binding, vk::Buffer buffer, u32 offset, u32 size) {
+void PipelineCache::BindUniformBuffer(u32 binding, vk::Buffer buffer, u32 offset, u32 size) {
     const DescriptorData data = {
         .buffer_info = vk::DescriptorBufferInfo{.buffer = buffer, .offset = offset, .range = size}};
     desc_manager.SetBinding(0, binding, data);

@@ -15,6 +15,7 @@ class Scheduler;
 class RenderpassCache;
 
 class Swapchain {
+    static constexpr u32 PREFERRED_IMAGE_COUNT = 8;
 public:
     Swapchain(const Instance& instance, Scheduler& scheduler,
               RenderpassCache& renderpass_cache);

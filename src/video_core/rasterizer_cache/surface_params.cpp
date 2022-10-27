@@ -3,7 +3,6 @@
 // Refer to the license.txt file included.
 
 #include "common/alignment.h"
-#include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/rasterizer_cache/surface_params.h"
 
 namespace VideoCore {

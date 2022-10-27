@@ -107,8 +107,8 @@ constexpr VideoCore::SurfaceParams NULL_PARAMS = {.width = 1,
 
 constexpr vk::ImageUsageFlags NULL_USAGE = vk::ImageUsageFlagBits::eSampled |
                                            vk::ImageUsageFlagBits::eTransferSrc |
-                                           vk::ImageUsageFlagBits::eTransferDst;
-constexpr vk::ImageUsageFlags NULL_STORAGE_USAGE = NULL_USAGE | vk::ImageUsageFlagBits::eStorage;
+                                           vk::ImageUsageFlagBits::eTransferDst|
+                                           vk::ImageUsageFlagBits::eStorage;
 
 RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instance& instance,
                                    Scheduler& scheduler, DescriptorManager& desc_manager,
@@ -117,7 +117,6 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
       renderpass_cache{renderpass_cache}, desc_manager{desc_manager}, res_cache{*this, runtime},
       pipeline_cache{instance, scheduler, renderpass_cache, desc_manager},
       null_surface{NULL_PARAMS, vk::Format::eR8G8B8A8Unorm, NULL_USAGE, runtime},
-      null_storage_surface{NULL_PARAMS, vk::Format::eR32Uint, NULL_STORAGE_USAGE, runtime},
       vertex_buffer{
           instance, scheduler, VERTEX_BUFFER_SIZE, vk::BufferUsageFlagBits::eVertexBuffer, {}},
       uniform_buffer{
@@ -128,9 +127,6 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
                      vk::BufferUsageFlagBits::eUniformTexelBuffer, TEXTURE_BUFFER_FORMATS},
       texture_lf_buffer{instance, scheduler, TEXTURE_BUFFER_SIZE,
                         vk::BufferUsageFlagBits::eUniformTexelBuffer, TEXTURE_BUFFER_LF_FORMATS} {
-
-    null_surface.Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0, 1);
-    null_storage_surface.Transition(vk::ImageLayout::eGeneral, 0, 1);
 
     uniform_block_data.lighting_lut_dirty.fill(true);
 
@@ -152,12 +148,8 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
 
     default_sampler = CreateSampler(default_sampler_info);
 
-    // Since we don't have access to VK_EXT_descriptor_indexing we need to intiallize
-    // all descriptor sets even the ones we don't use. Use default_texture for this
-    const u32 vs_uniform_size = sizeof(Pica::Shader::VSUniformData);
-    const u32 fs_uniform_size = sizeof(Pica::Shader::UniformData);
-    pipeline_cache.BindBuffer(0, uniform_buffer.GetHandle(), 0, vs_uniform_size);
-    pipeline_cache.BindBuffer(1, uniform_buffer.GetHandle(), vs_uniform_size, fs_uniform_size);
+    pipeline_cache.BindUniformBuffer(0, uniform_buffer.GetHandle(), 0, uniform_size_aligned_vs);
+    pipeline_cache.BindUniformBuffer(1, uniform_buffer.GetHandle(), uniform_size_aligned_vs, uniform_size_aligned_fs);
     pipeline_cache.BindTexelBuffer(2, texture_lf_buffer.GetView());
     pipeline_cache.BindTexelBuffer(3, texture_buffer.GetView(0));
     pipeline_cache.BindTexelBuffer(4, texture_buffer.GetView(1));
@@ -168,7 +160,7 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
     }
 
     for (u32 i = 0; i < 7; i++) {
-        pipeline_cache.BindStorageImage(i, null_storage_surface.GetImageView());
+        pipeline_cache.BindStorageImage(i, null_surface.GetImageView());
     }
 
     // Explicitly call the derived version to avoid warnings about calling virtual
@@ -667,7 +659,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         if (surface) {
             pipeline_cache.BindStorageImage(binding, surface->GetImageView());
         } else {
-            pipeline_cache.BindStorageImage(binding, null_storage_surface.GetImageView());
+            pipeline_cache.BindStorageImage(binding, null_surface.GetStorageView());
         }
     };
 
@@ -709,10 +701,9 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                 case TextureType::Shadow2D: {
                     auto surface = res_cache.GetTextureSurface(texture);
                     if (surface) {
-                        surface->Transition(vk::ImageLayout::eGeneral, 0, surface->alloc.levels);
                         pipeline_cache.BindStorageImage(0, surface->GetStorageView());
                     } else {
-                        pipeline_cache.BindStorageImage(0, null_storage_surface.GetImageView());
+                        pipeline_cache.BindStorageImage(0, null_surface.GetStorageView());
                     }
                     continue;
                 }
@@ -742,8 +733,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
                     auto surface = res_cache.GetTextureCube(config);
                     if (surface) {
-                        surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
-                                            surface->alloc.levels);
                         pipeline_cache.BindTexture(3, surface->GetImageView());
                     } else {
                         pipeline_cache.BindTexture(3, null_surface.GetImageView());
@@ -774,12 +763,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                         .extent = VideoCore::Extent{temp.GetScaledWidth(), temp.GetScaledHeight()}};
 
                     runtime.CopyTextures(*color_surface, temp, copy);
-                    temp.Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0, temp.alloc.levels);
-
                     pipeline_cache.BindTexture(texture_index, temp.GetImageView());
                 } else {
-                    surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
-                                        surface->alloc.levels);
                     pipeline_cache.BindTexture(texture_index, surface->GetImageView());
                 }
 
@@ -852,14 +837,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     auto [it, new_framebuffer] = framebuffers.try_emplace(framebuffer_info, vk::Framebuffer{});
     if (new_framebuffer) {
         it->second = CreateFramebuffer(framebuffer_info);
-    }
-
-    if (color_surface) {
-        color_surface->Transition(vk::ImageLayout::eColorAttachmentOptimal, 0, 1);
-    }
-
-    if (depth_surface) {
-        depth_surface->Transition(vk::ImageLayout::eDepthStencilAttachmentOptimal, 0, 1);
     }
 
     const RenderpassState renderpass_info = {
@@ -2158,7 +2135,7 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
         vs_uniforms.uniforms.SetFromRegs(Pica::g_state.regs.vs, Pica::g_state.vs);
         std::memcpy(uniforms + used_bytes, &vs_uniforms, sizeof(vs_uniforms));
 
-        pipeline_cache.BindBuffer(0, uniform_buffer.GetHandle(), offset + used_bytes,
+        pipeline_cache.BindUniformBuffer(0, uniform_buffer.GetHandle(), offset + used_bytes,
                                   sizeof(vs_uniforms));
         used_bytes += static_cast<u32>(uniform_size_aligned_vs);
     }
@@ -2167,7 +2144,7 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
         std::memcpy(uniforms + used_bytes, &uniform_block_data.data,
                     sizeof(Pica::Shader::UniformData));
 
-        pipeline_cache.BindBuffer(1, uniform_buffer.GetHandle(), offset + used_bytes,
+        pipeline_cache.BindUniformBuffer(1, uniform_buffer.GetHandle(), offset + used_bytes,
                                   sizeof(uniform_block_data.data));
         uniform_block_data.dirty = false;
         used_bytes += static_cast<u32>(uniform_size_aligned_fs);

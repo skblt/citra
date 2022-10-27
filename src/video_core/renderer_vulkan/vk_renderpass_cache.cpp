@@ -63,10 +63,10 @@ RenderpassCache::RenderpassCache(const Instance& instance, Scheduler& scheduler)
 
             cached_renderpasses[color][depth][0] = CreateRenderPass(
                 color_format, depth_format, vk::AttachmentLoadOp::eLoad,
-                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eColorAttachmentOptimal);
+                vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
             cached_renderpasses[color][depth][1] = CreateRenderPass(
                 color_format, depth_format, vk::AttachmentLoadOp::eClear,
-                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eColorAttachmentOptimal);
+                vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
         }
     }
 }
@@ -173,7 +173,7 @@ vk::RenderPass RenderpassCache::CreateRenderPass(vk::Format color, vk::Format de
                                       .finalLayout = final_layout};
 
         color_attachment_ref = vk::AttachmentReference{
-            .attachment = attachment_count++, .layout = vk::ImageLayout::eColorAttachmentOptimal};
+            .attachment = attachment_count++, .layout = vk::ImageLayout::eGeneral};
 
         use_color = true;
     }
@@ -185,12 +185,12 @@ vk::RenderPass RenderpassCache::CreateRenderPass(vk::Format color, vk::Format de
             .storeOp = vk::AttachmentStoreOp::eStore,
             .stencilLoadOp = load_op,
             .stencilStoreOp = vk::AttachmentStoreOp::eStore,
-            .initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            .finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal};
+            .initialLayout = vk::ImageLayout::eGeneral,
+            .finalLayout = vk::ImageLayout::eGeneral};
 
         depth_attachment_ref =
             vk::AttachmentReference{.attachment = attachment_count++,
-                                    .layout = vk::ImageLayout::eDepthStencilAttachmentOptimal};
+                                    .layout = vk::ImageLayout::eGeneral};
 
         use_depth = true;
     }

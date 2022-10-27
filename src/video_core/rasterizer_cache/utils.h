@@ -33,7 +33,7 @@ union ClearValue {
     Common::Vec4f color;
     struct {
         float depth;
-        u8 stencil;
+        u32 stencil;
     };
 };
 

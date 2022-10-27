@@ -16,7 +16,8 @@ struct Bindings {
 
 constexpr static std::array RASTERIZER_SETS = {
     Bindings{// Utility set
-             .bindings = {vk::DescriptorType::eUniformBuffer, vk::DescriptorType::eUniformBuffer,
+             .bindings = {vk::DescriptorType::eUniformBuffer,
+                          vk::DescriptorType::eUniformBuffer,
                           vk::DescriptorType::eUniformTexelBuffer,
                           vk::DescriptorType::eUniformTexelBuffer,
                           vk::DescriptorType::eUniformTexelBuffer},
