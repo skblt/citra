@@ -52,6 +52,11 @@ public:
     /// Records the command to the current chunk.
     template <typename T>
     void Record(T&& command) {
+        if (!use_worker_thread) {
+            command(render_cmdbuf, upload_cmdbuf);
+            return;
+        }
+
         if (chunk->Record(command)) {
             return;
         }
@@ -144,7 +149,7 @@ private:
                 return false;
             }
             Command* const current_last = last;
-            last = new (data.data() + command_offset) FuncType(std::move(command));
+            last = std::construct_at(reinterpret_cast<FuncType*>(data.data() + command_offset), std::move(command));
 
             if (current_last) {
                 current_last->SetNext(last);
@@ -202,7 +207,7 @@ private:
     std::condition_variable_any work_cv;
     std::condition_variable wait_cv;
     std::jthread worker_thread;
-    std::jthread prsent_thread;
+    bool use_worker_thread;
 };
 
 } // namespace Vulkan

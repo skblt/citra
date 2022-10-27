@@ -172,6 +172,16 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
+       <widget class="QCheckBox" name="toggle_async_recording">
+        <property name="toolTip">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Offloads command buffer recording and fragment shader generation to a worker thread. Can improve performance especially on weaker systems. Disable if you notice better performance. If unsure leave it enabled,&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        </property>
+        <property name="text">
+         <string>Async Command Recording</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QCheckBox" name="toggle_disk_shader_cache">
         <property name="toolTip">
          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Reduce stuttering by storing and loading generated shaders to disk.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
