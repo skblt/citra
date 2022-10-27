@@ -31,7 +31,7 @@ struct FormatTraits {
 /// The global Vulkan instance
 class Instance {
 public:
-    Instance(); ///< Portable constructor used to query physical devices
+    Instance(bool validation = false, bool dump_command_buffers = false);
     Instance(Frontend::EmuWindow& window, u32 physical_device_index);
     ~Instance();
 

@@ -40,7 +40,7 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
     }
 }
 
-Instance::Instance() {
+Instance::Instance(bool validation, bool dump_command_buffers) {
     // Fetch instance independant function pointers
     auto vkGetInstanceProcAddr =
         dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
@@ -52,7 +52,19 @@ Instance::Instance() {
                                                   .engineVersion = VK_MAKE_VERSION(1, 0, 0),
                                                   .apiVersion = VK_API_VERSION_1_0};
 
-    const vk::InstanceCreateInfo instance_info = {.pApplicationInfo = &application_info};
+    u32 layer_count = 0;
+    std::array<const char*, 2> layers;
+
+    if (validation) {
+        layers[layer_count++] = "VK_LAYER_KHRONOS_validation";
+    }
+    if (dump_command_buffers) {
+        layers[layer_count++] = "VK_LAYER_LUNARG_api_dump";
+    }
+
+    const vk::InstanceCreateInfo instance_info = {.pApplicationInfo = &application_info,
+                                                  .enabledLayerCount = layer_count,
+                                                  .ppEnabledLayerNames = layers.data()};
 
     instance = vk::createInstance(instance_info);
 
