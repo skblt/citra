@@ -20,8 +20,71 @@ static Common::Vec3f LightColor(const Pica::LightingRegs::LightColor& color) {
     return Common::Vec3u{color.r, color.g, color.b} / 255.0f;
 }
 
+RasterizerAccelerated::HardwareVertex::HardwareVertex(const Pica::Shader::OutputVertex& v,
+                                                      bool flip_quaternion) {
+    position[0] = v.pos.x.ToFloat32();
+    position[1] = v.pos.y.ToFloat32();
+    position[2] = v.pos.z.ToFloat32();
+    position[3] = v.pos.w.ToFloat32();
+    color[0] = v.color.x.ToFloat32();
+    color[1] = v.color.y.ToFloat32();
+    color[2] = v.color.z.ToFloat32();
+    color[3] = v.color.w.ToFloat32();
+    tex_coord0[0] = v.tc0.x.ToFloat32();
+    tex_coord0[1] = v.tc0.y.ToFloat32();
+    tex_coord1[0] = v.tc1.x.ToFloat32();
+    tex_coord1[1] = v.tc1.y.ToFloat32();
+    tex_coord2[0] = v.tc2.x.ToFloat32();
+    tex_coord2[1] = v.tc2.y.ToFloat32();
+    tex_coord0_w = v.tc0_w.ToFloat32();
+    normquat[0] = v.quat.x.ToFloat32();
+    normquat[1] = v.quat.y.ToFloat32();
+    normquat[2] = v.quat.z.ToFloat32();
+    normquat[3] = v.quat.w.ToFloat32();
+    view[0] = v.view.x.ToFloat32();
+    view[1] = v.view.y.ToFloat32();
+    view[2] = v.view.z.ToFloat32();
+
+    if (flip_quaternion) {
+        normquat = -normquat;
+    }
+}
+
 RasterizerAccelerated::RasterizerAccelerated() {
     uniform_block_data.lighting_lut_dirty.fill(true);
+}
+
+/**
+ * This is a helper function to resolve an issue when interpolating opposite quaternions. See below
+ * for a detailed description of this issue (yuriks):
+ *
+ * For any rotation, there are two quaternions Q, and -Q, that represent the same rotation. If you
+ * interpolate two quaternions that are opposite, instead of going from one rotation to another
+ * using the shortest path, you'll go around the longest path. You can test if two quaternions are
+ * opposite by checking if Dot(Q1, Q2) < 0. In that case, you can flip either of them, therefore
+ * making Dot(Q1, -Q2) positive.
+ *
+ * This solution corrects this issue per-vertex before passing the quaternions to OpenGL. This is
+ * correct for most cases but can still rotate around the long way sometimes. An implementation
+ * which did `lerp(lerp(Q1, Q2), Q3)` (with proper weighting), applying the dot product check
+ * between each step would work for those cases at the cost of being more complex to implement.
+ *
+ * Fortunately however, the 3DS hardware happens to also use this exact same logic to work around
+ * these issues, making this basic implementation actually more accurate to the hardware.
+ */
+static bool AreQuaternionsOpposite(Common::Vec4<Pica::float24> qa, Common::Vec4<Pica::float24> qb) {
+    Common::Vec4f a{qa.x.ToFloat32(), qa.y.ToFloat32(), qa.z.ToFloat32(), qa.w.ToFloat32()};
+    Common::Vec4f b{qb.x.ToFloat32(), qb.y.ToFloat32(), qb.z.ToFloat32(), qb.w.ToFloat32()};
+
+    return (Common::Dot(a, b) < 0.f);
+}
+
+void RasterizerAccelerated::AddTriangle(const Pica::Shader::OutputVertex& v0,
+                                        const Pica::Shader::OutputVertex& v1,
+                                        const Pica::Shader::OutputVertex& v2) {
+    vertex_batch.emplace_back(v0, false);
+    vertex_batch.emplace_back(v1, AreQuaternionsOpposite(v0.quat, v1.quat));
+    vertex_batch.emplace_back(v2, AreQuaternionsOpposite(v0.quat, v2.quat));
 }
 
 void RasterizerAccelerated::UpdatePagesCachedCount(PAddr addr, u32 size, int delta) {
@@ -114,6 +177,44 @@ void RasterizerAccelerated::ClearAll(bool flush) {
     }
 
     cached_pages = {};
+}
+
+RasterizerAccelerated::VertexArrayInfo RasterizerAccelerated::AnalyzeVertexArray(bool is_indexed) {
+    const auto& regs = Pica::g_state.regs;
+    const auto& vertex_attributes = regs.pipeline.vertex_attributes;
+
+    u32 vertex_min;
+    u32 vertex_max;
+    if (is_indexed) {
+        const auto& index_info = regs.pipeline.index_array;
+        const PAddr address = vertex_attributes.GetPhysicalBaseAddress() + index_info.offset;
+        const u8* index_address_8 = VideoCore::g_memory->GetPhysicalPointer(address);
+        const u16* index_address_16 = reinterpret_cast<const u16*>(index_address_8);
+        const bool index_u16 = index_info.format != 0;
+
+        vertex_min = 0xFFFF;
+        vertex_max = 0;
+        const u32 size = regs.pipeline.num_vertices * (index_u16 ? 2 : 1);
+        FlushRegion(address, size);
+        for (u32 index = 0; index < regs.pipeline.num_vertices; ++index) {
+            const u32 vertex = index_u16 ? index_address_16[index] : index_address_8[index];
+            vertex_min = std::min(vertex_min, vertex);
+            vertex_max = std::max(vertex_max, vertex);
+        }
+    } else {
+        vertex_min = regs.pipeline.vertex_offset;
+        vertex_max = regs.pipeline.vertex_offset + regs.pipeline.num_vertices - 1;
+    }
+
+    const u32 vertex_num = vertex_max - vertex_min + 1;
+    u32 vs_input_size = 0;
+    for (const auto& loader : vertex_attributes.attribute_loaders) {
+        if (loader.component_count != 0) {
+            vs_input_size += loader.byte_count * vertex_num;
+        }
+    }
+
+    return {vertex_min, vertex_max, vs_input_size};
 }
 
 void RasterizerAccelerated::SyncDepthScale() {

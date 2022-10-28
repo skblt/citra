@@ -5,13 +5,11 @@
 #pragma once
 
 #include "core/hw/gpu.h"
-#include "video_core/pica_types.h"
 #include "video_core/rasterizer_accelerated.h"
 #include "video_core/renderer_opengl/gl_shader_manager.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_stream_buffer.h"
 #include "video_core/renderer_opengl/gl_texture_runtime.h"
-#include "video_core/shader/shader.h"
 
 namespace Frontend {
 class EmuWindow;
@@ -32,8 +30,6 @@ public:
     void LoadDiskResources(const std::atomic_bool& stop_loading,
                            const VideoCore::DiskResourceLoadCallback& callback) override;
 
-    void AddTriangle(const Pica::Shader::OutputVertex& v0, const Pica::Shader::OutputVertex& v1,
-                     const Pica::Shader::OutputVertex& v2) override;
     void DrawTriangles() override;
     void NotifyPicaRegisterChanged(u32 id) override;
     void FlushAll() override;
@@ -75,48 +71,6 @@ private:
 
         // TODO(wwylele): remove this once mipmap for cube is implemented
         bool supress_mipmap_for_cube = false;
-    };
-
-    /// Structure that the hardware rendered vertices are composed of
-    struct HardwareVertex {
-        HardwareVertex() = default;
-        HardwareVertex(const Pica::Shader::OutputVertex& v, bool flip_quaternion) {
-            position[0] = v.pos.x.ToFloat32();
-            position[1] = v.pos.y.ToFloat32();
-            position[2] = v.pos.z.ToFloat32();
-            position[3] = v.pos.w.ToFloat32();
-            color[0] = v.color.x.ToFloat32();
-            color[1] = v.color.y.ToFloat32();
-            color[2] = v.color.z.ToFloat32();
-            color[3] = v.color.w.ToFloat32();
-            tex_coord0[0] = v.tc0.x.ToFloat32();
-            tex_coord0[1] = v.tc0.y.ToFloat32();
-            tex_coord1[0] = v.tc1.x.ToFloat32();
-            tex_coord1[1] = v.tc1.y.ToFloat32();
-            tex_coord2[0] = v.tc2.x.ToFloat32();
-            tex_coord2[1] = v.tc2.y.ToFloat32();
-            tex_coord0_w = v.tc0_w.ToFloat32();
-            normquat[0] = v.quat.x.ToFloat32();
-            normquat[1] = v.quat.y.ToFloat32();
-            normquat[2] = v.quat.z.ToFloat32();
-            normquat[3] = v.quat.w.ToFloat32();
-            view[0] = v.view.x.ToFloat32();
-            view[1] = v.view.y.ToFloat32();
-            view[2] = v.view.z.ToFloat32();
-
-            if (flip_quaternion) {
-                normquat = -normquat;
-            }
-        }
-
-        Common::Vec4f position;
-        Common::Vec4f color;
-        Common::Vec2f tex_coord0;
-        Common::Vec2f tex_coord1;
-        Common::Vec2f tex_coord2;
-        float tex_coord0_w;
-        Common::Vec4f normquat;
-        Common::Vec3f view;
     };
 
     /// Syncs the clip enabled status to match the PICA register
@@ -170,15 +124,6 @@ private:
 
     /// Internal implementation for AccelerateDrawBatch
     bool AccelerateDrawBatchInternal(bool is_indexed);
-
-    struct VertexArrayInfo {
-        u32 vs_input_index_min;
-        u32 vs_input_index_max;
-        u32 vs_input_size;
-    };
-
-    /// Retrieve the range and the size of the input vertex
-    VertexArrayInfo AnalyzeVertexArray(bool is_indexed);
 
     /// Setup vertex array for AccelerateDrawBatch
     void SetupVertexArray(u8* array_ptr, GLintptr buffer_offset, GLuint vs_input_index_min,
