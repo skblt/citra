@@ -170,7 +170,8 @@ void RasterizerVulkan::SyncFixedState() {
 
 void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min,
                                         u32 vs_input_index_max) {
-    auto [array_ptr, array_offset, invalidate] = vertex_buffer.Map(vs_input_size, 4);
+    const u32 vertex_size = vs_input_size + sizeof(Common::Vec4f) * 16;
+    auto [array_ptr, array_offset, invalidate] = vertex_buffer.Map(vertex_size, 4);
 
     // The Nintendo 3DS has 12 attribute loaders which are used to tell the GPU
     // how to interpret vertex data. The program firsts sets GPUREG_ATTR_BUF_BASE to the base
@@ -185,7 +186,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     std::array<bool, 16> enable_attributes{};
     VertexLayout layout{};
 
-    u32 buffer_offset = array_offset;
+    u32 buffer_offset = 0;
     for (const auto& loader : vertex_attributes.attribute_loaders) {
         if (loader.component_count == 0 || loader.byte_count == 0) {
             continue;
@@ -225,10 +226,10 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
         const PAddr data_addr =
             base_address + loader.data_offset + (vs_input_index_min * loader.byte_count);
         const u32 vertex_num = vs_input_index_max - vs_input_index_min + 1;
-        u32 data_size = loader.byte_count * vertex_num;
+        const u32 data_size = loader.byte_count * vertex_num;
 
-        res_cache.FlushRegion(data_addr, data_size, nullptr);
-        std::memcpy(array_ptr, VideoCore::g_memory->GetPhysicalPointer(data_addr), data_size);
+        res_cache.FlushRegion(data_addr, data_size);
+        std::memcpy(array_ptr + buffer_offset, VideoCore::g_memory->GetPhysicalPointer(data_addr), data_size);
 
         // Create the binding associated with this loader
         VertexBinding& binding = layout.bindings[layout.binding_count];
@@ -237,20 +238,19 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
         binding.stride.Assign(loader.byte_count);
 
         // Keep track of the binding offsets so we can bind the vertex buffer later
-        binding_offsets[layout.binding_count++] = buffer_offset;
-        data_size = Common::AlignUp(data_size, 16);
-        array_ptr += data_size;
-        buffer_offset += data_size;
+        binding_offsets[layout.binding_count++] = array_offset + buffer_offset;
+        buffer_offset += Common::AlignUp(data_size, 16);
     }
+
+    array_ptr += buffer_offset;
 
     // Reserve the last binding for fixed and default attributes
     // Place the default attrib at offset zero for easy access
-    constexpr Common::Vec4f default_attrib = Common::MakeVec(0.f, 0.f, 0.f, 1.f);
-    u32 offset = sizeof(Common::Vec4f);
+    const Common::Vec4f default_attrib = Common::MakeVec(0.f, 0.f, 0.f, 1.f);
     std::memcpy(array_ptr, default_attrib.AsArray(), sizeof(Common::Vec4f));
-    array_ptr += sizeof(Common::Vec4f);
 
     // Find all fixed attributes and assign them to the last binding
+    u32 offset = sizeof(Common::Vec4f);
     for (std::size_t i = 0; i < 16; i++) {
         if (vertex_attributes.IsDefaultAttribute(i)) {
             const u32 reg = regs.vs.GetRegisterForAttribute(i);
@@ -260,7 +260,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
                                          attr.w.ToFloat32()};
 
                 const u32 data_size = sizeof(float) * static_cast<u32>(data.size());
-                std::memcpy(array_ptr, data.data(), data_size);
+                std::memcpy(array_ptr + offset, data.data(), data_size);
 
                 VertexAttribute& attribute = layout.attributes[layout.attribute_count++];
                 attribute.binding.Assign(layout.binding_count);
@@ -270,19 +270,15 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
                 attribute.size.Assign(4);
 
                 offset += data_size;
-                array_ptr += data_size;
                 enable_attributes[reg] = true;
             }
         }
     }
 
     // Loop one more time to find unused attributes and assign them to the default one
-    // This needs to happen because i = 2 might be assigned to location = 3 so the loop
-    // above would skip setting it
+    // If the attribute is just disabled, shove the default attribute to avoid
+    // errors if the shader ever decides to use it.
     for (u32 i = 0; i < 16; i++) {
-        // If the attribute is just disabled, shove the default attribute to avoid
-        // errors if the shader ever decides to use it. The pipeline cache can discard
-        // this if needed since it has access to the usage mask from the code generator
         if (!enable_attributes[i]) {
             VertexAttribute& attribute = layout.attributes[layout.attribute_count++];
             attribute.binding.Assign(layout.binding_count);
@@ -298,11 +294,12 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     binding.binding.Assign(layout.binding_count);
     binding.fixed.Assign(1);
     binding.stride.Assign(offset);
-    binding_offsets[layout.binding_count++] = buffer_offset;
-    buffer_offset += offset;
 
+    binding_offsets[layout.binding_count++] = array_offset + buffer_offset;
+    vertex_buffer.Commit(buffer_offset + offset);
+
+    // Update the pipeline vertex layout
     pipeline_info.vertex_layout = layout;
-    vertex_buffer.Commit(buffer_offset - array_offset);
 
     scheduler.Record([this, layout, offsets = binding_offsets](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         std::array<vk::Buffer, 16> buffers;
@@ -323,7 +320,7 @@ bool RasterizerVulkan::SetupGeometryShader() {
     const auto& regs = Pica::g_state.regs;
 
     if (regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
-        LOG_ERROR(Render_OpenGL, "Accelerate draw doesn't support geometry shader");
+        LOG_ERROR(Render_Vulkan, "Accelerate draw doesn't support geometry shader");
         return false;
     }
 

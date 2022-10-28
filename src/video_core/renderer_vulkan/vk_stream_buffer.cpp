@@ -151,7 +151,8 @@ void StreamBuffer::Flush() {
     Bucket& bucket = buckets[bucket_index];
     const u32 flush_start = bucket_index * bucket_size + bucket.flush_cursor;
     const u32 flush_size = bucket.cursor - bucket.flush_cursor;
-    ASSERT(flush_size <= bucket_size && flush_start + flush_size <= total_size);
+    ASSERT(flush_size <= bucket_size);
+    ASSERT(flush_start + flush_size <= total_size);
 
     if (flush_size > 0) [[likely]] {
         VmaAllocator allocator = instance.GetAllocator();
