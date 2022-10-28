@@ -120,27 +120,36 @@ StreamBuffer::~StreamBuffer() {
 
 std::tuple<u8*, u32, bool> StreamBuffer::Map(u32 size, u32 alignment) {
     ASSERT(size <= total_size && alignment <= total_size);
-    Bucket& bucket = buckets[bucket_index];
-
-    if (bucket.cursor + size > bucket_size - alignment) {
-        bucket.gpu_tick = scheduler.CurrentTick();
-        MoveNextBucket();
-        return Map(size, alignment);
-    }
 
     if (alignment > 0) {
-        bucket.cursor = Common::AlignUp(bucket.cursor, alignment);
+        buffer_offset = Common::AlignUp(buffer_offset, alignment);
     }
 
-    const bool invalidate = std::exchange(bucket.invalid, false);
-    const u32 buffer_offset = bucket_index * bucket_size + bucket.cursor;
-    u8* mapped = reinterpret_cast<u8*>(staging.mapped.data() + buffer_offset);
+    bool invalidate = false;
+    const u32 new_offset = buffer_offset + size;
+    if (u32 new_index = new_offset / bucket_size; new_index != bucket_index) {
+        if (new_index >= BUCKET_COUNT) {
+            if (readback) {
+                Invalidate();
+            } else {
+                Flush();
+            }
+            buffer_offset = 0;
+            flush_offset = 0;
+            new_index = 0;
+            invalidate = true;
+        }
+        ticks[bucket_index] = scheduler.CurrentTick();
+        scheduler.Wait(ticks[new_index]);
+        bucket_index = new_index;
+    }
 
+    u8* mapped = reinterpret_cast<u8*>(staging.mapped.data() + buffer_offset);
     return std::make_tuple(mapped, buffer_offset, invalidate);
 }
 
 void StreamBuffer::Commit(u32 size) {
-    buckets[bucket_index].cursor += size;
+    buffer_offset += size;
 }
 
 void StreamBuffer::Flush() {
@@ -148,19 +157,17 @@ void StreamBuffer::Flush() {
         return;
     }
 
-    Bucket& bucket = buckets[bucket_index];
-    const u32 flush_start = bucket_index * bucket_size + bucket.flush_cursor;
-    const u32 flush_size = bucket.cursor - bucket.flush_cursor;
-    ASSERT(flush_size <= bucket_size);
-    ASSERT(flush_start + flush_size <= total_size);
+    const u32 flush_size = buffer_offset - flush_offset;
+    ASSERT(flush_size <= total_size);
+    ASSERT(flush_offset + flush_size <= total_size);
 
     if (flush_size > 0) [[likely]] {
         VmaAllocator allocator = instance.GetAllocator();
-        vmaFlushAllocation(allocator, staging.allocation, flush_start, flush_size);
+        vmaFlushAllocation(allocator, staging.allocation, flush_offset, flush_size);
         if (gpu_buffer) {
-            scheduler.Record([this, flush_start, flush_size](vk::CommandBuffer, vk::CommandBuffer upload_cmdbuf) {
+            scheduler.Record([this, flush_offset = flush_offset, flush_size](vk::CommandBuffer, vk::CommandBuffer upload_cmdbuf) {
                 const vk::BufferCopy copy_region = {
-                    .srcOffset = flush_start, .dstOffset = flush_start, .size = flush_size};
+                    .srcOffset = flush_offset, .dstOffset = flush_offset, .size = flush_size};
 
                 const vk::BufferMemoryBarrier pre_barrier = {
                     .srcAccessMask = vk::AccessFlagBits::eMemoryRead,
@@ -168,7 +175,7 @@ void StreamBuffer::Flush() {
                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .buffer = gpu_buffer,
-                    .offset = flush_start,
+                    .offset = flush_offset,
                     .size = flush_size};
 
                 upload_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
@@ -185,7 +192,7 @@ void StreamBuffer::Flush() {
                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .buffer = gpu_buffer,
-                    .offset = flush_start,
+                    .offset = flush_offset,
                     .size = flush_size};
 
                 upload_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, stage_mask,
@@ -193,7 +200,7 @@ void StreamBuffer::Flush() {
                                               {});
             });
         }
-        bucket.flush_cursor = bucket.cursor;
+        flush_offset = buffer_offset;
     }
 }
 
@@ -202,32 +209,15 @@ void StreamBuffer::Invalidate() {
         return;
     }
 
-    Bucket& bucket = buckets[bucket_index];
-    const u32 flush_start = bucket_index * bucket_size + bucket.flush_cursor;
-    const u32 flush_size = bucket.cursor - bucket.flush_cursor;
-    ASSERT(flush_size <= bucket_size && flush_start + flush_size <= total_size);
+    const u32 flush_size = buffer_offset - flush_offset;
+    ASSERT(flush_size <= total_size);
+    ASSERT(flush_offset + flush_size <= total_size);
 
     if (flush_size > 0) [[likely]] {
         VmaAllocator allocator = instance.GetAllocator();
-        vmaInvalidateAllocation(allocator, staging.allocation, flush_start, flush_size);
-        bucket.flush_cursor = bucket.cursor;
+        vmaInvalidateAllocation(allocator, staging.allocation, flush_offset, flush_size);
+        flush_offset = buffer_offset;
     }
-}
-
-void StreamBuffer::MoveNextBucket() {
-    // Flush and Invalidate are bucket local operations for simplicity so perform them here
-    if (readback) {
-        Invalidate();
-    } else {
-        Flush();
-    }
-
-    bucket_index = (bucket_index + 1) % BUCKET_COUNT;
-    Bucket& next_bucket = buckets[bucket_index];
-    scheduler.Wait(next_bucket.gpu_tick);
-    next_bucket.cursor = 0;
-    next_bucket.flush_cursor = 0;
-    next_bucket.invalid = true;
 }
 
 } // namespace Vulkan

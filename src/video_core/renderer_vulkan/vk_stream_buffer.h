@@ -72,17 +72,6 @@ public:
     }
 
 private:
-    /// Moves to the next bucket
-    void MoveNextBucket();
-
-    struct Bucket {
-        bool invalid = false;
-        u32 gpu_tick = 0;
-        u32 cursor = 0;
-        u32 flush_cursor = 0;
-    };
-
-private:
     const Instance& instance;
     Scheduler& scheduler;
     StagingBuffer staging;
@@ -90,12 +79,14 @@ private:
     VmaAllocation allocation{};
     vk::BufferUsageFlagBits usage;
     std::array<vk::BufferView, MAX_BUFFER_VIEWS> views{};
-    std::array<Bucket, BUCKET_COUNT> buckets;
     std::size_t view_count = 0;
     u32 total_size = 0;
     u32 bucket_size = 0;
+    u32 buffer_offset = 0;
+    u32 flush_offset = 0;
     u32 bucket_index = 0;
     bool readback = false;
+    std::array<u64, BUCKET_COUNT> ticks{};
 };
 
 } // namespace Vulkan
