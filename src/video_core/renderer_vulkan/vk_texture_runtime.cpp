@@ -708,12 +708,11 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
             render_cmdbuf.copyBufferToImage(staging.buffer, image, vk::ImageLayout::eTransferDstOptimal,
                                             region_count, copy_regions.data());
         });
+
+        runtime.upload_buffer.Commit(staging.size);
     }
 
     InvalidateAllWatcher();
-
-    // Lock this data until the next scheduler switch
-    runtime.upload_buffer.Commit(staging.size);
 }
 
 MICROPROFILE_DEFINE(Vulkan_Download, "VulkanSurface", "Texture Download", MP_RGB(128, 192, 64));
@@ -751,10 +750,8 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
             render_cmdbuf.copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal,
                                              staging.buffer, copy_region);
         });
+        runtime.download_buffer.Commit(staging.size);
     }
-
-    // Lock this data until the next scheduler switch
-    runtime.download_buffer.Commit(staging.size);
 }
 
 u32 Surface::GetInternalBytesPerPixel() const {
