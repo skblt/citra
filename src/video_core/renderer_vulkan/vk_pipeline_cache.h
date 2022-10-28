@@ -41,8 +41,6 @@ struct DepthStencilState {
         BitField<12, 3, Pica::FramebufferRegs::StencilAction> stencil_depth_fail_op;
         BitField<15, 3, Pica::FramebufferRegs::CompareFunc> stencil_compare_op;
     };
-
-    // These are dynamic state so keep them separate
     u8 stencil_reference;
     u8 stencil_compare_mask;
     u8 stencil_write_mask;
@@ -72,7 +70,7 @@ union VertexAttribute {
     u32 value = 0;
     BitField<0, 4, u32> binding;
     BitField<4, 4, u32> location;
-    BitField<8, 3, AttribType> type;
+    BitField<8, 3, Pica::PipelineRegs::VertexAttributeFormat> type;
     BitField<11, 3, u32> size;
     BitField<14, 11, u32> offset;
 };
@@ -95,7 +93,7 @@ struct PipelineInfo {
     RasterizationState rasterization{};
     DepthStencilState depth_stencil{};
 
-    bool IsDepthWriteEnabled() const {
+    [[nodiscard]] bool IsDepthWriteEnabled() const noexcept {
         const bool has_stencil = depth_attachment == VideoCore::PixelFormat::D24S8;
         const bool depth_write =
             depth_stencil.depth_test_enable && depth_stencil.depth_write_enable;

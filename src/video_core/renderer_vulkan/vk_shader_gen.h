@@ -8,11 +8,10 @@
 #include <optional>
 #include "common/hash.h"
 #include "video_core/regs.h"
+#include "video_core/regs_pipeline.h"
 #include "video_core/shader/shader.h"
 
 namespace Vulkan {
-
-enum class AttribType : u32 { Float = 0, Int = 1, Short = 2, Byte = 3, Ubyte = 4 };
 
 enum Attributes {
     ATTRIBUTE_POSITION,
@@ -149,7 +148,7 @@ struct PicaShaderConfigCommon {
     u64 swizzle_hash;
     u32 main_offset;
     bool sanitize_mul;
-    std::array<AttribType, 16> attrib_types;
+    std::array<Pica::PipelineRegs::VertexAttributeFormat, 16> attrib_types;
 
     u32 num_outputs;
 
