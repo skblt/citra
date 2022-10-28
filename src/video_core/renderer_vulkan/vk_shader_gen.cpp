@@ -106,8 +106,8 @@ PicaFSConfig::PicaFSConfig(const Pica::Regs& regs) {
     state.depthmap_enable.Assign(regs.rasterizer.depthmap_enable);
 
     state.alpha_test_func.Assign(regs.framebuffer.output_merger.alpha_test.enable
-                                ? regs.framebuffer.output_merger.alpha_test.func.Value()
-                                : FramebufferRegs::CompareFunc::Always);
+                                     ? regs.framebuffer.output_merger.alpha_test.func.Value()
+                                     : FramebufferRegs::CompareFunc::Always);
 
     state.texture0_type.Assign(regs.texturing.texture0.type);
 
@@ -132,9 +132,9 @@ PicaFSConfig::PicaFSConfig(const Pica::Regs& regs) {
     state.fog_mode.Assign(regs.texturing.fog_mode);
     state.fog_flip.Assign(regs.texturing.fog_flip != 0);
 
-    state.combiner_buffer_input.Assign(regs.texturing.tev_combiner_buffer_input.update_mask_rgb.Value() |
-                                  regs.texturing.tev_combiner_buffer_input.update_mask_a.Value()
-                                      << 4);
+    state.combiner_buffer_input.Assign(
+        regs.texturing.tev_combiner_buffer_input.update_mask_rgb.Value() |
+        regs.texturing.tev_combiner_buffer_input.update_mask_a.Value() << 4);
 
     // Fragment lighting
 
@@ -146,14 +146,18 @@ PicaFSConfig::PicaFSConfig(const Pica::Regs& regs) {
         const auto& light = regs.lighting.light[num];
         state.lighting.light[light_index].num.Assign(num);
         state.lighting.light[light_index].directional.Assign(light.config.directional != 0);
-        state.lighting.light[light_index].two_sided_diffuse.Assign(light.config.two_sided_diffuse != 0);
-        state.lighting.light[light_index].geometric_factor_0.Assign(light.config.geometric_factor_0 != 0);
-        state.lighting.light[light_index].geometric_factor_1.Assign(light.config.geometric_factor_1 != 0);
+        state.lighting.light[light_index].two_sided_diffuse.Assign(light.config.two_sided_diffuse !=
+                                                                   0);
+        state.lighting.light[light_index].geometric_factor_0.Assign(
+            light.config.geometric_factor_0 != 0);
+        state.lighting.light[light_index].geometric_factor_1.Assign(
+            light.config.geometric_factor_1 != 0);
         state.lighting.light[light_index].dist_atten_enable.Assign(
             !regs.lighting.IsDistAttenDisabled(num));
         state.lighting.light[light_index].spot_atten_enable.Assign(
             !regs.lighting.IsSpotAttenDisabled(num));
-        state.lighting.light[light_index].shadow_enable.Assign(!regs.lighting.IsShadowDisabled(num));
+        state.lighting.light[light_index].shadow_enable.Assign(
+            !regs.lighting.IsShadowDisabled(num));
     }
 
     state.lighting.lut_d0.enable.Assign(regs.lighting.config1.disable_lut_d0 == 0);
@@ -229,11 +233,10 @@ PicaFSConfig::PicaFSConfig(const Pica::Regs& regs) {
     }
 
     state.shadow_rendering.Assign(regs.framebuffer.output_merger.fragment_operation_mode ==
-                             FramebufferRegs::FragmentOperationMode::Shadow);
+                                  FramebufferRegs::FragmentOperationMode::Shadow);
 
     state.shadow_texture_orthographic.Assign(regs.texturing.shadow.orthographic != 0);
 }
-
 
 void PicaShaderConfigCommon::Init(const Pica::ShaderRegs& regs, Pica::Shader::ShaderSetup& setup) {
     program_hash = setup.GetProgramCodeHash();

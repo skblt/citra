@@ -113,9 +113,10 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
     }
 
     for (const char* extension : extensions) {
-        const auto iter = std::find_if(properties.begin(), properties.end(), [extension](const auto& prop) {
-            return std::strcmp(extension, prop.extensionName) == 0;
-        });
+        const auto iter =
+            std::find_if(properties.begin(), properties.end(), [extension](const auto& prop) {
+                return std::strcmp(extension, prop.extensionName) == 0;
+            });
 
         if (iter == properties.end()) {
             LOG_ERROR(Render_Vulkan, "Required instance extension {} is not available", extension);

@@ -61,12 +61,12 @@ RenderpassCache::RenderpassCache(const Instance& instance, Scheduler& scheduler)
                 continue;
             }
 
-            cached_renderpasses[color][depth][0] = CreateRenderPass(
-                color_format, depth_format, vk::AttachmentLoadOp::eLoad,
-                vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
-            cached_renderpasses[color][depth][1] = CreateRenderPass(
-                color_format, depth_format, vk::AttachmentLoadOp::eClear,
-                vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
+            cached_renderpasses[color][depth][0] =
+                CreateRenderPass(color_format, depth_format, vk::AttachmentLoadOp::eLoad,
+                                 vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
+            cached_renderpasses[color][depth][1] =
+                CreateRenderPass(color_format, depth_format, vk::AttachmentLoadOp::eClear,
+                                 vk::ImageLayout::eGeneral, vk::ImageLayout::eGeneral);
         }
     }
 }
@@ -94,21 +94,19 @@ void RenderpassCache::EnterRenderpass(const RenderpassState& state) {
         return;
     }
 
-    scheduler.Record([should_end = bool(current_state.renderpass), state]
-                     (vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+    scheduler.Record([should_end = bool(current_state.renderpass),
+                      state](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         if (should_end) {
             render_cmdbuf.endRenderPass();
         }
 
-        const vk::RenderPassBeginInfo renderpass_begin_info = {
-            .renderPass = state.renderpass,
-            .framebuffer = state.framebuffer,
-            .renderArea = state.render_area,
-            .clearValueCount = 1,
-            .pClearValues = &state.clear};
+        const vk::RenderPassBeginInfo renderpass_begin_info = {.renderPass = state.renderpass,
+                                                               .framebuffer = state.framebuffer,
+                                                               .renderArea = state.render_area,
+                                                               .clearValueCount = 1,
+                                                               .pClearValues = &state.clear};
 
         render_cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
-
     });
 
     if (is_dirty) {
@@ -123,9 +121,8 @@ void RenderpassCache::ExitRenderpass() {
         return;
     }
 
-    scheduler.Record([](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        render_cmdbuf.endRenderPass();
-    });
+    scheduler.Record(
+        [](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) { render_cmdbuf.endRenderPass(); });
 
     current_state = {};
 }
@@ -172,25 +169,24 @@ vk::RenderPass RenderpassCache::CreateRenderPass(vk::Format color, vk::Format de
                                       .initialLayout = initial_layout,
                                       .finalLayout = final_layout};
 
-        color_attachment_ref = vk::AttachmentReference{
-            .attachment = attachment_count++, .layout = vk::ImageLayout::eGeneral};
+        color_attachment_ref = vk::AttachmentReference{.attachment = attachment_count++,
+                                                       .layout = vk::ImageLayout::eGeneral};
 
         use_color = true;
     }
 
     if (depth != vk::Format::eUndefined) {
-        attachments[attachment_count] = vk::AttachmentDescription{
-            .format = depth,
-            .loadOp = load_op,
-            .storeOp = vk::AttachmentStoreOp::eStore,
-            .stencilLoadOp = load_op,
-            .stencilStoreOp = vk::AttachmentStoreOp::eStore,
-            .initialLayout = vk::ImageLayout::eGeneral,
-            .finalLayout = vk::ImageLayout::eGeneral};
+        attachments[attachment_count] =
+            vk::AttachmentDescription{.format = depth,
+                                      .loadOp = load_op,
+                                      .storeOp = vk::AttachmentStoreOp::eStore,
+                                      .stencilLoadOp = load_op,
+                                      .stencilStoreOp = vk::AttachmentStoreOp::eStore,
+                                      .initialLayout = vk::ImageLayout::eGeneral,
+                                      .finalLayout = vk::ImageLayout::eGeneral};
 
-        depth_attachment_ref =
-            vk::AttachmentReference{.attachment = attachment_count++,
-                                    .layout = vk::ImageLayout::eGeneral};
+        depth_attachment_ref = vk::AttachmentReference{.attachment = attachment_count++,
+                                                       .layout = vk::ImageLayout::eGeneral};
 
         use_depth = true;
     }

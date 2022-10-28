@@ -9,10 +9,10 @@
 #include "common/microprofile.h"
 #include "core/settings.h"
 #include "video_core/renderer_vulkan/pica_to_vk.h"
+#include "video_core/renderer_vulkan/vk_descriptor_manager.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
-#include "video_core/renderer_vulkan/vk_descriptor_manager.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 
 namespace Vulkan {
@@ -64,7 +64,8 @@ vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
 
 PipelineCache::PipelineCache(const Instance& instance, Scheduler& scheduler,
                              RenderpassCache& renderpass_cache, DescriptorManager& desc_manager)
-    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache}, desc_manager{desc_manager} {
+    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache},
+      desc_manager{desc_manager} {
     trivial_vertex_shader = Compile(GenerateTrivialVertexShader(), vk::ShaderStageFlagBits::eVertex,
                                     instance.GetDevice(), ShaderOptimization::High);
 }
@@ -199,10 +200,11 @@ bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
         return false;
     }
 
-    scheduler.Record([this, handle = handle, hash = config.Hash()](vk::CommandBuffer, vk::CommandBuffer) {
-        current_shaders[ProgramType::VS] = handle;
-        shader_hashes[ProgramType::VS] = hash;
-    });
+    scheduler.Record(
+        [this, handle = handle, hash = config.Hash()](vk::CommandBuffer, vk::CommandBuffer) {
+            current_shaders[ProgramType::VS] = handle;
+            shader_hashes[ProgramType::VS] = hash;
+        });
 
     return true;
 }
@@ -218,8 +220,9 @@ void PipelineCache::UseFixedGeometryShader(const Pica::Regs& regs) {
     const PicaFixedGSConfig gs_config{regs};
 
     scheduler.Record([this, gs_config](vk::CommandBuffer, vk::CommandBuffer) {
-        auto [handle, _] = fixed_geometry_shaders.Get(gs_config, vk::ShaderStageFlagBits::eGeometry,
-                                                      instance.GetDevice(), ShaderOptimization::High);
+        auto [handle, _] =
+            fixed_geometry_shaders.Get(gs_config, vk::ShaderStageFlagBits::eGeometry,
+                                       instance.GetDevice(), ShaderOptimization::High);
         current_shaders[ProgramType::GS] = handle;
         shader_hashes[ProgramType::GS] = gs_config.Hash();
     });
@@ -236,16 +239,17 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
     const PicaFSConfig config{regs};
 
     scheduler.Record([this, config](vk::CommandBuffer, vk::CommandBuffer) {
-        auto [handle, result] = fragment_shaders.Get(config, vk::ShaderStageFlagBits::eFragment,
-                                                     instance.GetDevice(), ShaderOptimization::High);
+        auto [handle, result] =
+            fragment_shaders.Get(config, vk::ShaderStageFlagBits::eFragment, instance.GetDevice(),
+                                 ShaderOptimization::High);
         current_shaders[ProgramType::FS] = handle;
         shader_hashes[ProgramType::FS] = config.Hash();
     });
 }
 
 void PipelineCache::BindTexture(u32 binding, vk::ImageView image_view) {
-    const vk::DescriptorImageInfo image_info = {
-        .imageView = image_view, .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::DescriptorImageInfo image_info = {.imageView = image_view,
+                                                .imageLayout = vk::ImageLayout::eGeneral};
     desc_manager.SetBinding(1, binding, DescriptorData{image_info});
 }
 
@@ -299,24 +303,21 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
     const bool is_dirty = scheduler.IsStateDirty(StateFlags::Pipeline);
 
     PipelineInfo current = current_info;
-    scheduler.Record([this, info, is_dirty, current](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        if (info.dynamic.stencil_compare_mask !=
-                current.dynamic.stencil_compare_mask ||
-            is_dirty) {
+    scheduler.Record([this, info, is_dirty, current](vk::CommandBuffer render_cmdbuf,
+                                                     vk::CommandBuffer) {
+        if (info.dynamic.stencil_compare_mask != current.dynamic.stencil_compare_mask || is_dirty) {
             render_cmdbuf.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                                 info.dynamic.stencil_compare_mask);
+                                                info.dynamic.stencil_compare_mask);
         }
 
-        if (info.dynamic.stencil_write_mask != current.dynamic.stencil_write_mask ||
-            is_dirty) {
+        if (info.dynamic.stencil_write_mask != current.dynamic.stencil_write_mask || is_dirty) {
             render_cmdbuf.setStencilWriteMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                               info.dynamic.stencil_write_mask);
+                                              info.dynamic.stencil_write_mask);
         }
 
-        if (info.dynamic.stencil_reference != current.dynamic.stencil_reference ||
-            is_dirty) {
+        if (info.dynamic.stencil_reference != current.dynamic.stencil_reference || is_dirty) {
             render_cmdbuf.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
-                                               info.dynamic.stencil_reference);
+                                              info.dynamic.stencil_reference);
         }
 
         if (info.dynamic.blend_color != current.dynamic.blend_color || is_dirty) {
@@ -341,8 +342,7 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
                 render_cmdbuf.setDepthTestEnableEXT(info.depth_stencil.depth_test_enable);
             }
 
-            if (info.depth_stencil.depth_write_enable !=
-                    current.depth_stencil.depth_write_enable ||
+            if (info.depth_stencil.depth_write_enable != current.depth_stencil.depth_write_enable ||
                 is_dirty) {
                 render_cmdbuf.setDepthWriteEnableEXT(info.depth_stencil.depth_write_enable);
             }
@@ -362,8 +362,7 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
                 info.depth_stencil.stencil_pass_op != current.depth_stencil.stencil_pass_op ||
                 info.depth_stencil.stencil_depth_fail_op !=
                     current.depth_stencil.stencil_depth_fail_op ||
-                info.depth_stencil.stencil_compare_op !=
-                    current.depth_stencil.stencil_compare_op ||
+                info.depth_stencil.stencil_compare_op != current.depth_stencil.stencil_compare_op ||
                 is_dirty) {
                 render_cmdbuf.setStencilOpEXT(
                     vk::StencilFaceFlagBits::eFrontAndBack,

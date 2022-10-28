@@ -30,10 +30,10 @@ struct StagingBuffer {
 class StreamBuffer {
     static constexpr u32 MAX_BUFFER_VIEWS = 3;
     static constexpr u32 BUCKET_COUNT = 4;
+
 public:
     /// Staging only constructor
-    StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
-                 bool readback = false);
+    StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size, bool readback = false);
     /// Staging + GPU streaming constructor
     StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
                  vk::BufferUsageFlagBits usage, std::span<const vk::Format> views,

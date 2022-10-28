@@ -13,9 +13,10 @@
 
 namespace Vulkan {
 
-Swapchain::Swapchain(const Instance& instance, Scheduler& scheduler, RenderpassCache& renderpass_cache)
-    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache},
-      surface{instance.GetSurface()} {
+Swapchain::Swapchain(const Instance& instance, Scheduler& scheduler,
+                     RenderpassCache& renderpass_cache)
+    : instance{instance}, scheduler{scheduler},
+      renderpass_cache{renderpass_cache}, surface{instance.GetSurface()} {
     FindPresentFormat();
     SetPresentMode();
     renderpass_cache.CreatePresentRenderpass(surface_format.format);
@@ -85,8 +86,8 @@ MICROPROFILE_DEFINE(Vulkan_Acquire, "Vulkan", "Swapchain Acquire", MP_RGB(185, 6
 void Swapchain::AcquireNextImage() {
     MICROPROFILE_SCOPE(Vulkan_Acquire);
     vk::Device device = instance.GetDevice();
-    vk::Result result = device.acquireNextImageKHR(swapchain, UINT64_MAX, image_acquired[frame_index],
-                                                   VK_NULL_HANDLE, &image_index);
+    vk::Result result = device.acquireNextImageKHR(
+        swapchain, UINT64_MAX, image_acquired[frame_index], VK_NULL_HANDLE, &image_index);
 
     switch (result) {
     case vk::Result::eSuccess:
@@ -131,16 +132,17 @@ void Swapchain::Present() {
 
 void Swapchain::FindPresentFormat() {
     const std::vector<vk::SurfaceFormatKHR> formats =
-            instance.GetPhysicalDevice().getSurfaceFormatsKHR(surface);
+        instance.GetPhysicalDevice().getSurfaceFormatsKHR(surface);
 
     surface_format = formats[0];
     if (formats.size() == 1 && formats[0].format == vk::Format::eUndefined) {
         surface_format.format = vk::Format::eB8G8R8A8Unorm;
     } else {
-        auto it = std::find_if(formats.begin(), formats.end(), [](vk::SurfaceFormatKHR format) -> bool {
-            return format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear &&
-                   format.format == vk::Format::eB8G8R8A8Unorm;
-        });
+        auto it =
+            std::find_if(formats.begin(), formats.end(), [](vk::SurfaceFormatKHR format) -> bool {
+                return format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear &&
+                       format.format == vk::Format::eB8G8R8A8Unorm;
+            });
 
         if (it == formats.end()) {
             LOG_CRITICAL(Render_Vulkan, "Unable to find required swapchain format!");
@@ -155,7 +157,7 @@ void Swapchain::SetPresentMode() {
     present_mode = vk::PresentModeKHR::eFifo;
     if (!Settings::values.use_vsync_new) {
         const std::vector<vk::PresentModeKHR> modes =
-                instance.GetPhysicalDevice().getSurfacePresentModesKHR(surface);
+            instance.GetPhysicalDevice().getSurfacePresentModesKHR(surface);
 
         const auto FindMode = [&modes](vk::PresentModeKHR requested) {
             auto it =
@@ -172,19 +174,18 @@ void Swapchain::SetPresentMode() {
             present_mode = vk::PresentModeKHR::eMailbox;
         }
     }
-
 }
 
 void Swapchain::SetSurfaceProperties(u32 width, u32 height) {
     const vk::SurfaceCapabilitiesKHR capabilities =
-            instance.GetPhysicalDevice().getSurfaceCapabilitiesKHR(surface);
+        instance.GetPhysicalDevice().getSurfaceCapabilitiesKHR(surface);
 
     extent = capabilities.currentExtent;
     if (capabilities.currentExtent.width == std::numeric_limits<u32>::max()) {
         extent.width =
             std::clamp(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-        extent.height =
-            std::clamp(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+        extent.height = std::clamp(height, capabilities.minImageExtent.height,
+                                   capabilities.maxImageExtent.height);
     }
 
     // Select number of images in swap chain, we prefer one buffer in the background to work on

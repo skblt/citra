@@ -10,8 +10,8 @@
 #include <utility>
 #include <queue>
 #include "common/alignment.h"
-#include "common/common_types.h"
 #include "common/common_funcs.h"
+#include "common/common_types.h"
 #include "video_core/renderer_vulkan/vk_master_semaphore.h"
 #include "video_core/renderer_vulkan/vk_resource_pool.h"
 
@@ -103,7 +103,8 @@ private:
     public:
         virtual ~Command() = default;
 
-        virtual void Execute(vk::CommandBuffer render_cmdbuf, vk::CommandBuffer upload_cmdbuf) const = 0;
+        virtual void Execute(vk::CommandBuffer render_cmdbuf,
+                             vk::CommandBuffer upload_cmdbuf) const = 0;
 
         Command* GetNext() const {
             return next;
@@ -126,7 +127,8 @@ private:
         TypedCommand(TypedCommand&&) = delete;
         TypedCommand& operator=(TypedCommand&&) = delete;
 
-        void Execute(vk::CommandBuffer render_cmdbuf, vk::CommandBuffer upload_cmdbuf) const override {
+        void Execute(vk::CommandBuffer render_cmdbuf,
+                     vk::CommandBuffer upload_cmdbuf) const override {
             command(render_cmdbuf, upload_cmdbuf);
         }
 
@@ -149,7 +151,8 @@ private:
                 return false;
             }
             Command* const current_last = last;
-            last = std::construct_at(reinterpret_cast<FuncType*>(data.data() + command_offset), std::move(command));
+            last = std::construct_at(reinterpret_cast<FuncType*>(data.data() + command_offset),
+                                     std::move(command));
 
             if (current_last) {
                 current_last->SetNext(last);

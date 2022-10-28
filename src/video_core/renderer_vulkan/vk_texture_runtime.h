@@ -248,6 +248,7 @@ private:
     Scheduler& scheduler;
     bool is_framebuffer = false;
     bool is_storage = false;
+
 public:
     ImageAlloc alloc;
     FormatTraits traits;

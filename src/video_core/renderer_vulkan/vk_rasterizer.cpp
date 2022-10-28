@@ -38,10 +38,9 @@ constexpr VideoCore::SurfaceParams NULL_PARAMS = {.width = 1,
                                                   .pixel_format = VideoCore::PixelFormat::RGBA8,
                                                   .type = VideoCore::SurfaceType::Color};
 
-constexpr vk::ImageUsageFlags NULL_USAGE = vk::ImageUsageFlagBits::eSampled |
-                                           vk::ImageUsageFlagBits::eTransferSrc |
-                                           vk::ImageUsageFlagBits::eTransferDst|
-                                           vk::ImageUsageFlagBits::eStorage;
+constexpr vk::ImageUsageFlags NULL_USAGE =
+    vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc |
+    vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eStorage;
 
 RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instance& instance,
                                    Scheduler& scheduler, DescriptorManager& desc_manager,
@@ -81,7 +80,8 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
     default_sampler = CreateSampler(default_sampler_info);
 
     pipeline_cache.BindUniformBuffer(0, uniform_buffer.GetHandle(), 0, uniform_size_aligned_vs);
-    pipeline_cache.BindUniformBuffer(1, uniform_buffer.GetHandle(), uniform_size_aligned_vs, uniform_size_aligned_fs);
+    pipeline_cache.BindUniformBuffer(1, uniform_buffer.GetHandle(), uniform_size_aligned_vs,
+                                     uniform_size_aligned_fs);
     pipeline_cache.BindTexelBuffer(2, texture_lf_buffer.GetView());
     pipeline_cache.BindTexelBuffer(3, texture_buffer.GetView(0));
     pipeline_cache.BindTexelBuffer(4, texture_buffer.GetView(1));
@@ -203,7 +203,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
 
                     const u32 input_reg = regs.vs.GetRegisterForAttribute(attribute_index);
                     const Pica::PipelineRegs::VertexAttributeFormat format =
-                            vertex_attributes.GetFormat(attribute_index);
+                        vertex_attributes.GetFormat(attribute_index);
 
                     VertexAttribute& attribute = layout.attributes[layout.attribute_count++];
                     attribute.binding.Assign(layout.binding_count);
@@ -229,7 +229,8 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
         const u32 data_size = loader.byte_count * vertex_num;
 
         res_cache.FlushRegion(data_addr, data_size);
-        std::memcpy(array_ptr + buffer_offset, VideoCore::g_memory->GetPhysicalPointer(data_addr), data_size);
+        std::memcpy(array_ptr + buffer_offset, VideoCore::g_memory->GetPhysicalPointer(data_addr),
+                    data_size);
 
         // Create the binding associated with this loader
         VertexBinding& binding = layout.bindings[layout.binding_count];
@@ -302,11 +303,11 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     // Update the pipeline vertex layout
     pipeline_info.vertex_layout = layout;
 
-    scheduler.Record([this, layout, offsets = binding_offsets](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+    scheduler.Record([this, layout, offsets = binding_offsets](vk::CommandBuffer render_cmdbuf,
+                                                               vk::CommandBuffer) {
         std::array<vk::Buffer, 16> buffers;
         buffers.fill(vertex_buffer.GetHandle());
-        render_cmdbuf.bindVertexBuffers(0, layout.binding_count, buffers.data(),
-                                         offsets.data());
+        render_cmdbuf.bindVertexBuffers(0, layout.binding_count, buffers.data(), offsets.data());
     });
 }
 
@@ -385,13 +386,16 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
         index_buffer.Commit(index_buffer_size);
 
         scheduler.Record([this, offset = index_offset, num_vertices = regs.pipeline.num_vertices,
-                         index_u16, vertex_offset = vs_input_index_min](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-            const vk::IndexType index_type = index_u16 ? vk::IndexType::eUint16 : vk::IndexType::eUint8EXT;
+                          index_u16, vertex_offset = vs_input_index_min](
+                             vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+            const vk::IndexType index_type =
+                index_u16 ? vk::IndexType::eUint16 : vk::IndexType::eUint8EXT;
             render_cmdbuf.bindIndexBuffer(index_buffer.GetHandle(), offset, index_type);
             render_cmdbuf.drawIndexed(num_vertices, 1, 0, -vertex_offset, 0);
         });
     } else {
-        scheduler.Record([num_vertices = regs.pipeline.num_vertices](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        scheduler.Record([num_vertices = regs.pipeline.num_vertices](
+                             vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
             render_cmdbuf.draw(num_vertices, 1, 0, 0);
         });
     }
@@ -689,8 +693,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         .render_area = vk::Rect2D{.offset = {static_cast<s32>(draw_rect.left),
                                              static_cast<s32>(draw_rect.bottom)},
                                   .extent = {draw_rect.GetWidth(), draw_rect.GetHeight()}},
-        .clear = {}
-    };
+        .clear = {}};
 
     renderpass_cache.EnterRenderpass(renderpass_info);
 
@@ -717,7 +720,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             vertex_buffer.Commit(vertex_size);
 
             scheduler.Record([this, vertices, base_vertex,
-                             offset = offset](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer){
+                              offset = offset](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
                 render_cmdbuf.bindVertexBuffers(0, vertex_buffer.GetHandle(), offset);
                 render_cmdbuf.draw(vertices, 1, base_vertex, 0);
             });
@@ -1430,10 +1433,7 @@ bool RasterizerVulkan::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
 void RasterizerVulkan::MakeSoftwareVertexLayout() {
     constexpr std::array sizes = {4, 4, 2, 2, 2, 1, 4, 3};
 
-    software_layout = VertexLayout{
-        .binding_count = 1,
-        .attribute_count = 8
-    };
+    software_layout = VertexLayout{.binding_count = 1, .attribute_count = 8};
 
     for (u32 i = 0; i < software_layout.binding_count; i++) {
         VertexBinding& binding = software_layout.bindings[i];
@@ -1812,7 +1812,7 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
         std::memcpy(uniforms + used_bytes, &vs_uniforms, sizeof(vs_uniforms));
 
         pipeline_cache.BindUniformBuffer(0, uniform_buffer.GetHandle(), offset + used_bytes,
-                                  sizeof(vs_uniforms));
+                                         sizeof(vs_uniforms));
         used_bytes += static_cast<u32>(uniform_size_aligned_vs);
     }
 
@@ -1821,7 +1821,7 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
                     sizeof(Pica::Shader::UniformData));
 
         pipeline_cache.BindUniformBuffer(1, uniform_buffer.GetHandle(), offset + used_bytes,
-                                  sizeof(uniform_block_data.data));
+                                         sizeof(uniform_block_data.data));
         uniform_block_data.dirty = false;
         used_bytes += static_cast<u32>(uniform_size_aligned_fs);
     }

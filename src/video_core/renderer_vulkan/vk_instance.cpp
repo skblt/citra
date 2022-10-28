@@ -123,7 +123,8 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) {
     try {
         instance = vk::createInstance(instance_info);
     } catch (vk::LayerNotPresentError& err) {
-        LOG_CRITICAL(Render_Vulkan, "Validation requested but layer is not available {}", err.what());
+        LOG_CRITICAL(Render_Vulkan, "Validation requested but layer is not available {}",
+                     err.what());
         UNREACHABLE();
     }
 
