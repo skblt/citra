@@ -296,6 +296,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     binding.stride.Assign(offset);
 
     binding_offsets[layout.binding_count++] = array_offset + buffer_offset;
+    ASSERT(buffer_offset + offset <= vertex_size);
     vertex_buffer.Commit(buffer_offset + offset);
 
     // Update the pipeline vertex layout
@@ -1564,12 +1565,8 @@ void RasterizerVulkan::SyncBlendFuncs() {
 }
 
 void RasterizerVulkan::SyncBlendColor() {
-    const Common::Vec4f blend_color =
-        PicaToVK::ColorRGBA8(Pica::g_state.regs.framebuffer.output_merger.blend_const.raw);
-
-    scheduler.Record([blend_color](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        render_cmdbuf.setBlendConstants(blend_color.AsArray());
-    });
+    const auto& regs = Pica::g_state.regs;
+    pipeline_info.dynamic.blend_color = regs.framebuffer.output_merger.blend_const.raw;
 }
 
 void RasterizerVulkan::SyncLogicOp() {
@@ -1585,7 +1582,7 @@ void RasterizerVulkan::SyncColorWriteMask() {
 
 void RasterizerVulkan::SyncStencilWriteMask() {
     const auto& regs = Pica::g_state.regs;
-    pipeline_info.depth_stencil.stencil_write_mask =
+    pipeline_info.dynamic.stencil_write_mask =
         (regs.framebuffer.framebuffer.allow_depth_stencil_write != 0)
             ? static_cast<u32>(regs.framebuffer.output_merger.stencil_test.write_mask)
             : 0;
@@ -1611,8 +1608,8 @@ void RasterizerVulkan::SyncStencilTest() {
     pipeline_info.depth_stencil.stencil_pass_op.Assign(stencil_test.action_depth_pass);
     pipeline_info.depth_stencil.stencil_depth_fail_op.Assign(stencil_test.action_depth_fail);
     pipeline_info.depth_stencil.stencil_compare_op.Assign(stencil_test.func);
-    pipeline_info.depth_stencil.stencil_reference = stencil_test.reference_value;
-    pipeline_info.depth_stencil.stencil_compare_mask = stencil_test.input_mask;
+    pipeline_info.dynamic.stencil_reference = stencil_test.reference_value;
+    pipeline_info.dynamic.stencil_compare_mask = stencil_test.input_mask;
 }
 
 void RasterizerVulkan::SyncDepthTest() {

@@ -29,21 +29,16 @@ union RasterizationState {
     BitField<4, 2, Pica::RasterizerRegs::CullMode> cull_mode;
 };
 
-struct DepthStencilState {
-    union {
-        u32 value = 0;
-        BitField<0, 1, u32> depth_test_enable;
-        BitField<1, 1, u32> depth_write_enable;
-        BitField<2, 1, u32> stencil_test_enable;
-        BitField<3, 3, Pica::FramebufferRegs::CompareFunc> depth_compare_op;
-        BitField<6, 3, Pica::FramebufferRegs::StencilAction> stencil_fail_op;
-        BitField<9, 3, Pica::FramebufferRegs::StencilAction> stencil_pass_op;
-        BitField<12, 3, Pica::FramebufferRegs::StencilAction> stencil_depth_fail_op;
-        BitField<15, 3, Pica::FramebufferRegs::CompareFunc> stencil_compare_op;
-    };
-    u8 stencil_reference;
-    u8 stencil_compare_mask;
-    u8 stencil_write_mask;
+union DepthStencilState {
+    u32 value = 0;
+    BitField<0, 1, u32> depth_test_enable;
+    BitField<1, 1, u32> depth_write_enable;
+    BitField<2, 1, u32> stencil_test_enable;
+    BitField<3, 3, Pica::FramebufferRegs::CompareFunc> depth_compare_op;
+    BitField<6, 3, Pica::FramebufferRegs::StencilAction> stencil_fail_op;
+    BitField<9, 3, Pica::FramebufferRegs::StencilAction> stencil_pass_op;
+    BitField<12, 3, Pica::FramebufferRegs::StencilAction> stencil_depth_fail_op;
+    BitField<15, 3, Pica::FramebufferRegs::CompareFunc> stencil_compare_op;
 };
 
 union BlendingState {
@@ -57,6 +52,13 @@ union BlendingState {
     BitField<20, 3, Pica::FramebufferRegs::BlendEquation> alpha_blend_eq;
     BitField<23, 4, u32> color_write_mask;
     BitField<27, 4, Pica::FramebufferRegs::LogicOp> logic_op;
+};
+
+struct DynamicState {
+    u32 blend_color = 0;
+    u8 stencil_reference;
+    u8 stencil_compare_mask;
+    u8 stencil_write_mask;
 };
 
 union VertexBinding {
@@ -92,13 +94,14 @@ struct PipelineInfo {
     VideoCore::PixelFormat depth_attachment = VideoCore::PixelFormat::D24S8;
     RasterizationState rasterization{};
     DepthStencilState depth_stencil{};
+    DynamicState dynamic;
 
     [[nodiscard]] bool IsDepthWriteEnabled() const noexcept {
         const bool has_stencil = depth_attachment == VideoCore::PixelFormat::D24S8;
         const bool depth_write =
             depth_stencil.depth_test_enable && depth_stencil.depth_write_enable;
         const bool stencil_write = has_stencil && depth_stencil.stencil_test_enable &&
-                                   depth_stencil.stencil_write_mask != 0;
+                                   dynamic.stencil_write_mask != 0;
 
         return depth_write || stencil_write;
     }
