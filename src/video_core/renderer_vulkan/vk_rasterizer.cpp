@@ -8,6 +8,7 @@
 #include "common/microprofile.h"
 #include "video_core/pica_state.h"
 #include "video_core/regs_framebuffer.h"
+#include "video_core/regs_pipeline.h"
 #include "video_core/regs_rasterizer.h"
 #include "video_core/renderer_vulkan/pica_to_vk.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
@@ -167,13 +168,6 @@ void RasterizerVulkan::SyncFixedState() {
     SyncDepthWriteMask();
 }
 
-static constexpr std::array vs_attrib_types = {
-    AttribType::Byte,  // VertexAttributeFormat::BYTE
-    AttribType::Ubyte, // VertexAttributeFormat::UBYTE
-    AttribType::Short, // VertexAttributeFormat::SHORT
-    AttribType::Float  // VertexAttributeFormat::FLOAT
-};
-
 void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min,
                                         u32 vs_input_index_max) {
     auto [array_ptr, array_offset, invalidate] = vertex_buffer.Map(vs_input_size, 4);
@@ -207,16 +201,14 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
                         offset, vertex_attributes.GetElementSizeInBytes(attribute_index));
 
                     const u32 input_reg = regs.vs.GetRegisterForAttribute(attribute_index);
-                    const u32 attrib_format =
-                        static_cast<u32>(vertex_attributes.GetFormat(attribute_index));
-                    const AttribType type = vs_attrib_types[attrib_format];
+                    const Pica::PipelineRegs::VertexAttributeFormat format =
+                            vertex_attributes.GetFormat(attribute_index);
 
-                    // Define the attribute
                     VertexAttribute& attribute = layout.attributes[layout.attribute_count++];
                     attribute.binding.Assign(layout.binding_count);
                     attribute.location.Assign(input_reg);
                     attribute.offset.Assign(offset);
-                    attribute.type.Assign(type);
+                    attribute.type.Assign(format);
                     attribute.size.Assign(size);
 
                     enable_attributes[input_reg] = true;
@@ -274,7 +266,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
                 attribute.binding.Assign(layout.binding_count);
                 attribute.location.Assign(reg);
                 attribute.offset.Assign(offset);
-                attribute.type.Assign(AttribType::Float);
+                attribute.type.Assign(Pica::PipelineRegs::VertexAttributeFormat::FLOAT);
                 attribute.size.Assign(4);
 
                 offset += data_size;
@@ -296,7 +288,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
             attribute.binding.Assign(layout.binding_count);
             attribute.location.Assign(i);
             attribute.offset.Assign(0);
-            attribute.type.Assign(AttribType::Float);
+            attribute.type.Assign(Pica::PipelineRegs::VertexAttributeFormat::FLOAT);
             attribute.size.Assign(4);
         }
     }
@@ -1458,7 +1450,7 @@ void RasterizerVulkan::MakeSoftwareVertexLayout() {
         attribute.binding.Assign(0);
         attribute.location.Assign(i);
         attribute.offset.Assign(offset);
-        attribute.type.Assign(AttribType::Float);
+        attribute.type.Assign(Pica::PipelineRegs::VertexAttributeFormat::FLOAT);
         attribute.size.Assign(sizes[i]);
         offset += sizes[i] * sizeof(float);
     }

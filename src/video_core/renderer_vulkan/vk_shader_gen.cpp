@@ -1627,14 +1627,14 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
         if (used_regs[i]) {
             std::string_view prefix;
             switch (config.state.attrib_types[i]) {
-            case AttribType::Float:
+            case Pica::PipelineRegs::VertexAttributeFormat::FLOAT:
                 prefix = "";
                 break;
-            case AttribType::Byte:
-            case AttribType::Short:
+            case Pica::PipelineRegs::VertexAttributeFormat::BYTE:
+            case Pica::PipelineRegs::VertexAttributeFormat::SHORT:
                 prefix = "i";
                 break;
-            case AttribType::Ubyte:
+            case Pica::PipelineRegs::VertexAttributeFormat::UBYTE:
                 prefix = "u";
                 break;
             default:
