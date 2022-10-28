@@ -20,74 +20,6 @@
 
 namespace Vulkan {
 
-RasterizerVulkan::HardwareVertex::HardwareVertex(const Pica::Shader::OutputVertex& v,
-                                                 bool flip_quaternion) {
-    position[0] = v.pos.x.ToFloat32();
-    position[1] = v.pos.y.ToFloat32();
-    position[2] = v.pos.z.ToFloat32();
-    position[3] = v.pos.w.ToFloat32();
-    color[0] = v.color.x.ToFloat32();
-    color[1] = v.color.y.ToFloat32();
-    color[2] = v.color.z.ToFloat32();
-    color[3] = v.color.w.ToFloat32();
-    tex_coord0[0] = v.tc0.x.ToFloat32();
-    tex_coord0[1] = v.tc0.y.ToFloat32();
-    tex_coord1[0] = v.tc1.x.ToFloat32();
-    tex_coord1[1] = v.tc1.y.ToFloat32();
-    tex_coord2[0] = v.tc2.x.ToFloat32();
-    tex_coord2[1] = v.tc2.y.ToFloat32();
-    tex_coord0_w = v.tc0_w.ToFloat32();
-    normquat[0] = v.quat.x.ToFloat32();
-    normquat[1] = v.quat.y.ToFloat32();
-    normquat[2] = v.quat.z.ToFloat32();
-    normquat[3] = v.quat.w.ToFloat32();
-    view[0] = v.view.x.ToFloat32();
-    view[1] = v.view.y.ToFloat32();
-    view[2] = v.view.z.ToFloat32();
-
-    if (flip_quaternion) {
-        normquat = -normquat;
-    }
-}
-
-/**
- * This maps to the following layout in GLSL code:
- *  layout(location = 0) in vec4 vert_position;
- *  layout(location = 1) in vec4 vert_color;
- *  layout(location = 2) in vec2 vert_texcoord0;
- *  layout(location = 3) in vec2 vert_texcoord1;
- *  layout(location = 4) in vec2 vert_texcoord2;
- *  layout(location = 5) in float vert_texcoord0_w;
- *  layout(location = 6) in vec4 vert_normquat;
- *  layout(location = 7) in vec3 vert_view;
- */
-constexpr VertexLayout RasterizerVulkan::HardwareVertex::GetVertexLayout() {
-    VertexLayout layout{};
-    layout.attribute_count = 8;
-    layout.binding_count = 1;
-
-    // Define binding
-    layout.bindings[0].binding.Assign(0);
-    layout.bindings[0].fixed.Assign(0);
-    layout.bindings[0].stride.Assign(sizeof(HardwareVertex));
-
-    // Define attributes
-    constexpr std::array sizes = {4, 4, 2, 2, 2, 1, 4, 3};
-    u32 offset = 0;
-
-    for (u32 loc = 0; loc < 8; loc++) {
-        VertexAttribute& attribute = layout.attributes[loc];
-        attribute.binding.Assign(0);
-        attribute.location.Assign(loc);
-        attribute.offset.Assign(offset);
-        attribute.type.Assign(AttribType::Float);
-        attribute.size.Assign(sizes[loc]);
-        offset += sizes[loc] * sizeof(float);
-    }
-
-    return layout;
-}
-
 constexpr u32 VERTEX_BUFFER_SIZE = 256 * 1024 * 1024;
 constexpr u32 INDEX_BUFFER_SIZE = 16 * 1024 * 1024;
 constexpr u32 UNIFORM_BUFFER_SIZE = 16 * 1024 * 1024;
@@ -139,7 +71,8 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
         Common::AlignUp<std::size_t>(sizeof(Pica::Shader::UniformData), uniform_buffer_alignment);
 
     // Define vertex layout for software shaders
-    pipeline_info.vertex_layout = HardwareVertex::GetVertexLayout();
+    MakeSoftwareVertexLayout();
+    pipeline_info.vertex_layout = software_layout;
 
     const SamplerInfo default_sampler_info = {
         .mag_filter = Pica::TexturingRegs::TextureConfig::TextureFilter::Linear,
@@ -242,89 +175,12 @@ void RasterizerVulkan::SyncFixedState() {
     SyncDepthWriteMask();
 }
 
-/**
- * This is a helper function to resolve an issue when interpolating opposite quaternions. See below
- * for a detailed description of this issue (yuriks):
- *
- * For any rotation, there are two quaternions Q, and -Q, that represent the same rotation. If you
- * interpolate two quaternions that are opposite, instead of going from one rotation to another
- * using the shortest path, you'll go around the longest path. You can test if two quaternions are
- * opposite by checking if Dot(Q1, Q2) < 0. In that case, you can flip either of them, therefore
- * making Dot(Q1, -Q2) positive.
- *
- * This solution corrects this issue per-vertex before passing the quaternions to OpenGL. This is
- * correct for most cases but can still rotate around the long way sometimes. An implementation
- * which did `lerp(lerp(Q1, Q2), Q3)` (with proper weighting), applying the dot product check
- * between each step would work for those cases at the cost of being more complex to implement.
- *
- * Fortunately however, the 3DS hardware happens to also use this exact same logic to work around
- * these issues, making this basic implementation actually more accurate to the hardware.
- */
-static bool AreQuaternionsOpposite(Common::Vec4<Pica::float24> qa, Common::Vec4<Pica::float24> qb) {
-    Common::Vec4f a{qa.x.ToFloat32(), qa.y.ToFloat32(), qa.z.ToFloat32(), qa.w.ToFloat32()};
-    Common::Vec4f b{qb.x.ToFloat32(), qb.y.ToFloat32(), qb.z.ToFloat32(), qb.w.ToFloat32()};
-
-    return (Common::Dot(a, b) < 0.f);
-}
-
-void RasterizerVulkan::AddTriangle(const Pica::Shader::OutputVertex& v0,
-                                   const Pica::Shader::OutputVertex& v1,
-                                   const Pica::Shader::OutputVertex& v2) {
-    vertex_batch.emplace_back(v0, false);
-    vertex_batch.emplace_back(v1, AreQuaternionsOpposite(v0.quat, v1.quat));
-    vertex_batch.emplace_back(v2, AreQuaternionsOpposite(v0.quat, v2.quat));
-}
-
 static constexpr std::array vs_attrib_types = {
     AttribType::Byte,  // VertexAttributeFormat::BYTE
     AttribType::Ubyte, // VertexAttributeFormat::UBYTE
     AttribType::Short, // VertexAttributeFormat::SHORT
     AttribType::Float  // VertexAttributeFormat::FLOAT
 };
-
-struct VertexArrayInfo {
-    u32 vs_input_index_min;
-    u32 vs_input_index_max;
-    u32 vs_input_size;
-};
-
-RasterizerVulkan::VertexArrayInfo RasterizerVulkan::AnalyzeVertexArray(bool is_indexed) {
-    const auto& regs = Pica::g_state.regs;
-    const auto& vertex_attributes = regs.pipeline.vertex_attributes;
-
-    u32 vertex_min;
-    u32 vertex_max;
-    if (is_indexed) {
-        const auto& index_info = regs.pipeline.index_array;
-        const PAddr address = vertex_attributes.GetPhysicalBaseAddress() + index_info.offset;
-        const u8* index_address_8 = VideoCore::g_memory->GetPhysicalPointer(address);
-        const u16* index_address_16 = reinterpret_cast<const u16*>(index_address_8);
-        const bool index_u16 = index_info.format != 0;
-
-        vertex_min = 0xFFFF;
-        vertex_max = 0;
-        const u32 size = regs.pipeline.num_vertices * (index_u16 ? 2 : 1);
-        res_cache.FlushRegion(address, size, nullptr);
-        for (u32 index = 0; index < regs.pipeline.num_vertices; ++index) {
-            const u32 vertex = index_u16 ? index_address_16[index] : index_address_8[index];
-            vertex_min = std::min(vertex_min, vertex);
-            vertex_max = std::max(vertex_max, vertex);
-        }
-    } else {
-        vertex_min = regs.pipeline.vertex_offset;
-        vertex_max = regs.pipeline.vertex_offset + regs.pipeline.num_vertices - 1;
-    }
-
-    const u32 vertex_num = vertex_max - vertex_min + 1;
-    u32 vs_input_size = 0;
-    for (const auto& loader : vertex_attributes.attribute_loaders) {
-        if (loader.component_count != 0) {
-            vs_input_size += loader.byte_count * vertex_num;
-        }
-    }
-
-    return {vertex_min, vertex_max, vs_input_size};
-}
 
 void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min,
                                         u32 vs_input_index_max) {
@@ -877,7 +733,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         succeeded = AccelerateDrawBatchInternal(is_indexed);
     } else {
         pipeline_info.rasterization.topology.Assign(Pica::PipelineRegs::TriangleTopology::List);
-        pipeline_info.vertex_layout = HardwareVertex::GetVertexLayout();
+        pipeline_info.vertex_layout = software_layout;
         pipeline_cache.UseTrivialVertexShader();
         pipeline_cache.UseTrivialGeometryShader();
         pipeline_cache.BindPipeline(pipeline_info);
@@ -1602,6 +1458,33 @@ bool RasterizerVulkan::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
     screen_info.display_texture = &src_surface->alloc;
 
     return true;
+}
+
+void RasterizerVulkan::MakeSoftwareVertexLayout() {
+    constexpr std::array sizes = {4, 4, 2, 2, 2, 1, 4, 3};
+
+    software_layout = VertexLayout{
+        .binding_count = 1,
+        .attribute_count = 8
+    };
+
+    for (u32 i = 0; i < software_layout.binding_count; i++) {
+        VertexBinding& binding = software_layout.bindings[i];
+        binding.binding.Assign(i);
+        binding.fixed.Assign(0);
+        binding.stride.Assign(sizeof(HardwareVertex));
+    }
+
+    u32 offset = 0;
+    for (u32 i = 0; i < 8; i++) {
+        VertexAttribute& attribute = software_layout.attributes[i];
+        attribute.binding.Assign(0);
+        attribute.location.Assign(i);
+        attribute.offset.Assign(offset);
+        attribute.type.Assign(AttribType::Float);
+        attribute.size.Assign(sizes[i]);
+        offset += sizes[i] * sizeof(float);
+    }
 }
 
 vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
