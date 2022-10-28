@@ -16,8 +16,11 @@ public:
     RasterizerAccelerated();
     virtual ~RasterizerAccelerated() = default;
 
-    void UpdatePagesCachedCount(PAddr addr, u32 size, int delta) override;
+    void AddTriangle(const Pica::Shader::OutputVertex& v0,
+                     const Pica::Shader::OutputVertex& v1,
+                     const Pica::Shader::OutputVertex& v2) override;
 
+    void UpdatePagesCachedCount(PAddr addr, u32 size, int delta) override;
     void ClearAll(bool flush) override;
 
 protected:
@@ -79,7 +82,8 @@ protected:
     /// Syncs the shadow texture bias to match the PICA register
     void SyncShadowTextureBias();
 
-private:
+protected:
+    /// Structure that keeps tracks of the uniform state
     struct UniformBlockData {
         Pica::Shader::UniformData data{};
         std::array<bool, Pica::LightingRegs::NumLightingSampler> lighting_lut_dirty{};
@@ -93,8 +97,34 @@ private:
         bool dirty = true;
     };
 
+    /// Structure that the hardware rendered vertices are composed of
+    struct HardwareVertex {
+        HardwareVertex() = default;
+        HardwareVertex(const Pica::Shader::OutputVertex& v, bool flip_quaternion);
+
+        Common::Vec4f position;
+        Common::Vec4f color;
+        Common::Vec2f tex_coord0;
+        Common::Vec2f tex_coord1;
+        Common::Vec2f tex_coord2;
+        float tex_coord0_w;
+        Common::Vec4f normquat;
+        Common::Vec3f view;
+    };
+
+    struct VertexArrayInfo {
+        u32 vs_input_index_min;
+        u32 vs_input_index_max;
+        u32 vs_input_size;
+    };
+
+    /// Retrieve the range and the size of the input vertex
+    VertexArrayInfo AnalyzeVertexArray(bool is_indexed);
+
 protected:
     std::array<u16, 0x30000> cached_pages{};
+    std::vector<HardwareVertex> vertex_batch;
+    bool shader_dirty = true;
 
     UniformBlockData uniform_block_data{};
     std::array<std::array<Common::Vec2f, 256>, Pica::LightingRegs::NumLightingSampler>

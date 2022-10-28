@@ -9,7 +9,6 @@
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
-#include "video_core/shader/shader.h"
 
 namespace Frontend {
 class EmuWindow;
@@ -84,8 +83,6 @@ public:
     void LoadDiskResources(const std::atomic_bool& stop_loading,
                            const VideoCore::DiskResourceLoadCallback& callback) override;
 
-    void AddTriangle(const Pica::Shader::OutputVertex& v0, const Pica::Shader::OutputVertex& v1,
-                     const Pica::Shader::OutputVertex& v2) override;
     void DrawTriangles() override;
     void NotifyPicaRegisterChanged(u32 id) override;
     void FlushAll() override;
@@ -164,15 +161,6 @@ private:
     /// Copies vertex data performing needed convertions and casts
     void PaddedVertexCopy(u32 stride, u32 vertex_num, u8* data);
 
-    struct VertexArrayInfo {
-        u32 vs_input_index_min;
-        u32 vs_input_index_max;
-        u32 vs_input_size;
-    };
-
-    /// Retrieve the range and the size of the input vertex
-    VertexArrayInfo AnalyzeVertexArray(bool is_indexed);
-
     /// Setup vertex array for AccelerateDrawBatch
     void SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min, u32 vs_input_index_max);
 
@@ -181,6 +169,9 @@ private:
 
     /// Setup geometry shader for AccelerateDrawBatch
     bool SetupGeometryShader();
+
+    /// Creates the vertex layout struct used for software shader pipelines
+    void MakeSoftwareVertexLayout();
 
     /// Creates a new sampler object
     vk::Sampler CreateSampler(const SamplerInfo& info);
@@ -196,26 +187,8 @@ private:
     DescriptorManager& desc_manager;
     RasterizerCache res_cache;
     PipelineCache pipeline_cache;
-    bool shader_dirty = true;
 
-    /// Structure that the hardware rendered vertices are composed of
-    struct HardwareVertex {
-        HardwareVertex() = default;
-        HardwareVertex(const Pica::Shader::OutputVertex& v, bool flip_quaternion);
-
-        constexpr static VertexLayout GetVertexLayout();
-
-        Common::Vec4f position;
-        Common::Vec4f color;
-        Common::Vec2f tex_coord0;
-        Common::Vec2f tex_coord1;
-        Common::Vec2f tex_coord2;
-        float tex_coord0_w;
-        Common::Vec4f normquat;
-        Common::Vec3f view;
-    };
-
-    std::vector<HardwareVertex> vertex_batch;
+    VertexLayout software_layout;
     std::array<u64, 16> binding_offsets{};
     vk::Sampler default_sampler;
     Surface null_surface;
