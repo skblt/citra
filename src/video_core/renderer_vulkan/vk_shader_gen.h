@@ -42,77 +42,85 @@ struct TevStageConfigRaw {
 };
 
 struct PicaFSConfigState {
-    Pica::FramebufferRegs::CompareFunc alpha_test_func;
-    Pica::RasterizerRegs::ScissorMode scissor_test_mode;
-    Pica::TexturingRegs::TextureConfig::TextureType texture0_type;
-    bool texture2_use_coord1;
-    std::array<TevStageConfigRaw, 6> tev_stages;
-    u8 combiner_buffer_input;
+    union {
+        BitField<0, 3, Pica::FramebufferRegs::CompareFunc> alpha_test_func;
+        BitField<3, 2, Pica::RasterizerRegs::ScissorMode> scissor_test_mode;
+        BitField<5, 3, Pica::TexturingRegs::TextureConfig::TextureType> texture0_type;
+        BitField<8, 1, u32> texture2_use_coord1;
+        BitField<9, 8, u32> combiner_buffer_input;
+        BitField<17, 1, Pica::RasterizerRegs::DepthBuffering> depthmap_enable;
+        BitField<18, 3, Pica::TexturingRegs::FogMode> fog_mode;
+        BitField<21, 1, u32> fog_flip;
+        BitField<22, 1, u32> alphablend_enable;
+        BitField<23, 4, Pica::FramebufferRegs::LogicOp> logic_op;
+        BitField<27, 1, u32> shadow_rendering;
+        BitField<28, 1, u32> shadow_texture_orthographic;
+    };
 
-    Pica::RasterizerRegs::DepthBuffering depthmap_enable;
-    Pica::TexturingRegs::FogMode fog_mode;
-    bool fog_flip;
-    bool alphablend_enable;
-    Pica::FramebufferRegs::LogicOp logic_op;
+    std::array<TevStageConfigRaw, 6> tev_stages;
 
     struct {
-        struct {
-            unsigned num;
-            bool directional;
-            bool two_sided_diffuse;
-            bool dist_atten_enable;
-            bool spot_atten_enable;
-            bool geometric_factor_0;
-            bool geometric_factor_1;
-            bool shadow_enable;
+        union {
+            BitField<0, 3, u16> num;
+            BitField<3, 1, u16> directional;
+            BitField<4, 1, u16> two_sided_diffuse;
+            BitField<5, 1, u16> dist_atten_enable;
+            BitField<6, 1, u16> spot_atten_enable;
+            BitField<7, 1, u16> geometric_factor_0;
+            BitField<8, 1, u16> geometric_factor_1;
+            BitField<9, 1, u16> shadow_enable;
         } light[8];
 
-        bool enable;
-        unsigned src_num;
-        Pica::LightingRegs::LightingBumpMode bump_mode;
-        unsigned bump_selector;
-        bool bump_renorm;
-        bool clamp_highlights;
-
-        Pica::LightingRegs::LightingConfig config;
-        bool enable_primary_alpha;
-        bool enable_secondary_alpha;
-
-        bool enable_shadow;
-        bool shadow_primary;
-        bool shadow_secondary;
-        bool shadow_invert;
-        bool shadow_alpha;
-        unsigned shadow_selector;
+        union {
+            BitField<0, 1, u32> enable;
+            BitField<1, 4, u32> src_num;
+            BitField<5, 2, Pica::LightingRegs::LightingBumpMode> bump_mode;
+            BitField<7, 2, u32> bump_selector;
+            BitField<9, 1, u32> bump_renorm;
+            BitField<10, 1, u32> clamp_highlights;
+            BitField<11, 4, Pica::LightingRegs::LightingConfig> config;
+            BitField<15, 1, u32> enable_primary_alpha;
+            BitField<16, 1, u32> enable_secondary_alpha;
+            BitField<17, 1, u32> enable_shadow;
+            BitField<18, 1, u32> shadow_primary;
+            BitField<19, 1, u32> shadow_secondary;
+            BitField<20, 1, u32> shadow_invert;
+            BitField<21, 1, u32> shadow_alpha;
+            BitField<22, 2, u32> shadow_selector;
+        };
 
         struct {
-            bool enable;
-            bool abs_input;
-            Pica::LightingRegs::LightingLutInput type;
+            union {
+                BitField<0, 1, u32> enable;
+                BitField<1, 1, u32> abs_input;
+                BitField<2, 3, Pica::LightingRegs::LightingLutInput> type;
+            };
             float scale;
         } lut_d0, lut_d1, lut_sp, lut_fr, lut_rr, lut_rg, lut_rb;
     } lighting;
 
     struct {
-        bool enable;
-        u32 coord;
-        Pica::TexturingRegs::ProcTexClamp u_clamp, v_clamp;
-        Pica::TexturingRegs::ProcTexCombiner color_combiner, alpha_combiner;
-        bool separate_alpha;
-        bool noise_enable;
-        Pica::TexturingRegs::ProcTexShift u_shift, v_shift;
-        u32 lut_width;
-        u32 lut_offset0;
-        u32 lut_offset1;
-        u32 lut_offset2;
-        u32 lut_offset3;
-        u32 lod_min;
-        u32 lod_max;
-        Pica::TexturingRegs::ProcTexFilter lut_filter;
+        union {
+            BitField<0, 1, u32> enable;
+            BitField<1, 2, u32> coord;
+            BitField<3, 3, Pica::TexturingRegs::ProcTexClamp> u_clamp;
+            BitField<6, 3, Pica::TexturingRegs::ProcTexClamp> v_clamp;
+            BitField<9, 4, Pica::TexturingRegs::ProcTexCombiner> color_combiner;
+            BitField<13, 4, Pica::TexturingRegs::ProcTexCombiner> alpha_combiner;
+            BitField<17, 3, Pica::TexturingRegs::ProcTexFilter> lut_filter;
+            BitField<20, 1, u32> separate_alpha;
+            BitField<21, 1, u32> noise_enable;
+            BitField<22, 2, Pica::TexturingRegs::ProcTexShift> u_shift;
+            BitField<24, 2, Pica::TexturingRegs::ProcTexShift> v_shift;
+        };
+        u8 lut_width;
+        u8 lut_offset0;
+        u8 lut_offset1;
+        u8 lut_offset2;
+        u8 lut_offset3;
+        u8 lod_min;
+        u8 lod_max;
     } proctex;
-
-    bool shadow_rendering;
-    bool shadow_texture_orthographic;
 };
 
 /**
@@ -124,9 +132,7 @@ struct PicaFSConfigState {
  * two separate shaders sharing the same key.
  */
 struct PicaFSConfig : Common::HashableStruct<PicaFSConfigState> {
-
-    /// Construct a PicaFSConfig with the given Pica register configuration.
-    static PicaFSConfig BuildFromRegs(const Pica::Regs& regs);
+    PicaFSConfig(const Pica::Regs& regs);
 
     bool TevStageUpdatesCombinerBufferColor(unsigned stage_index) const {
         return (stage_index < 4) && (state.combiner_buffer_input & (1 << stage_index));
