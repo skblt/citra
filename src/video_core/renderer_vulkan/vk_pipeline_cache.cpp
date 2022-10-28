@@ -19,14 +19,12 @@ namespace Vulkan {
 
 u32 AttribBytes(VertexAttribute attrib) {
     switch (attrib.type) {
-    case AttribType::Float:
+    case Pica::PipelineRegs::VertexAttributeFormat::FLOAT:
         return sizeof(float) * attrib.size;
-    case AttribType::Int:
-        return sizeof(u32) * attrib.size;
-    case AttribType::Short:
+    case Pica::PipelineRegs::VertexAttributeFormat::SHORT:
         return sizeof(u16) * attrib.size;
-    case AttribType::Byte:
-    case AttribType::Ubyte:
+    case Pica::PipelineRegs::VertexAttributeFormat::BYTE:
+    case Pica::PipelineRegs::VertexAttributeFormat::UBYTE:
         return sizeof(u8) * attrib.size;
     }
 
@@ -35,16 +33,14 @@ u32 AttribBytes(VertexAttribute attrib) {
 
 vk::Format ToVkAttributeFormat(VertexAttribute attrib) {
     constexpr std::array attribute_formats = {
-        std::array{vk::Format::eR32Sfloat, vk::Format::eR32G32Sfloat, vk::Format::eR32G32B32Sfloat,
-                   vk::Format::eR32G32B32A32Sfloat},
-        std::array{vk::Format::eR32Sint, vk::Format::eR32G32Sint, vk::Format::eR32G32B32Sint,
-                   vk::Format::eR32G32B32A32Sint},
-        std::array{vk::Format::eR16Sint, vk::Format::eR16G16Sint, vk::Format::eR16G16B16Sint,
-                   vk::Format::eR16G16B16A16Sint},
         std::array{vk::Format::eR8Sint, vk::Format::eR8G8Sint, vk::Format::eR8G8B8Sint,
                    vk::Format::eR8G8B8A8Sint},
         std::array{vk::Format::eR8Uint, vk::Format::eR8G8Uint, vk::Format::eR8G8B8Uint,
-                   vk::Format::eR8G8B8A8Uint}};
+                   vk::Format::eR8G8B8A8Uint},
+        std::array{vk::Format::eR16Sint, vk::Format::eR16G16Sint, vk::Format::eR16G16B16Sint,
+                   vk::Format::eR16G16B16A16Sint},
+        std::array{vk::Format::eR32Sfloat, vk::Format::eR32G32Sfloat, vk::Format::eR32G32B32Sfloat,
+                   vk::Format::eR32G32B32A32Sfloat}};
 
     ASSERT(attrib.size <= 4);
     return attribute_formats[static_cast<u32>(attrib.type.Value())][attrib.size.Value() - 1];
