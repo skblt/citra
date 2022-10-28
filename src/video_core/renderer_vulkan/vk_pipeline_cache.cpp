@@ -162,8 +162,7 @@ void PipelineCache::BindPipeline(const PipelineInfo& info) {
 
         const u64 info_hash_size = instance.IsExtendedDynamicStateSupported()
                                        ? offsetof(PipelineInfo, rasterization)
-                                       : offsetof(PipelineInfo, depth_stencil) +
-                                             offsetof(DepthStencilState, stencil_reference);
+                                       : offsetof(PipelineInfo, dynamic);
 
         u64 info_hash = Common::ComputeHash64(&info, info_hash_size);
         u64 pipeline_hash = Common::HashCombine(shader_hash, info_hash);
@@ -234,7 +233,7 @@ void PipelineCache::UseTrivialGeometryShader() {
 }
 
 void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
-    const PicaFSConfig config = PicaFSConfig::BuildFromRegs(regs);
+    const PicaFSConfig config{regs};
 
     scheduler.Record([this, config](vk::CommandBuffer, vk::CommandBuffer) {
         auto [handle, result] = fragment_shaders.Get(config, vk::ShaderStageFlagBits::eFragment,
@@ -301,23 +300,28 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
 
     PipelineInfo current = current_info;
     scheduler.Record([this, info, is_dirty, current](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        if (info.depth_stencil.stencil_compare_mask !=
-                current.depth_stencil.stencil_compare_mask ||
+        if (info.dynamic.stencil_compare_mask !=
+                current.dynamic.stencil_compare_mask ||
             is_dirty) {
             render_cmdbuf.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                                 info.depth_stencil.stencil_compare_mask);
+                                                 info.dynamic.stencil_compare_mask);
         }
 
-        if (info.depth_stencil.stencil_write_mask != current.depth_stencil.stencil_write_mask ||
+        if (info.dynamic.stencil_write_mask != current.dynamic.stencil_write_mask ||
             is_dirty) {
             render_cmdbuf.setStencilWriteMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                               info.depth_stencil.stencil_write_mask);
+                                               info.dynamic.stencil_write_mask);
         }
 
-        if (info.depth_stencil.stencil_reference != current.depth_stencil.stencil_reference ||
+        if (info.dynamic.stencil_reference != current.dynamic.stencil_reference ||
             is_dirty) {
             render_cmdbuf.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
-                                               info.depth_stencil.stencil_reference);
+                                               info.dynamic.stencil_reference);
+        }
+
+        if (info.dynamic.blend_color != current.dynamic.blend_color || is_dirty) {
+            const Common::Vec4f color = PicaToVK::ColorRGBA8(info.dynamic.blend_color);
+            render_cmdbuf.setBlendConstants(color.AsArray());
         }
 
         if (instance.IsExtendedDynamicStateSupported()) {

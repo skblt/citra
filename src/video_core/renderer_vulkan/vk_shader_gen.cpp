@@ -8,6 +8,7 @@
 #include "common/logging/log.h"
 #include "core/core.h"
 #include "video_core/pica_state.h"
+#include "video_core/regs_framebuffer.h"
 #include "video_core/renderer_opengl/gl_shader_decompiler.h"
 #include "video_core/renderer_vulkan/vk_shader_gen.h"
 #include "video_core/video_core.h"
@@ -99,25 +100,21 @@ out gl_PerVertex {
     return out;
 }
 
-PicaFSConfig PicaFSConfig::BuildFromRegs(const Pica::Regs& regs) {
-    PicaFSConfig res{};
+PicaFSConfig::PicaFSConfig(const Pica::Regs& regs) {
+    state.scissor_test_mode.Assign(regs.rasterizer.scissor_test.mode);
 
-    auto& state = res.state;
+    state.depthmap_enable.Assign(regs.rasterizer.depthmap_enable);
 
-    state.scissor_test_mode = regs.rasterizer.scissor_test.mode;
-
-    state.depthmap_enable = regs.rasterizer.depthmap_enable;
-
-    state.alpha_test_func = regs.framebuffer.output_merger.alpha_test.enable
+    state.alpha_test_func.Assign(regs.framebuffer.output_merger.alpha_test.enable
                                 ? regs.framebuffer.output_merger.alpha_test.func.Value()
-                                : FramebufferRegs::CompareFunc::Always;
+                                : FramebufferRegs::CompareFunc::Always);
 
-    state.texture0_type = regs.texturing.texture0.type;
+    state.texture0_type.Assign(regs.texturing.texture0.type);
 
-    state.texture2_use_coord1 = regs.texturing.main_config.texture2_use_coord1 != 0;
+    state.texture2_use_coord1.Assign(regs.texturing.main_config.texture2_use_coord1 != 0);
 
-    state.alphablend_enable = {};
-    state.logic_op = {};
+    state.alphablend_enable.Assign(0);
+    state.logic_op.Assign(Pica::FramebufferRegs::LogicOp::Clear);
 
     // Copy relevant tev stages fields.
     // We don't sync const_color here because of the high variance, it is a
@@ -132,95 +129,95 @@ PicaFSConfig PicaFSConfig::BuildFromRegs(const Pica::Regs& regs) {
         state.tev_stages[i].scales_raw = tev_stage.scales_raw;
     }
 
-    state.fog_mode = regs.texturing.fog_mode;
-    state.fog_flip = regs.texturing.fog_flip != 0;
+    state.fog_mode.Assign(regs.texturing.fog_mode);
+    state.fog_flip.Assign(regs.texturing.fog_flip != 0);
 
-    state.combiner_buffer_input = regs.texturing.tev_combiner_buffer_input.update_mask_rgb.Value() |
+    state.combiner_buffer_input.Assign(regs.texturing.tev_combiner_buffer_input.update_mask_rgb.Value() |
                                   regs.texturing.tev_combiner_buffer_input.update_mask_a.Value()
-                                      << 4;
+                                      << 4);
 
     // Fragment lighting
 
-    state.lighting.enable = !regs.lighting.disable;
-    state.lighting.src_num = regs.lighting.max_light_index + 1;
+    state.lighting.enable.Assign(!regs.lighting.disable);
+    state.lighting.src_num.Assign(regs.lighting.max_light_index + 1);
 
-    for (unsigned light_index = 0; light_index < state.lighting.src_num; ++light_index) {
-        unsigned num = regs.lighting.light_enable.GetNum(light_index);
+    for (u32 light_index = 0; light_index < state.lighting.src_num; ++light_index) {
+        u32 num = regs.lighting.light_enable.GetNum(light_index);
         const auto& light = regs.lighting.light[num];
-        state.lighting.light[light_index].num = num;
-        state.lighting.light[light_index].directional = light.config.directional != 0;
-        state.lighting.light[light_index].two_sided_diffuse = light.config.two_sided_diffuse != 0;
-        state.lighting.light[light_index].geometric_factor_0 = light.config.geometric_factor_0 != 0;
-        state.lighting.light[light_index].geometric_factor_1 = light.config.geometric_factor_1 != 0;
-        state.lighting.light[light_index].dist_atten_enable =
-            !regs.lighting.IsDistAttenDisabled(num);
-        state.lighting.light[light_index].spot_atten_enable =
-            !regs.lighting.IsSpotAttenDisabled(num);
-        state.lighting.light[light_index].shadow_enable = !regs.lighting.IsShadowDisabled(num);
+        state.lighting.light[light_index].num.Assign(num);
+        state.lighting.light[light_index].directional.Assign(light.config.directional != 0);
+        state.lighting.light[light_index].two_sided_diffuse.Assign(light.config.two_sided_diffuse != 0);
+        state.lighting.light[light_index].geometric_factor_0.Assign(light.config.geometric_factor_0 != 0);
+        state.lighting.light[light_index].geometric_factor_1.Assign(light.config.geometric_factor_1 != 0);
+        state.lighting.light[light_index].dist_atten_enable.Assign(
+            !regs.lighting.IsDistAttenDisabled(num));
+        state.lighting.light[light_index].spot_atten_enable.Assign(
+            !regs.lighting.IsSpotAttenDisabled(num));
+        state.lighting.light[light_index].shadow_enable.Assign(!regs.lighting.IsShadowDisabled(num));
     }
 
-    state.lighting.lut_d0.enable = regs.lighting.config1.disable_lut_d0 == 0;
-    state.lighting.lut_d0.abs_input = regs.lighting.abs_lut_input.disable_d0 == 0;
-    state.lighting.lut_d0.type = regs.lighting.lut_input.d0.Value();
+    state.lighting.lut_d0.enable.Assign(regs.lighting.config1.disable_lut_d0 == 0);
+    state.lighting.lut_d0.abs_input.Assign(regs.lighting.abs_lut_input.disable_d0 == 0);
+    state.lighting.lut_d0.type.Assign(regs.lighting.lut_input.d0.Value());
     state.lighting.lut_d0.scale = regs.lighting.lut_scale.GetScale(regs.lighting.lut_scale.d0);
 
-    state.lighting.lut_d1.enable = regs.lighting.config1.disable_lut_d1 == 0;
-    state.lighting.lut_d1.abs_input = regs.lighting.abs_lut_input.disable_d1 == 0;
-    state.lighting.lut_d1.type = regs.lighting.lut_input.d1.Value();
+    state.lighting.lut_d1.enable.Assign(regs.lighting.config1.disable_lut_d1 == 0);
+    state.lighting.lut_d1.abs_input.Assign(regs.lighting.abs_lut_input.disable_d1 == 0);
+    state.lighting.lut_d1.type.Assign(regs.lighting.lut_input.d1.Value());
     state.lighting.lut_d1.scale = regs.lighting.lut_scale.GetScale(regs.lighting.lut_scale.d1);
 
     // this is a dummy field due to lack of the corresponding register
-    state.lighting.lut_sp.enable = true;
-    state.lighting.lut_sp.abs_input = regs.lighting.abs_lut_input.disable_sp == 0;
-    state.lighting.lut_sp.type = regs.lighting.lut_input.sp.Value();
+    state.lighting.lut_sp.enable.Assign(1);
+    state.lighting.lut_sp.abs_input.Assign(regs.lighting.abs_lut_input.disable_sp == 0);
+    state.lighting.lut_sp.type.Assign(regs.lighting.lut_input.sp.Value());
     state.lighting.lut_sp.scale = regs.lighting.lut_scale.GetScale(regs.lighting.lut_scale.sp);
 
-    state.lighting.lut_fr.enable = regs.lighting.config1.disable_lut_fr == 0;
-    state.lighting.lut_fr.abs_input = regs.lighting.abs_lut_input.disable_fr == 0;
-    state.lighting.lut_fr.type = regs.lighting.lut_input.fr.Value();
+    state.lighting.lut_fr.enable.Assign(regs.lighting.config1.disable_lut_fr == 0);
+    state.lighting.lut_fr.abs_input.Assign(regs.lighting.abs_lut_input.disable_fr == 0);
+    state.lighting.lut_fr.type.Assign(regs.lighting.lut_input.fr.Value());
     state.lighting.lut_fr.scale = regs.lighting.lut_scale.GetScale(regs.lighting.lut_scale.fr);
 
-    state.lighting.lut_rr.enable = regs.lighting.config1.disable_lut_rr == 0;
-    state.lighting.lut_rr.abs_input = regs.lighting.abs_lut_input.disable_rr == 0;
-    state.lighting.lut_rr.type = regs.lighting.lut_input.rr.Value();
+    state.lighting.lut_rr.enable.Assign(regs.lighting.config1.disable_lut_rr == 0);
+    state.lighting.lut_rr.abs_input.Assign(regs.lighting.abs_lut_input.disable_rr == 0);
+    state.lighting.lut_rr.type.Assign(regs.lighting.lut_input.rr.Value());
     state.lighting.lut_rr.scale = regs.lighting.lut_scale.GetScale(regs.lighting.lut_scale.rr);
 
-    state.lighting.lut_rg.enable = regs.lighting.config1.disable_lut_rg == 0;
-    state.lighting.lut_rg.abs_input = regs.lighting.abs_lut_input.disable_rg == 0;
-    state.lighting.lut_rg.type = regs.lighting.lut_input.rg.Value();
+    state.lighting.lut_rg.enable.Assign(regs.lighting.config1.disable_lut_rg == 0);
+    state.lighting.lut_rg.abs_input.Assign(regs.lighting.abs_lut_input.disable_rg == 0);
+    state.lighting.lut_rg.type.Assign(regs.lighting.lut_input.rg.Value());
     state.lighting.lut_rg.scale = regs.lighting.lut_scale.GetScale(regs.lighting.lut_scale.rg);
 
-    state.lighting.lut_rb.enable = regs.lighting.config1.disable_lut_rb == 0;
-    state.lighting.lut_rb.abs_input = regs.lighting.abs_lut_input.disable_rb == 0;
-    state.lighting.lut_rb.type = regs.lighting.lut_input.rb.Value();
+    state.lighting.lut_rb.enable.Assign(regs.lighting.config1.disable_lut_rb == 0);
+    state.lighting.lut_rb.abs_input.Assign(regs.lighting.abs_lut_input.disable_rb == 0);
+    state.lighting.lut_rb.type.Assign(regs.lighting.lut_input.rb.Value());
     state.lighting.lut_rb.scale = regs.lighting.lut_scale.GetScale(regs.lighting.lut_scale.rb);
 
-    state.lighting.config = regs.lighting.config0.config;
-    state.lighting.enable_primary_alpha = regs.lighting.config0.enable_primary_alpha;
-    state.lighting.enable_secondary_alpha = regs.lighting.config0.enable_secondary_alpha;
-    state.lighting.bump_mode = regs.lighting.config0.bump_mode;
-    state.lighting.bump_selector = regs.lighting.config0.bump_selector;
-    state.lighting.bump_renorm = regs.lighting.config0.disable_bump_renorm == 0;
-    state.lighting.clamp_highlights = regs.lighting.config0.clamp_highlights != 0;
+    state.lighting.config.Assign(regs.lighting.config0.config);
+    state.lighting.enable_primary_alpha.Assign(regs.lighting.config0.enable_primary_alpha);
+    state.lighting.enable_secondary_alpha.Assign(regs.lighting.config0.enable_secondary_alpha);
+    state.lighting.bump_mode.Assign(regs.lighting.config0.bump_mode);
+    state.lighting.bump_selector.Assign(regs.lighting.config0.bump_selector);
+    state.lighting.bump_renorm.Assign(regs.lighting.config0.disable_bump_renorm == 0);
+    state.lighting.clamp_highlights.Assign(regs.lighting.config0.clamp_highlights != 0);
 
-    state.lighting.enable_shadow = regs.lighting.config0.enable_shadow != 0;
-    state.lighting.shadow_primary = regs.lighting.config0.shadow_primary != 0;
-    state.lighting.shadow_secondary = regs.lighting.config0.shadow_secondary != 0;
-    state.lighting.shadow_invert = regs.lighting.config0.shadow_invert != 0;
-    state.lighting.shadow_alpha = regs.lighting.config0.shadow_alpha != 0;
-    state.lighting.shadow_selector = regs.lighting.config0.shadow_selector;
+    state.lighting.enable_shadow.Assign(regs.lighting.config0.enable_shadow != 0);
+    state.lighting.shadow_primary.Assign(regs.lighting.config0.shadow_primary != 0);
+    state.lighting.shadow_secondary.Assign(regs.lighting.config0.shadow_secondary != 0);
+    state.lighting.shadow_invert.Assign(regs.lighting.config0.shadow_invert != 0);
+    state.lighting.shadow_alpha.Assign(regs.lighting.config0.shadow_alpha != 0);
+    state.lighting.shadow_selector.Assign(regs.lighting.config0.shadow_selector);
 
-    state.proctex.enable = regs.texturing.main_config.texture3_enable;
+    state.proctex.enable.Assign(regs.texturing.main_config.texture3_enable);
     if (state.proctex.enable) {
-        state.proctex.coord = regs.texturing.main_config.texture3_coordinates;
-        state.proctex.u_clamp = regs.texturing.proctex.u_clamp;
-        state.proctex.v_clamp = regs.texturing.proctex.v_clamp;
-        state.proctex.color_combiner = regs.texturing.proctex.color_combiner;
-        state.proctex.alpha_combiner = regs.texturing.proctex.alpha_combiner;
-        state.proctex.separate_alpha = regs.texturing.proctex.separate_alpha;
-        state.proctex.noise_enable = regs.texturing.proctex.noise_enable;
-        state.proctex.u_shift = regs.texturing.proctex.u_shift;
-        state.proctex.v_shift = regs.texturing.proctex.v_shift;
+        state.proctex.coord.Assign(regs.texturing.main_config.texture3_coordinates);
+        state.proctex.u_clamp.Assign(regs.texturing.proctex.u_clamp);
+        state.proctex.v_clamp.Assign(regs.texturing.proctex.v_clamp);
+        state.proctex.color_combiner.Assign(regs.texturing.proctex.color_combiner);
+        state.proctex.alpha_combiner.Assign(regs.texturing.proctex.alpha_combiner);
+        state.proctex.separate_alpha.Assign(regs.texturing.proctex.separate_alpha);
+        state.proctex.noise_enable.Assign(regs.texturing.proctex.noise_enable);
+        state.proctex.u_shift.Assign(regs.texturing.proctex.u_shift);
+        state.proctex.v_shift.Assign(regs.texturing.proctex.v_shift);
         state.proctex.lut_width = regs.texturing.proctex_lut.width;
         state.proctex.lut_offset0 = regs.texturing.proctex_lut_offset.level0;
         state.proctex.lut_offset1 = regs.texturing.proctex_lut_offset.level1;
@@ -228,16 +225,15 @@ PicaFSConfig PicaFSConfig::BuildFromRegs(const Pica::Regs& regs) {
         state.proctex.lut_offset3 = regs.texturing.proctex_lut_offset.level3;
         state.proctex.lod_min = regs.texturing.proctex_lut.lod_min;
         state.proctex.lod_max = regs.texturing.proctex_lut.lod_max;
-        state.proctex.lut_filter = regs.texturing.proctex_lut.filter;
+        state.proctex.lut_filter.Assign(regs.texturing.proctex_lut.filter);
     }
 
-    state.shadow_rendering = regs.framebuffer.output_merger.fragment_operation_mode ==
-                             FramebufferRegs::FragmentOperationMode::Shadow;
+    state.shadow_rendering.Assign(regs.framebuffer.output_merger.fragment_operation_mode ==
+                             FramebufferRegs::FragmentOperationMode::Shadow);
 
-    state.shadow_texture_orthographic = regs.texturing.shadow.orthographic != 0;
-
-    return res;
+    state.shadow_texture_orthographic.Assign(regs.texturing.shadow.orthographic != 0);
 }
+
 
 void PicaShaderConfigCommon::Init(const Pica::ShaderRegs& regs, Pica::Shader::ShaderSetup& setup) {
     program_hash = setup.GetProgramCodeHash();
