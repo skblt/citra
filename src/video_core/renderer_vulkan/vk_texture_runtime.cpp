@@ -659,7 +659,7 @@ void Surface::Transition(vk::ImageLayout new_layout, u32 level, u32 level_count)
     runtime.Transition(alloc, new_layout, level, level_count);
 }
 
-MICROPROFILE_DEFINE(Vulkan_Upload, "VulkanSurface", "Texture Upload", MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(Vulkan_Upload, "Vulkan", "Texture Upload", MP_RGB(128, 192, 64));
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
     MICROPROFILE_SCOPE(Vulkan_Upload);
 
@@ -715,7 +715,7 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
     InvalidateAllWatcher();
 }
 
-MICROPROFILE_DEFINE(Vulkan_Download, "VulkanSurface", "Texture Download", MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(Vulkan_Download, "Vulkan", "Texture Download", MP_RGB(128, 192, 64));
 void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
     MICROPROFILE_SCOPE(Vulkan_Download);
 

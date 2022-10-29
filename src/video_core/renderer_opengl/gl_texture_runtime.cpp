@@ -370,7 +370,7 @@ Surface::~Surface() {
     }
 }
 
-MICROPROFILE_DEFINE(OpenGL_Upload, "OpenGLSurface", "Texture Upload", MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(OpenGL_Upload, "OpenGL", "Texture Upload", MP_RGB(128, 192, 64));
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingBuffer& staging) {
     MICROPROFILE_SCOPE(OpenGL_Upload);
 
@@ -404,7 +404,7 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingBu
     InvalidateAllWatcher();
 }
 
-MICROPROFILE_DEFINE(OpenGL_Download, "OpenGLSurface", "Texture Download", MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(OpenGL_Download, "OpenGL", "Texture Download", MP_RGB(128, 192, 64));
 void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingBuffer& staging) {
     MICROPROFILE_SCOPE(OpenGL_Download);
 
