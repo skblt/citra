@@ -163,7 +163,6 @@ void StreamBuffer::Flush() {
     ASSERT(flush_offset + flush_size <= total_size);
 
     if (flush_size > 0) [[likely]] {
-        // Ensure all staging writes are visible to the host memory domain
         VmaAllocator allocator = instance.GetAllocator();
         vmaFlushAllocation(allocator, staging.allocation, flush_offset, flush_size);
         if (gpu_buffer) {
@@ -202,7 +201,6 @@ void StreamBuffer::Invalidate() {
     ASSERT(flush_offset + flush_size <= total_size);
 
     if (flush_size > 0) [[likely]] {
-        // Ensure the staging memory can be read by the host
         VmaAllocator allocator = instance.GetAllocator();
         vmaInvalidateAllocation(allocator, staging.allocation, flush_offset, flush_size);
         flush_offset = buffer_offset;

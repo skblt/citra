@@ -900,7 +900,6 @@ void RendererVulkan::SwapBuffers() {
         if (swapchain.NeedsRecreation()) {
             RecreateSwapchain();
         }
-        scheduler.WaitWorker();
         swapchain.AcquireNextImage();
     } while (swapchain.NeedsRecreation());
 
@@ -929,9 +928,8 @@ void RendererVulkan::SwapBuffers() {
     DrawScreens(layout, false);
 
     const vk::Semaphore image_acquired = swapchain.GetImageAcquiredSemaphore();
-    const VkSemaphore present_ready = swapchain.GetPresentReadySemaphore();
+    const vk::Semaphore present_ready = swapchain.GetPresentReadySemaphore();
     scheduler.Flush(present_ready, image_acquired);
-    //scheduler.WaitWorker();
     swapchain.Present();
 
     m_current_frame++;
