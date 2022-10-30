@@ -8,6 +8,7 @@
 #include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
+#include "video_core/renderer_opengl/gl_stream_buffer.h"
 #include "video_core/renderer_opengl/texture_downloader_es.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
 
@@ -19,35 +20,11 @@ struct FormatTuple {
     GLenum type;
 };
 
-struct StagingBuffer {
-    OGLBuffer buffer{};
-    mutable OGLSync buffer_lock{};
-    mutable std::span<std::byte> mapped{};
-    u32 size{};
-
-    bool operator<(const StagingBuffer& other) const {
-        return size < other.size;
-    }
-
-    /// Returns true if the buffer does not take part in pending transfer operations
-    bool IsFree() const {
-        if (buffer_lock) {
-            GLint status;
-            glGetSynciv(buffer_lock.handle, GL_SYNC_STATUS, 1, nullptr, &status);
-            return status == GL_SIGNALED;
-        }
-
-        return true;
-    }
-
-    /// Prevents the runtime from reusing the buffer until the transfer operation is complete
-    void Lock() const {
-        if (buffer_lock) {
-            buffer_lock.Release();
-        }
-
-        buffer_lock.Create();
-    }
+struct StagingData {
+    GLuint buffer;
+    u32 size = 0;
+    std::span<std::byte> mapped{};
+    GLintptr buffer_offset = 0;
 };
 
 class Driver;
@@ -65,7 +42,7 @@ public:
     ~TextureRuntime() = default;
 
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
-    const StagingBuffer& FindStaging(u32 size, bool upload);
+    StagingData FindStaging(u32 size, bool upload);
 
     /// Returns the OpenGL format tuple associated with the provided pixel format
     const FormatTuple& GetFormatTuple(VideoCore::PixelFormat pixel_format);
@@ -122,17 +99,12 @@ private:
 
 private:
     Driver& driver;
-    TextureDownloaderES downloader_es;
     TextureFilterer filterer;
+    TextureDownloaderES downloader_es;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
-
-    // Staging buffers stored in increasing size
-    std::multiset<StagingBuffer> upload_buffers;
-    std::multiset<StagingBuffer> download_buffers;
-    OGLFramebuffer read_fbo, draw_fbo;
-
-    // Recycled textures to reduce driver allocation overhead
     std::unordered_multimap<VideoCore::HostTextureTag, OGLTexture> texture_recycler;
+    OGLStreamBuffer upload_buffer, download_buffer;
+    OGLFramebuffer read_fbo, draw_fbo;
 };
 
 class Surface : public VideoCore::SurfaceBase<Surface> {
@@ -141,10 +113,10 @@ public:
     ~Surface() override;
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture
-    void Upload(const VideoCore::BufferTextureCopy& upload, const StagingBuffer& staging);
+    void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
 
     /// Downloads pixel data to staging from a rectangle region of the surface texture
-    void Download(const VideoCore::BufferTextureCopy& download, const StagingBuffer& staging);
+    void Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging);
 
     /// Returns the bpp of the internal surface format
     u32 GetInternalBytesPerPixel() const {
@@ -153,10 +125,10 @@ public:
 
 private:
     /// Uploads pixel data to scaled texture
-    void ScaledUpload(const VideoCore::BufferTextureCopy& upload, const StagingBuffer& staging);
+    void ScaledUpload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
 
     /// Downloads scaled image by downscaling the requested rectangle
-    void ScaledDownload(const VideoCore::BufferTextureCopy& download);
+    void ScaledDownload(const VideoCore::BufferTextureCopy& download, const StagingData& staging);
 
 private:
     TextureRuntime& runtime;
