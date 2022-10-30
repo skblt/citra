@@ -283,6 +283,8 @@ void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::spa
             return Pica::Texture::ConvertABGRToRGBA(source, dest);
         case VideoCore::PixelFormat::RGB8:
             return Pica::Texture::ConvertBGRToRGBA(source, dest);
+        case VideoCore::PixelFormat::RGBA4:
+            return Pica::Texture::ConvertRGBA4ToRGBA8(source, dest);
         default:
             break;
         }
