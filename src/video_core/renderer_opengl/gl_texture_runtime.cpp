@@ -36,7 +36,7 @@ static constexpr std::array COLOR_TUPLES_OES = {
     FormatTuple{GL_RGBA4, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4},   // RGBA4
 };
 
-GLbitfield MakeBufferMask(VideoCore::SurfaceType type) {
+[[nodiscard]] GLbitfield MakeBufferMask(VideoCore::SurfaceType type) {
     switch (type) {
     case VideoCore::SurfaceType::Color:
     case VideoCore::SurfaceType::Texture:
@@ -53,9 +53,13 @@ GLbitfield MakeBufferMask(VideoCore::SurfaceType type) {
     return GL_COLOR_BUFFER_BIT;
 }
 
+constexpr u32 UPLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
+constexpr u32 DOWNLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
+
 TextureRuntime::TextureRuntime(Driver& driver)
-    : driver{driver}, downloader_es{false}, filterer{Settings::values.texture_filter_name,
-                                                     VideoCore::GetResolutionScaleFactor()} {
+    : driver{driver}, filterer{Settings::values.texture_filter_name, VideoCore::GetResolutionScaleFactor()},
+      downloader_es{false}, upload_buffer{GL_PIXEL_UNPACK_BUFFER, UPLOAD_BUFFER_SIZE},
+      download_buffer{GL_PIXEL_PACK_BUFFER, DOWNLOAD_BUFFER_SIZE, true}  {
 
     read_fbo.Create();
     draw_fbo.Create();
@@ -70,51 +74,14 @@ TextureRuntime::TextureRuntime(Driver& driver)
     Register(VideoCore::PixelFormat::RGB5A1, std::make_unique<RGBA4toRGB5A1>());
 }
 
-const StagingBuffer& TextureRuntime::FindStaging(u32 size, bool upload) {
-    const GLenum target = upload ? GL_PIXEL_UNPACK_BUFFER : GL_PIXEL_PACK_BUFFER;
-    const GLbitfield access = upload ? GL_MAP_WRITE_BIT : GL_MAP_READ_BIT;
-    auto& search = upload ? upload_buffers : download_buffers;
+StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
+    auto& buffer = upload ? upload_buffer : download_buffer;
+    auto [data, offset, invalidate] = buffer.Map(size, 4);
 
-    // Attempt to find a free buffer that fits the requested data
-    for (auto it = search.lower_bound({.size = size}); it != search.end(); it++) {
-        if (!upload || it->IsFree()) {
-            it->mapped = std::span{it->mapped.data(), size};
-            return *it;
-        }
-    }
-
-    OGLBuffer buffer{};
-    buffer.Create();
-
-    glBindBuffer(target, buffer.handle);
-
-    // Allocate a new buffer and map the data to the host
-    std::byte* data = nullptr;
-    if (driver.IsOpenGLES() && driver.HasExtBufferStorage()) {
-        const GLbitfield storage =
-            upload ? GL_MAP_WRITE_BIT : GL_MAP_READ_BIT | GL_CLIENT_STORAGE_BIT_EXT;
-        glBufferStorageEXT(target, size, nullptr,
-                           storage | GL_MAP_PERSISTENT_BIT_EXT | GL_MAP_COHERENT_BIT_EXT);
-        data = reinterpret_cast<std::byte*>(glMapBufferRange(
-            target, 0, size, access | GL_MAP_PERSISTENT_BIT_EXT | GL_MAP_COHERENT_BIT_EXT));
-    } else if (driver.HasArbBufferStorage()) {
-        const GLbitfield storage =
-            upload ? GL_MAP_WRITE_BIT : GL_MAP_READ_BIT | GL_CLIENT_STORAGE_BIT;
-        glBufferStorage(target, size, nullptr,
-                        storage | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
-        data = reinterpret_cast<std::byte*>(glMapBufferRange(
-            target, 0, size, access | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT));
-    } else {
-        UNIMPLEMENTED();
-    }
-
-    glBindBuffer(target, 0);
-
-    StagingBuffer staging = {
-        .buffer = std::move(buffer), .mapped = std::span{data, size}, .size = size};
-
-    const auto& it = search.emplace(std::move(staging));
-    return *it;
+    return StagingData{.buffer = buffer.GetHandle(),
+                       .size = size,
+                       .mapped = std::span<std::byte>{reinterpret_cast<std::byte*>(data), size},
+                       .buffer_offset = offset};
 }
 
 const FormatTuple& TextureRuntime::GetFormatTuple(VideoCore::PixelFormat pixel_format) {
@@ -371,41 +338,40 @@ Surface::~Surface() {
 }
 
 MICROPROFILE_DEFINE(OpenGL_Upload, "OpenGL", "Texture Upload", MP_RGB(128, 192, 64));
-void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingBuffer& staging) {
+void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
     MICROPROFILE_SCOPE(OpenGL_Upload);
 
     // Ensure no bad interactions with GL_UNPACK_ALIGNMENT
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
 
-    OpenGLState prev_state = OpenGLState::GetCurState();
-    SCOPE_EXIT({ prev_state.Apply(); });
-
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(stride));
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, staging.buffer.handle);
-
     const bool is_scaled = res_scale != 1;
     if (is_scaled) {
         ScaledUpload(upload, staging);
     } else {
+        OpenGLState prev_state = OpenGLState::GetCurState();
+        SCOPE_EXIT({ prev_state.Apply(); });
+
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(stride));
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, staging.buffer);
+
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture.handle);
 
         const auto& tuple = runtime.GetFormatTuple(pixel_format);
         glTexSubImage2D(GL_TEXTURE_2D, upload.texture_level, upload.texture_rect.left,
                         upload.texture_rect.bottom, upload.texture_rect.GetWidth(),
-                        upload.texture_rect.GetHeight(), tuple.format, tuple.type, 0);
+                        upload.texture_rect.GetHeight(), tuple.format, tuple.type,
+                        reinterpret_cast<void*>(staging.buffer_offset));
+
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        runtime.upload_buffer.Unmap(staging.size);
     }
 
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-
-    // Lock the staging buffer until glTexSubImage completes
-    staging.Lock();
     InvalidateAllWatcher();
 }
 
 MICROPROFILE_DEFINE(OpenGL_Download, "OpenGL", "Texture Download", MP_RGB(128, 192, 64));
-void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingBuffer& staging) {
+void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
     MICROPROFILE_SCOPE(OpenGL_Download);
 
     // Ensure no bad interactions with GL_PACK_ALIGNMENT
@@ -415,11 +381,11 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
     SCOPE_EXIT({ prev_state.Apply(); });
 
     glPixelStorei(GL_PACK_ROW_LENGTH, static_cast<GLint>(stride));
-    glBindBuffer(GL_PIXEL_PACK_BUFFER, staging.buffer.handle);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, staging.buffer);
 
     const bool is_scaled = res_scale != 1;
     if (is_scaled) {
-        ScaledDownload(download);
+        ScaledDownload(download, staging);
     } else {
         runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, download.texture_level, GL_TEXTURE_2D, type,
                                 texture);
@@ -427,15 +393,17 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
         const auto& tuple = runtime.GetFormatTuple(pixel_format);
         glReadPixels(download.texture_rect.left, download.texture_rect.bottom,
                      download.texture_rect.GetWidth(), download.texture_rect.GetHeight(),
-                     tuple.format, tuple.type, 0);
+                     tuple.format, tuple.type,
+                     reinterpret_cast<void*>(staging.buffer_offset));
+
+        runtime.download_buffer.Unmap(staging.size);
     }
 
-    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     glPixelStorei(GL_PACK_ROW_LENGTH, 0);
 }
 
 void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload,
-                           const StagingBuffer& staging) {
+                           const StagingData& staging) {
     const u32 rect_width = upload.texture_rect.GetWidth();
     const u32 rect_height = upload.texture_rect.GetHeight();
     const auto scaled_rect = upload.texture_rect * res_scale;
@@ -468,7 +436,7 @@ void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload,
     }
 }
 
-void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download) {
+void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
     const u32 rect_width = download.texture_rect.GetWidth();
     const u32 rect_height = download.texture_rect.GetHeight();
     const VideoCore::Rect2D scaled_rect = download.texture_rect * res_scale;
@@ -498,11 +466,14 @@ void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download) {
     const auto& tuple = runtime.GetFormatTuple(pixel_format);
     if (driver.IsOpenGLES()) {
         const auto& downloader_es = runtime.GetDownloaderES();
-        downloader_es.GetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, rect_height,
-                                  rect_width, 0);
+        downloader_es.GetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, rect_height, rect_width,
+                                  reinterpret_cast<void*>(staging.buffer_offset));
     } else {
-        glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, 0);
+        glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type,
+                      reinterpret_cast<void*>(staging.buffer_offset));
     }
+
+    runtime.download_buffer.Unmap(staging.size);
 }
 
 } // namespace OpenGL

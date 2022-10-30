@@ -908,7 +908,7 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
 
     MICROPROFILE_SCOPE(RasterizerCache_SurfaceLoad);
 
-    const auto& staging = runtime.FindStaging(
+    const auto staging = runtime.FindStaging(
         load_info.width * load_info.height * surface->GetInternalBytesPerPixel(), true);
     MemoryRef source_ptr = VideoCore::g_memory->GetPhysicalRef(load_info.addr);
     if (!source_ptr) [[unlikely]] {
@@ -939,7 +939,7 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
     const u32 flush_end = boost::icl::last_next(interval);
     ASSERT(flush_start >= surface->addr && flush_end <= surface->end);
 
-    const auto& staging = runtime.FindStaging(
+    const auto staging = runtime.FindStaging(
         flush_info.width * flush_info.height * surface->GetInternalBytesPerPixel(), false);
     const BufferTextureCopy download = {.buffer_offset = 0,
                                         .buffer_size = staging.size,
