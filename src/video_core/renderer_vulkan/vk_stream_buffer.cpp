@@ -14,30 +14,40 @@
 
 namespace Vulkan {
 
-inline auto ToVkAccessStageFlags(vk::BufferUsageFlagBits usage) {
-    std::pair<vk::AccessFlags, vk::PipelineStageFlags> result{};
+[[nodiscard]] vk::AccessFlags MakeAccessFlags(vk::BufferUsageFlagBits usage) {
     switch (usage) {
     case vk::BufferUsageFlagBits::eVertexBuffer:
-        result = std::make_pair(vk::AccessFlagBits::eVertexAttributeRead,
-                                vk::PipelineStageFlagBits::eVertexInput);
-        break;
+        return vk::AccessFlagBits::eVertexAttributeRead;
     case vk::BufferUsageFlagBits::eIndexBuffer:
-        result =
-            std::make_pair(vk::AccessFlagBits::eIndexRead, vk::PipelineStageFlagBits::eVertexInput);
+        return vk::AccessFlagBits::eIndexRead;
     case vk::BufferUsageFlagBits::eUniformBuffer:
-        result = std::make_pair(vk::AccessFlagBits::eUniformRead,
-                                vk::PipelineStageFlagBits::eVertexShader |
-                                    vk::PipelineStageFlagBits::eGeometryShader |
-                                    vk::PipelineStageFlagBits::eFragmentShader);
+        return vk::AccessFlagBits::eUniformRead;
     case vk::BufferUsageFlagBits::eUniformTexelBuffer:
-        result = std::make_pair(vk::AccessFlagBits::eShaderRead,
-                                vk::PipelineStageFlagBits::eFragmentShader);
-        break;
+        return vk::AccessFlagBits::eShaderRead;
     default:
         LOG_CRITICAL(Render_Vulkan, "Unknown usage flag {}", usage);
+        UNREACHABLE();
     }
+    return vk::AccessFlagBits::eNone;
+}
 
-    return result;
+[[nodiscard]] vk::PipelineStageFlags MakePipelineStage(vk::BufferUsageFlagBits usage) {
+    switch (usage) {
+    case vk::BufferUsageFlagBits::eVertexBuffer:
+        return vk::PipelineStageFlagBits::eVertexInput;
+    case vk::BufferUsageFlagBits::eIndexBuffer:
+        return vk::PipelineStageFlagBits::eVertexInput;
+    case vk::BufferUsageFlagBits::eUniformBuffer:
+        return vk::PipelineStageFlagBits::eVertexShader |
+               vk::PipelineStageFlagBits::eGeometryShader |
+               vk::PipelineStageFlagBits::eFragmentShader;
+    case vk::BufferUsageFlagBits::eUniformTexelBuffer:
+        return vk::PipelineStageFlagBits::eFragmentShader;
+    default:
+        LOG_CRITICAL(Render_Vulkan, "Unknown usage flag {}", usage);
+        UNREACHABLE();
+    }
+    return vk::PipelineStageFlagBits::eNone;
 }
 
 StagingBuffer::StagingBuffer(const Instance& instance, u32 size, bool readback)
@@ -154,7 +164,6 @@ void StreamBuffer::Commit(u32 size) {
 
 void StreamBuffer::Flush() {
     if (readback) {
-        LOG_WARNING(Render_Vulkan, "Cannot flush read only buffer");
         return;
     }
 
@@ -172,17 +181,17 @@ void StreamBuffer::Flush() {
 
                 upload_cmdbuf.copyBuffer(staging.buffer, gpu_buffer, copy_region);
 
-                auto [access_mask, stage_mask] = ToVkAccessStageFlags(usage);
                 const vk::BufferMemoryBarrier buffer_barrier = {
                     .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
-                    .dstAccessMask = access_mask,
+                    .dstAccessMask = MakeAccessFlags(usage),
                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .buffer = gpu_buffer,
                     .offset = flush_offset,
                     .size = flush_size};
 
-                upload_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, stage_mask,
+                upload_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                              MakePipelineStage(usage),
                                               vk::DependencyFlagBits::eByRegion, {}, buffer_barrier,
                                               {});
             });
