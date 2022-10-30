@@ -141,7 +141,6 @@ void main(){
     glRenderbufferStorage(GL_RENDERBUFFER, GL_R32UI, MAX_SIZE, MAX_SIZE);
     glFramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
                               r32ui_renderbuffer.handle);
-    glUniform1i(glGetUniformLocation(d24s8_r32ui_conversion_shader.program.handle, "depth"), 1);
 
     state.draw.draw_framebuffer = depth16_fbo.handle;
     state.renderbuffer = r16_renderbuffer.handle;
