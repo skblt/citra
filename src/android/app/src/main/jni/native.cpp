@@ -154,7 +154,7 @@ static Core::System::ResultStatus RunCitra(const std::string& filepath) {
     Config{};
     // Replace with game-specific settings
     u64 program_id{};
-    FileUtil::SetCurrentRomPath(filepath);
+    Common::FS::SetCurrentRomPath(filepath);
     auto app_loader = Loader::GetLoader(filepath);
     if (app_loader) {
         app_loader->ReadProgramId(program_id);
@@ -305,18 +305,18 @@ void Java_org_citra_citra_1emu_NativeLibrary_SwapScreens(JNIEnv* env, [[maybe_un
 void Java_org_citra_citra_1emu_NativeLibrary_SetUserDirectory(JNIEnv* env,
                                                               [[maybe_unused]] jclass clazz,
                                                               jstring j_directory) {
-    FileUtil::SetCurrentDir(GetJString(env, j_directory));
+    Common::FS::SetCurrentDir(GetJString(env, j_directory));
 }
 
 jobjectArray Java_org_citra_citra_1emu_NativeLibrary_GetInstalledGamePaths(
     JNIEnv* env, [[maybe_unused]] jclass clazz) {
     std::vector<std::string> games;
-    const FileUtil::DirectoryEntryCallable ScanDir =
+    const Common::FS::DirectoryEntryCallable ScanDir =
         [&games, &ScanDir](u64*, const std::string& directory, const std::string& virtual_name) {
             std::string path = directory + virtual_name;
-            if (FileUtil::IsDirectory(path)) {
+            if (Common::FS::IsDirectory(path)) {
                 path += '/';
-                FileUtil::ForeachDirectoryEntry(nullptr, path, ScanDir);
+                Common::FS::ForeachDirectoryEntry(nullptr, path, ScanDir);
             } else {
                 auto loader = Loader::GetLoader(path);
                 if (loader) {
@@ -330,12 +330,12 @@ jobjectArray Java_org_citra_citra_1emu_NativeLibrary_GetInstalledGamePaths(
             return true;
         };
     ScanDir(nullptr, "",
-            FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir) +
+            Common::FS::GetUserPath(Common::FS::UserPath::SDMCDir) +
                 "Nintendo "
                 "3DS/00000000000000000000000000000000/"
                 "00000000000000000000000000000000/title/00040000");
     ScanDir(nullptr, "",
-            FileUtil::GetUserPath(FileUtil::UserPath::NANDDir) +
+            Common::FS::GetUserPath(Common::FS::UserPath::NANDDir) +
                 "00000000000000000000000000000000/title/00040010");
     jobjectArray jgames = env->NewObjectArray(static_cast<jsize>(games.size()),
                                               env->FindClass("java/lang/String"), nullptr);

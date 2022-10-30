@@ -16,33 +16,33 @@ ConfigureStorage::ConfigureStorage(QWidget* parent)
     SetConfiguration();
 
     connect(ui->open_nand_dir, &QPushButton::clicked, []() {
-        QString path = QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::NANDDir));
+        QString path = QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::NANDDir));
         QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     });
 
     connect(ui->change_nand_dir, &QPushButton::clicked, this, [this]() {
         const QString dir_path = QFileDialog::getExistingDirectory(
             this, tr("Select NAND Directory"),
-            QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::NANDDir)),
+            QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::NANDDir)),
             QFileDialog::ShowDirsOnly);
         if (!dir_path.isEmpty()) {
-            FileUtil::UpdateUserPath(FileUtil::UserPath::NANDDir, dir_path.toStdString());
+            Common::FS::UpdateUserPath(Common::FS::UserPath::NANDDir, dir_path.toStdString());
             SetConfiguration();
         }
     });
 
     connect(ui->open_sdmc_dir, &QPushButton::clicked, []() {
-        QString path = QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir));
+        QString path = QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::SDMCDir));
         QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     });
 
     connect(ui->change_sdmc_dir, &QPushButton::clicked, this, [this]() {
         const QString dir_path = QFileDialog::getExistingDirectory(
             this, tr("Select SDMC Directory"),
-            QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir)),
+            QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::SDMCDir)),
             QFileDialog::ShowDirsOnly);
         if (!dir_path.isEmpty()) {
-            FileUtil::UpdateUserPath(FileUtil::UserPath::SDMCDir, dir_path.toStdString());
+            Common::FS::UpdateUserPath(Common::FS::UserPath::SDMCDir, dir_path.toStdString());
             SetConfiguration();
         }
     });
@@ -61,13 +61,13 @@ ConfigureStorage::~ConfigureStorage() = default;
 
 void ConfigureStorage::SetConfiguration() {
     ui->nand_group->setVisible(Settings::values.use_custom_storage);
-    QString nand_path = QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::NANDDir));
+    QString nand_path = QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::NANDDir));
     ui->nand_dir_path->setText(nand_path);
     ui->open_nand_dir->setEnabled(!nand_path.isEmpty());
 
     ui->sdmc_group->setVisible(Settings::values.use_virtual_sd &&
                                Settings::values.use_custom_storage);
-    QString sdmc_path = QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir));
+    QString sdmc_path = QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::SDMCDir));
     ui->sdmc_dir_path->setText(sdmc_path);
     ui->open_sdmc_dir->setEnabled(!sdmc_path.isEmpty());
 
@@ -82,10 +82,10 @@ void ConfigureStorage::ApplyConfiguration() {
     Settings::values.use_custom_storage = ui->toggle_custom_storage->isChecked();
 
     if (!Settings::values.use_custom_storage) {
-        FileUtil::UpdateUserPath(FileUtil::UserPath::NANDDir,
-                                 GetDefaultUserPath(FileUtil::UserPath::NANDDir));
-        FileUtil::UpdateUserPath(FileUtil::UserPath::SDMCDir,
-                                 GetDefaultUserPath(FileUtil::UserPath::SDMCDir));
+        Common::FS::UpdateUserPath(Common::FS::UserPath::NANDDir,
+                                 GetDefaultUserPath(Common::FS::UserPath::NANDDir));
+        Common::FS::UpdateUserPath(Common::FS::UserPath::SDMCDir,
+                                 GetDefaultUserPath(Common::FS::UserPath::SDMCDir));
     }
 }
 

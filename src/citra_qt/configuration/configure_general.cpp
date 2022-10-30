@@ -117,9 +117,9 @@ void ConfigureGeneral::SetConfiguration() {
     QString screenshot_path = UISettings::values.screenshot_path;
     if (screenshot_path.isEmpty()) {
         screenshot_path =
-            QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::UserDir));
+            QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::UserDir));
         screenshot_path.append(QStringLiteral("screenshots/"));
-        FileUtil::CreateFullPath(screenshot_path.toStdString());
+        Common::FS::CreateFullPath(screenshot_path.toStdString());
         UISettings::values.screenshot_path = screenshot_path;
     }
     ui->screenshot_dir_path->setText(screenshot_path);
@@ -134,7 +134,7 @@ void ConfigureGeneral::ResetDefaults() {
     if (answer == QMessageBox::No)
         return;
 
-    FileUtil::Delete(FileUtil::GetUserPath(FileUtil::UserPath::ConfigDir) + "qt-config.ini");
+    Common::FS::Delete(Common::FS::GetUserPath(Common::FS::UserPath::ConfigDir) + "qt-config.ini");
     std::exit(0);
 }
 

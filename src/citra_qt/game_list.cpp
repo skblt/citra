@@ -493,15 +493,15 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
     const bool is_application =
         0x0004000000000000 <= program_id && program_id <= 0x00040000FFFFFFFF;
 
-    std::string sdmc_dir = FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir);
+    std::string sdmc_dir = Common::FS::GetUserPath(Common::FS::UserPath::SDMCDir);
     open_save_location->setEnabled(
-        is_application && FileUtil::Exists(FileSys::ArchiveSource_SDSaveData::GetSaveDataPathFor(
+        is_application && Common::FS::Exists(FileSys::ArchiveSource_SDSaveData::GetSaveDataPathFor(
                               sdmc_dir, program_id)));
 
     if (extdata_id) {
         open_extdata_location->setEnabled(
             is_application &&
-            FileUtil::Exists(FileSys::GetExtDataPathFromId(sdmc_dir, extdata_id)));
+            Common::FS::Exists(FileSys::GetExtDataPathFromId(sdmc_dir, extdata_id)));
     } else {
         open_extdata_location->setVisible(false);
     }
@@ -510,7 +510,7 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
     open_application_location->setEnabled(path.toStdString() ==
                                           Service::AM::GetTitleContentPath(media_type, program_id));
     open_update_location->setEnabled(
-        is_application && FileUtil::Exists(Service::AM::GetTitlePath(Service::FS::MediaType::SDMC,
+        is_application && Common::FS::Exists(Service::AM::GetTitlePath(Service::FS::MediaType::SDMC,
                                                                      program_id + 0xe00000000) +
                                            "content/"));
     auto it = FindMatchingCompatibilityEntry(compatibility_list, program_id);
@@ -535,29 +535,29 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
         emit OpenFolderRequested(program_id, GameListOpenTarget::UPDATE_DATA);
     });
     connect(open_texture_dump_location, &QAction::triggered, this, [this, program_id] {
-        if (FileUtil::CreateFullPath(fmt::format("{}textures/{:016X}/",
-                                                 FileUtil::GetUserPath(FileUtil::UserPath::DumpDir),
+        if (Common::FS::CreateFullPath(fmt::format("{}textures/{:016X}/",
+                                                 Common::FS::GetUserPath(Common::FS::UserPath::DumpDir),
                                                  program_id))) {
             emit OpenFolderRequested(program_id, GameListOpenTarget::TEXTURE_DUMP);
         }
     });
     connect(open_texture_load_location, &QAction::triggered, this, [this, program_id] {
-        if (FileUtil::CreateFullPath(fmt::format("{}textures/{:016X}/",
-                                                 FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
+        if (Common::FS::CreateFullPath(fmt::format("{}textures/{:016X}/",
+                                                 Common::FS::GetUserPath(Common::FS::UserPath::LoadDir),
                                                  program_id))) {
             emit OpenFolderRequested(program_id, GameListOpenTarget::TEXTURE_LOAD);
         }
     });
     connect(open_texture_load_location, &QAction::triggered, this, [this, program_id] {
-        if (FileUtil::CreateFullPath(fmt::format("{}textures/{:016X}/",
-                                                 FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
+        if (Common::FS::CreateFullPath(fmt::format("{}textures/{:016X}/",
+                                                 Common::FS::GetUserPath(Common::FS::UserPath::LoadDir),
                                                  program_id))) {
             emit OpenFolderRequested(program_id, GameListOpenTarget::TEXTURE_LOAD);
         }
     });
     connect(open_mods_location, &QAction::triggered, this, [this, program_id] {
-        if (FileUtil::CreateFullPath(fmt::format("{}mods/{:016X}/",
-                                                 FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
+        if (Common::FS::CreateFullPath(fmt::format("{}mods/{:016X}/",
+                                                 Common::FS::GetUserPath(Common::FS::UserPath::LoadDir),
                                                  program_id))) {
             emit OpenFolderRequested(program_id, GameListOpenTarget::MODS);
         }
@@ -568,7 +568,7 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
         emit NavigateToGamedbEntryRequested(program_id, compatibility_list);
     });
     connect(open_shader_cache_location, &QAction::triggered, this, [this, program_id] {
-        if (FileUtil::CreateFullPath(FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir))) {
+        if (Common::FS::CreateFullPath(Common::FS::GetUserPath(Common::FS::UserPath::ShaderDir))) {
             emit OpenFolderRequested(program_id, GameListOpenTarget::SHADER_CACHE);
         }
     });
@@ -576,14 +576,14 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
         const std::string_view cache_type =
             Settings::values.separable_shader ? "separable" : "conventional";
         const std::string path = fmt::format("{}opengl/precompiled/{}/{:016X}.bin",
-                                             FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir),
+                                             Common::FS::GetUserPath(Common::FS::UserPath::ShaderDir),
                                              cache_type, program_id);
         QFile file{QString::fromStdString(path)};
         file.remove();
     });
     connect(delete_vulkan_disk_shader_cache, &QAction::triggered, this, [] {
         const std::string path =
-            fmt::format("{}vulkan", FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir));
+            fmt::format("{}vulkan", Common::FS::GetUserPath(Common::FS::UserPath::ShaderDir));
         QDir dir{QString::fromStdString(path)};
         dir.removeRecursively();
     });

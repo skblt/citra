@@ -159,9 +159,9 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
     log_filter.ParseFilterString(Settings::values.log_filter);
     Log::SetGlobalFilter(log_filter);
     Log::AddBackend(std::make_unique<Log::LogcatBackend>());
-    FileUtil::CreateFullPath(FileUtil::GetUserPath(FileUtil::UserPath::LogDir));
+    Common::FS::CreateFullPath(Common::FS::GetUserPath(Common::FS::UserPath::LogDir));
     Log::AddBackend(std::make_unique<Log::FileBackend>(
-        FileUtil::GetUserPath(FileUtil::UserPath::LogDir) + LOG_FILE));
+        Common::FS::GetUserPath(Common::FS::UserPath::LogDir) + LOG_FILE));
     LOG_INFO(Frontend, "Logging backend initialised");
 
     // Initialize misc classes

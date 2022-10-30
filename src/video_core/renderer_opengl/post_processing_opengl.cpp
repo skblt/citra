@@ -123,17 +123,17 @@ void SetOutput(float4 color_in)
 )";
 
 std::vector<std::string> GetPostProcessingShaderList(bool anaglyph) {
-    std::string shader_dir = FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir);
+    std::string shader_dir = Common::FS::GetUserPath(Common::FS::UserPath::ShaderDir);
     std::vector<std::string> shader_names;
 
-    if (!FileUtil::IsDirectory(shader_dir)) {
-        FileUtil::CreateDir(shader_dir);
+    if (!Common::FS::IsDirectory(shader_dir)) {
+        Common::FS::CreateDir(shader_dir);
     }
 
     if (anaglyph) {
         shader_dir = shader_dir + "anaglyph";
-        if (!FileUtil::IsDirectory(shader_dir)) {
-            FileUtil::CreateDir(shader_dir);
+        if (!Common::FS::IsDirectory(shader_dir)) {
+            Common::FS::CreateDir(shader_dir);
         }
     }
 
@@ -141,7 +141,7 @@ std::vector<std::string> GetPostProcessingShaderList(bool anaglyph) {
     const auto callback = [&shader_names](u64* num_entries_out, const std::string& directory,
                                           const std::string& virtual_name) -> bool {
         const std::string physical_name = directory + DIR_SEP + virtual_name;
-        if (!FileUtil::IsDirectory(physical_name)) {
+        if (!Common::FS::IsDirectory(physical_name)) {
             // The following is done to avoid coupling this to Qt
             std::size_t dot_pos = virtual_name.rfind(".");
             if (dot_pos != std::string::npos) {
@@ -153,7 +153,7 @@ std::vector<std::string> GetPostProcessingShaderList(bool anaglyph) {
         return true;
     };
 
-    FileUtil::ForeachDirectoryEntry(nullptr, shader_dir, callback);
+    Common::FS::ForeachDirectoryEntry(nullptr, shader_dir, callback);
 
     std::sort(shader_names.begin(), shader_names.end());
 
@@ -161,7 +161,7 @@ std::vector<std::string> GetPostProcessingShaderList(bool anaglyph) {
 }
 
 std::string GetPostProcessingShaderCode(bool anaglyph, std::string_view shader) {
-    std::string shader_dir = FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir);
+    std::string shader_dir = Common::FS::GetUserPath(Common::FS::UserPath::ShaderDir);
     std::string shader_path;
 
     if (anaglyph) {
@@ -174,7 +174,7 @@ std::string GetPostProcessingShaderCode(bool anaglyph, std::string_view shader) 
                                                   const std::string& directory,
                                                   const std::string& virtual_name) -> bool {
         const std::string physical_name = directory + DIR_SEP + virtual_name;
-        if (!FileUtil::IsDirectory(physical_name)) {
+        if (!Common::FS::IsDirectory(physical_name)) {
             // The following is done to avoid coupling this to Qt
             std::size_t dot_pos = virtual_name.rfind(".");
             if (dot_pos != std::string::npos) {
@@ -188,7 +188,7 @@ std::string GetPostProcessingShaderCode(bool anaglyph, std::string_view shader) 
         return true;
     };
 
-    FileUtil::ForeachDirectoryEntry(nullptr, shader_dir, callback);
+    Common::FS::ForeachDirectoryEntry(nullptr, shader_dir, callback);
     if (shader_path.empty()) {
         return "";
     }

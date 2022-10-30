@@ -106,7 +106,7 @@ void PipelineCache::LoadDiskCache() {
     vk::PipelineCacheCreateInfo cache_info = {.initialDataSize = 0, .pInitialData = nullptr};
 
     std::vector<u8> cache_data;
-    FileUtil::IOFile cache_file{cache_file_path, "r"};
+    Common::FS::IOFile cache_file{cache_file_path, "r"};
     if (cache_file.IsOpen()) {
         LOG_INFO(Render_Vulkan, "Loading pipeline cache");
 
@@ -135,7 +135,7 @@ void PipelineCache::SaveDiskCache() {
 
     const std::string cache_file_path = fmt::format("{}{:x}{:x}.bin", GetPipelineCacheDir(),
                                                     instance.GetVendorID(), instance.GetDeviceID());
-    FileUtil::IOFile cache_file{cache_file_path, "wb"};
+    Common::FS::IOFile cache_file{cache_file_path, "wb"};
     if (!cache_file.IsOpen()) {
         LOG_INFO(Render_Vulkan, "Unable to open pipeline cache for writing");
         return;
@@ -582,7 +582,7 @@ bool PipelineCache::IsCacheValid(const u8* data, u64 size) const {
 
 bool PipelineCache::EnsureDirectories() const {
     const auto CreateDir = [](const std::string& dir) {
-        if (!FileUtil::CreateDir(dir)) {
+        if (!Common::FS::CreateDir(dir)) {
             LOG_ERROR(Render_Vulkan, "Failed to create directory={}", dir);
             return false;
         }
@@ -590,12 +590,12 @@ bool PipelineCache::EnsureDirectories() const {
         return true;
     };
 
-    return CreateDir(FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir)) &&
+    return CreateDir(Common::FS::GetUserPath(Common::FS::UserPath::ShaderDir)) &&
            CreateDir(GetPipelineCacheDir());
 }
 
 std::string PipelineCache::GetPipelineCacheDir() const {
-    return FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir) + "vulkan" + DIR_SEP;
+    return Common::FS::GetUserPath(Common::FS::UserPath::ShaderDir) + "vulkan" + DIR_SEP;
 }
 
 } // namespace Vulkan

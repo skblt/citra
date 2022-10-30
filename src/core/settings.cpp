@@ -131,8 +131,8 @@ void LogSettings() {
     LogSetting("DataStorage_UseVirtualSd", values.use_virtual_sd);
     LogSetting("DataStorage_UseCustomStorage", values.use_custom_storage);
     if (values.use_custom_storage) {
-        LogSetting("DataStorage_SdmcDir", FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir));
-        LogSetting("DataStorage_NandDir", FileUtil::GetUserPath(FileUtil::UserPath::NANDDir));
+        LogSetting("DataStorage_SdmcDir", Common::FS::GetUserPath(Common::FS::UserPath::SDMCDir));
+        LogSetting("DataStorage_NandDir", Common::FS::GetUserPath(Common::FS::UserPath::NANDDir));
     }
     LogSetting("System_IsNew3ds", values.is_new_3ds);
     LogSetting("System_RegionValue", values.region_value);

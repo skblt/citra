@@ -27,7 +27,7 @@ namespace Core {
 class System;
 }
 
-namespace FileUtil {
+namespace Common::FS {
 class IOFile;
 }
 
@@ -49,9 +49,9 @@ public:
     ShaderDiskCacheRaw() = default;
     ~ShaderDiskCacheRaw() = default;
 
-    bool Load(FileUtil::IOFile& file);
+    bool Load(Common::FS::IOFile& file);
 
-    bool Save(FileUtil::IOFile& file) const;
+    bool Save(Common::FS::IOFile& file) const;
 
     u64 GetUniqueIdentifier() const {
         return unique_identifier;
@@ -124,14 +124,14 @@ public:
 private:
     /// Loads the transferable cache. Returns empty on failure.
     std::optional<std::pair<ShaderDecompiledMap, ShaderDumpsMap>> LoadPrecompiledFile(
-        FileUtil::IOFile& file, bool compressed);
+        Common::FS::IOFile& file, bool compressed);
 
     /// Loads a decompiled cache entry from m_precompiled_cache_virtual_file. Returns empty on
     /// failure.
     std::optional<ShaderDiskCacheDecompiled> LoadDecompiledEntry();
 
     /// Saves a decompiled entry to the passed file. Does not check for collisions.
-    void SaveDecompiledToFile(FileUtil::IOFile& file, u64 unique_identifier,
+    void SaveDecompiledToFile(Common::FS::IOFile& file, u64 unique_identifier,
                               const ShaderDecompiler::ProgramResult& code, bool sanitize_mul);
 
     /// Saves a decompiled entry to the virtual precompiled cache. Does not check for collisions.
@@ -142,7 +142,7 @@ private:
     bool IsUsable() const;
 
     /// Opens current game's transferable file and write it's header if it doesn't exist
-    FileUtil::IOFile AppendTransferableFile();
+    Common::FS::IOFile AppendTransferableFile();
 
     /// Save precompiled header to precompiled_cache_in_memory
     void SavePrecompiledHeaderToVirtualPrecompiledCache();
@@ -223,7 +223,7 @@ private:
     u64 program_id{};
     std::string title_id;
 
-    FileUtil::IOFile AppendPrecompiledFile();
+    Common::FS::IOFile AppendPrecompiledFile();
 };
 
 } // namespace OpenGL

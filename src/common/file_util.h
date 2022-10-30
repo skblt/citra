@@ -22,7 +22,7 @@
 #include "common/string_util.h"
 #endif
 
-namespace FileUtil {
+namespace Common::FS {
 
 // User paths for GetUserPath
 enum class UserPath {
@@ -383,7 +383,7 @@ private:
     friend class boost::serialization::access;
 };
 
-} // namespace FileUtil
+} // namespace Common::FS
 
 // To deal with Windows being dumb at unicode:
 template <typename T>

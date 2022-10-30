@@ -35,7 +35,7 @@ std::vector<u8> GetSMDHData(std::string physical_name) {
         std::string update_path = Service::AM::GetTitleContentPath(
             Service::FS::MediaType::SDMC, program_id + 0x0000000E'00000000);
 
-        if (!FileUtil::Exists(update_path))
+        if (!Common::FS::Exists(update_path))
             return original_smdh;
 
         std::unique_ptr<Loader::AppLoader> update_loader = Loader::GetLoader(update_path);

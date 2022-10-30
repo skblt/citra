@@ -43,8 +43,8 @@ FuncDL<int(AVCodecParserContext*, AVCodecContext*, uint8_t**, int*, const uint8_
 FuncDL<void(AVCodecParserContext*)> av_parser_close_dl;
 
 bool InitFFmpegDL() {
-    std::string dll_path = FileUtil::GetUserPath(FileUtil::UserPath::DLLDir);
-    FileUtil::CreateDir(dll_path);
+    std::string dll_path = Common::FS::GetUserPath(Common::FS::UserPath::DLLDir);
+    Common::FS::CreateDir(dll_path);
     std::wstring w_dll_path = Common::UTF8ToUTF16W(dll_path);
     SetDllDirectoryW(w_dll_path.c_str());
 

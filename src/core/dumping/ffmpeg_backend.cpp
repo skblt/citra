@@ -412,7 +412,7 @@ bool FFmpegMuxer::Init(const std::string& path, const Layout::FramebufferLayout&
 
     InitializeFFmpegLibraries();
 
-    if (!FileUtil::CreateFullPath(path)) {
+    if (!Common::FS::CreateFullPath(path)) {
         return false;
     }
 

@@ -76,7 +76,7 @@
 // This namespace has various generic functions related to files and paths.
 // The code still needs a ton of cleanup.
 // REMEMBER: strdup considered harmful!
-namespace FileUtil {
+namespace Common::FS {
 
 // Remove any ending forward slashes from directory paths
 // Modifies argument.
@@ -198,7 +198,7 @@ bool CreateFullPath(const std::string& fullPath) {
     int panicCounter = 100;
     LOG_TRACE(Common_Filesystem, "path {}", fullPath);
 
-    if (FileUtil::Exists(fullPath)) {
+    if (Common::FS::Exists(fullPath)) {
         LOG_DEBUG(Common_Filesystem, "path exists {}", fullPath);
         return true;
     }
@@ -214,7 +214,7 @@ bool CreateFullPath(const std::string& fullPath) {
 
         // Include the '/' so the first call is CreateDir("/") rather than CreateDir("")
         std::string const subPath(fullPath.substr(0, position + 1));
-        if (!FileUtil::IsDirectory(subPath) && !FileUtil::CreateDir(subPath)) {
+        if (!Common::FS::IsDirectory(subPath) && !Common::FS::CreateDir(subPath)) {
             LOG_ERROR(Common, "CreateFullPath: directory creation failed");
             return false;
         }
@@ -233,7 +233,7 @@ bool DeleteDir(const std::string& filename) {
     LOG_TRACE(Common_Filesystem, "directory {}", filename);
 
     // check if a directory
-    if (!FileUtil::IsDirectory(filename)) {
+    if (!Common::FS::IsDirectory(filename)) {
         LOG_ERROR(Common_Filesystem, "Not a directory {}", filename);
         return false;
     }
@@ -373,7 +373,7 @@ u64 GetSize(FILE* f) {
 bool CreateEmptyFile(const std::string& filename) {
     LOG_TRACE(Common_Filesystem, "{}", filename);
 
-    if (!FileUtil::IOFile(filename, "wb").IsOpen()) {
+    if (!Common::FS::IOFile(filename, "wb").IsOpen()) {
         LOG_ERROR(Common_Filesystem, "failed {}: {}", filename, GetLastErrorMsg());
         return false;
     }
@@ -501,7 +501,7 @@ bool DeleteDirRecursively(const std::string& directory, unsigned int recursion) 
         return false;
 
     // Delete the outermost directory
-    FileUtil::DeleteDir(directory);
+    Common::FS::DeleteDir(directory);
     return true;
 }
 
@@ -509,10 +509,10 @@ void CopyDir(const std::string& source_path, const std::string& dest_path) {
 #ifndef _WIN32
     if (source_path == dest_path)
         return;
-    if (!FileUtil::Exists(source_path))
+    if (!Common::FS::Exists(source_path))
         return;
-    if (!FileUtil::Exists(dest_path))
-        FileUtil::CreateFullPath(dest_path);
+    if (!Common::FS::Exists(dest_path))
+        Common::FS::CreateFullPath(dest_path);
 
     DIR* dirp = opendir(source_path.c_str());
     if (!dirp)
@@ -531,11 +531,11 @@ void CopyDir(const std::string& source_path, const std::string& dest_path) {
         if (IsDirectory(source)) {
             source += '/';
             dest += '/';
-            if (!FileUtil::Exists(dest))
-                FileUtil::CreateFullPath(dest);
+            if (!Common::FS::Exists(dest))
+                Common::FS::CreateFullPath(dest);
             CopyDir(source, dest);
-        } else if (!FileUtil::Exists(dest))
-            FileUtil::Copy(source, dest);
+        } else if (!Common::FS::Exists(dest))
+            Common::FS::Copy(source, dest);
     }
     closedir(dirp);
 #endif
@@ -560,7 +560,7 @@ std::optional<std::string> GetCurrentDir() {
 #endif
     free(dir);
     return strDir;
-} // namespace FileUtil
+} // namespace Common::FS
 
 bool SetCurrentDir(const std::string& directory) {
 #ifdef _WIN32
@@ -689,7 +689,7 @@ void SetUserPath(const std::string& path) {
     } else {
 #ifdef _WIN32
         user_path = GetExeDirectory() + DIR_SEP USERDATA_DIR DIR_SEP;
-        if (!FileUtil::IsDirectory(user_path)) {
+        if (!Common::FS::IsDirectory(user_path)) {
             user_path = AppDataRoamingDirectory() + DIR_SEP EMU_DATA_DIR DIR_SEP;
         } else {
             LOG_INFO(Common_Filesystem, "Using the local user directory");
@@ -698,13 +698,13 @@ void SetUserPath(const std::string& path) {
         g_paths.emplace(UserPath::ConfigDir, user_path + CONFIG_DIR DIR_SEP);
         g_paths.emplace(UserPath::CacheDir, user_path + CACHE_DIR DIR_SEP);
 #elif ANDROID
-        if (FileUtil::Exists(DIR_SEP SDCARD_DIR)) {
+        if (Common::FS::Exists(DIR_SEP SDCARD_DIR)) {
             user_path = DIR_SEP SDCARD_DIR DIR_SEP EMU_DATA_DIR DIR_SEP;
             g_paths.emplace(UserPath::ConfigDir, user_path + CONFIG_DIR DIR_SEP);
             g_paths.emplace(UserPath::CacheDir, user_path + CACHE_DIR DIR_SEP);
         }
 #else
-        if (FileUtil::Exists(ROOT_DIR DIR_SEP USERDATA_DIR)) {
+        if (Common::FS::Exists(ROOT_DIR DIR_SEP USERDATA_DIR)) {
             user_path = ROOT_DIR DIR_SEP USERDATA_DIR DIR_SEP;
             g_paths.emplace(UserPath::ConfigDir, user_path + CONFIG_DIR DIR_SEP);
             g_paths.emplace(UserPath::CacheDir, user_path + CACHE_DIR DIR_SEP);
@@ -779,7 +779,7 @@ const void UpdateUserPath(UserPath path, const std::string& filename) {
     if (filename.empty()) {
         return;
     }
-    if (!FileUtil::IsDirectory(filename)) {
+    if (!Common::FS::IsDirectory(filename)) {
         LOG_ERROR(Common_Filesystem, "Path is not a directory. UserPath: {}  filename: {}", path,
                   filename);
         return;
@@ -998,7 +998,7 @@ bool IOFile::Close() {
 
 u64 IOFile::GetSize() const {
     if (IsOpen())
-        return FileUtil::GetSize(m_file);
+        return Common::FS::GetSize(m_file);
 
     return 0;
 }
@@ -1070,4 +1070,4 @@ bool IOFile::Resize(u64 size) {
     return m_good;
 }
 
-} // namespace FileUtil
+} // namespace Common::FS

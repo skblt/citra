@@ -47,7 +47,7 @@ ShaderDiskCacheRaw::ShaderDiskCacheRaw(u64 unique_identifier, ProgramType progra
     : unique_identifier{unique_identifier}, program_type{program_type}, config{config},
       program_code{std::move(program_code)} {}
 
-bool ShaderDiskCacheRaw::Load(FileUtil::IOFile& file) {
+bool ShaderDiskCacheRaw::Load(Common::FS::IOFile& file) {
     if (file.ReadBytes(&unique_identifier, sizeof(u64)) != sizeof(u64) ||
         file.ReadBytes(&program_type, sizeof(u32)) != sizeof(u32)) {
         return false;
@@ -77,7 +77,7 @@ bool ShaderDiskCacheRaw::Load(FileUtil::IOFile& file) {
     return true;
 }
 
-bool ShaderDiskCacheRaw::Save(FileUtil::IOFile& file) const {
+bool ShaderDiskCacheRaw::Save(Common::FS::IOFile& file) const {
     if (file.WriteObject(unique_identifier) != 1 ||
         file.WriteObject(static_cast<u32>(program_type)) != 1) {
         return false;
@@ -114,7 +114,7 @@ std::optional<std::vector<ShaderDiskCacheRaw>> ShaderDiskCache::LoadTransferable
     }
     tried_to_load = true;
 
-    FileUtil::IOFile file(GetTransferablePath(), "rb");
+    Common::FS::IOFile file(GetTransferablePath(), "rb");
     if (!file.IsOpen()) {
         LOG_INFO(Render_OpenGL, "No transferable shader cache found for game with title id={}",
                  GetTitleID());
@@ -177,7 +177,7 @@ ShaderDiskCache::LoadPrecompiled(bool compressed) {
     if (!IsUsable())
         return {};
 
-    FileUtil::IOFile file(GetPrecompiledPath(), "rb");
+    Common::FS::IOFile file(GetPrecompiledPath(), "rb");
     if (!file.IsOpen()) {
         LOG_INFO(Render_OpenGL, "No precompiled shader cache found for game with title id={}",
                  GetTitleID());
@@ -197,7 +197,7 @@ ShaderDiskCache::LoadPrecompiled(bool compressed) {
 }
 
 std::optional<std::pair<std::unordered_map<u64, ShaderDiskCacheDecompiled>, ShaderDumpsMap>>
-ShaderDiskCache::LoadPrecompiledFile(FileUtil::IOFile& file, bool compressed) {
+ShaderDiskCache::LoadPrecompiledFile(Common::FS::IOFile& file, bool compressed) {
     // Read compressed file from disk and decompress to virtual precompiled cache file
     std::vector<u8> precompiled_file(file.GetSize());
     file.ReadBytes(precompiled_file.data(), precompiled_file.size());
@@ -301,7 +301,7 @@ std::optional<ShaderDiskCacheDecompiled> ShaderDiskCache::LoadDecompiledEntry() 
     return entry;
 }
 
-void ShaderDiskCache::SaveDecompiledToFile(FileUtil::IOFile& file, u64 unique_identifier,
+void ShaderDiskCache::SaveDecompiledToFile(Common::FS::IOFile& file, u64 unique_identifier,
                                            const ShaderDecompiler::ProgramResult& result,
                                            bool sanitize_mul) {
     if (!IsUsable())
@@ -331,7 +331,7 @@ bool ShaderDiskCache::SaveDecompiledToCache(u64 unique_identifier,
 }
 
 void ShaderDiskCache::InvalidateAll() {
-    if (!FileUtil::Delete(GetTransferablePath())) {
+    if (!Common::FS::Delete(GetTransferablePath())) {
         LOG_ERROR(Render_OpenGL, "Failed to invalidate transferable file={}",
                   GetTransferablePath());
     }
@@ -342,7 +342,7 @@ void ShaderDiskCache::InvalidatePrecompiled() {
     // Clear virtual precompiled cache file
     decompressed_precompiled_cache.resize(0);
 
-    if (!FileUtil::Delete(GetPrecompiledPath())) {
+    if (!Common::FS::Delete(GetPrecompiledPath())) {
         LOG_ERROR(Render_OpenGL, "Failed to invalidate precompiled file={}", GetPrecompiledPath());
     }
 }
@@ -357,7 +357,7 @@ void ShaderDiskCache::SaveRaw(const ShaderDiskCacheRaw& entry) {
         return;
     }
 
-    FileUtil::IOFile file = AppendTransferableFile();
+    Common::FS::IOFile file = AppendTransferableFile();
     if (!file.IsOpen())
         return;
     if (file.WriteObject(TransferableEntryKind::Raw) != 1 || !entry.Save(file)) {
@@ -413,7 +413,7 @@ void ShaderDiskCache::SaveDumpToFile(u64 unique_identifier, GLuint program, bool
     if (!IsUsable())
         return;
 
-    FileUtil::IOFile file = AppendPrecompiledFile();
+    Common::FS::IOFile file = AppendPrecompiledFile();
     if (!file.IsOpen())
         return;
 
@@ -444,14 +444,14 @@ bool ShaderDiskCache::IsUsable() const {
     return tried_to_load && Settings::values.use_disk_shader_cache;
 }
 
-FileUtil::IOFile ShaderDiskCache::AppendTransferableFile() {
+Common::FS::IOFile ShaderDiskCache::AppendTransferableFile() {
     if (!EnsureDirectories())
         return {};
 
     const auto transferable_path{GetTransferablePath()};
-    const bool existed = FileUtil::Exists(transferable_path);
+    const bool existed = Common::FS::Exists(transferable_path);
 
-    FileUtil::IOFile file(transferable_path, "ab");
+    Common::FS::IOFile file(transferable_path, "ab");
     if (!file.IsOpen()) {
         LOG_ERROR(Render_OpenGL, "Failed to open transferable cache in path={}", transferable_path);
         return {};
@@ -467,14 +467,14 @@ FileUtil::IOFile ShaderDiskCache::AppendTransferableFile() {
     return file;
 }
 
-FileUtil::IOFile ShaderDiskCache::AppendPrecompiledFile() {
+Common::FS::IOFile ShaderDiskCache::AppendPrecompiledFile() {
     if (!EnsureDirectories())
         return {};
 
     const auto precompiled_path{GetPrecompiledPath()};
-    const bool existed = FileUtil::Exists(precompiled_path);
+    const bool existed = Common::FS::Exists(precompiled_path);
 
-    FileUtil::IOFile file(precompiled_path, "ab");
+    Common::FS::IOFile file(precompiled_path, "ab");
     if (!file.IsOpen()) {
         LOG_ERROR(Render_OpenGL, "Failed to open precompiled cache in path={}", precompiled_path);
         return {};
@@ -506,7 +506,7 @@ void ShaderDiskCache::SaveVirtualPrecompiledFile() {
         decompressed_precompiled_cache.data(), decompressed_precompiled_cache.size());
 
     const auto precompiled_path{GetPrecompiledPath()};
-    FileUtil::IOFile file(precompiled_path, "wb");
+    Common::FS::IOFile file(precompiled_path, "wb");
 
     if (!file.IsOpen()) {
         LOG_ERROR(Render_OpenGL, "Failed to open precompiled cache in path={}", precompiled_path);
@@ -521,24 +521,24 @@ void ShaderDiskCache::SaveVirtualPrecompiledFile() {
 
 bool ShaderDiskCache::EnsureDirectories() const {
     const auto CreateDir = [](const std::string& dir) {
-        if (!FileUtil::CreateDir(dir)) {
+        if (!Common::FS::CreateDir(dir)) {
             LOG_ERROR(Render_OpenGL, "Failed to create directory={}", dir);
             return false;
         }
         return true;
     };
 
-    return CreateDir(FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir)) &&
+    return CreateDir(Common::FS::GetUserPath(Common::FS::UserPath::ShaderDir)) &&
            CreateDir(GetBaseDir()) && CreateDir(GetTransferableDir()) &&
            CreateDir(GetPrecompiledDir()) && CreateDir(GetPrecompiledShaderDir());
 }
 
 std::string ShaderDiskCache::GetTransferablePath() {
-    return FileUtil::SanitizePath(GetTransferableDir() + DIR_SEP_CHR + GetTitleID() + ".bin");
+    return Common::FS::SanitizePath(GetTransferableDir() + DIR_SEP_CHR + GetTitleID() + ".bin");
 }
 
 std::string ShaderDiskCache::GetPrecompiledPath() {
-    return FileUtil::SanitizePath(GetPrecompiledShaderDir() + DIR_SEP_CHR + GetTitleID() + ".bin");
+    return Common::FS::SanitizePath(GetPrecompiledShaderDir() + DIR_SEP_CHR + GetTitleID() + ".bin");
 }
 
 std::string ShaderDiskCache::GetTransferableDir() const {
@@ -557,7 +557,7 @@ std::string ShaderDiskCache::GetPrecompiledShaderDir() const {
 }
 
 std::string ShaderDiskCache::GetBaseDir() const {
-    return FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir) + DIR_SEP "opengl";
+    return Common::FS::GetUserPath(Common::FS::UserPath::ShaderDir) + DIR_SEP "opengl";
 }
 
 u64 ShaderDiskCache::GetProgramID() {

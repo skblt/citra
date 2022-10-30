@@ -64,12 +64,12 @@ void CheatEngine::UpdateCheat(int index, const std::shared_ptr<CheatBase>& new_c
 }
 
 void CheatEngine::SaveCheatFile() const {
-    const std::string cheat_dir = FileUtil::GetUserPath(FileUtil::UserPath::CheatsDir);
+    const std::string cheat_dir = Common::FS::GetUserPath(Common::FS::UserPath::CheatsDir);
     const std::string filepath = fmt::format(
         "{}{:016X}.txt", cheat_dir, system.Kernel().GetCurrentProcess()->codeset->program_id);
 
-    if (!FileUtil::IsDirectory(cheat_dir)) {
-        FileUtil::CreateDir(cheat_dir);
+    if (!Common::FS::IsDirectory(cheat_dir)) {
+        Common::FS::CreateDir(cheat_dir);
     }
 
     std::ofstream file;
@@ -84,15 +84,15 @@ void CheatEngine::SaveCheatFile() const {
 }
 
 void CheatEngine::LoadCheatFile() {
-    const std::string cheat_dir = FileUtil::GetUserPath(FileUtil::UserPath::CheatsDir);
+    const std::string cheat_dir = Common::FS::GetUserPath(Common::FS::UserPath::CheatsDir);
     const std::string filepath = fmt::format(
         "{}{:016X}.txt", cheat_dir, system.Kernel().GetCurrentProcess()->codeset->program_id);
 
-    if (!FileUtil::IsDirectory(cheat_dir)) {
-        FileUtil::CreateDir(cheat_dir);
+    if (!Common::FS::IsDirectory(cheat_dir)) {
+        Common::FS::CreateDir(cheat_dir);
     }
 
-    if (!FileUtil::Exists(filepath))
+    if (!Common::FS::Exists(filepath))
         return;
 
     auto gateway_cheats = GatewayCheat::LoadFile(filepath);

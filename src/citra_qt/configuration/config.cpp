@@ -19,8 +19,8 @@
 
 Config::Config() {
     // TODO: Don't hardcode the path; let the frontend decide where to put the config files.
-    qt_config_loc = FileUtil::GetUserPath(FileUtil::UserPath::ConfigDir) + "qt-config.ini";
-    FileUtil::CreateFullPath(qt_config_loc);
+    qt_config_loc = Common::FS::GetUserPath(Common::FS::UserPath::ConfigDir) + "qt-config.ini";
+    Common::FS::CreateFullPath(qt_config_loc);
     qt_config =
         std::make_unique<QSettings>(QString::fromStdString(qt_config_loc), QSettings::IniFormat);
     Reload();
@@ -312,8 +312,8 @@ void Config::ReadDataStorageValues() {
         ReadSetting(QStringLiteral("sdmc_directory"), QStringLiteral("")).toString().toStdString();
 
     if (Settings::values.use_custom_storage) {
-        FileUtil::UpdateUserPath(FileUtil::UserPath::NANDDir, nand_dir);
-        FileUtil::UpdateUserPath(FileUtil::UserPath::SDMCDir, sdmc_dir);
+        Common::FS::UpdateUserPath(Common::FS::UserPath::NANDDir, nand_dir);
+        Common::FS::UpdateUserPath(Common::FS::UserPath::SDMCDir, sdmc_dir);
     }
 
     qt_config->endGroup();
@@ -875,10 +875,10 @@ void Config::SaveDataStorageValues() {
     WriteSetting(QStringLiteral("use_virtual_sd"), Settings::values.use_virtual_sd, true);
     WriteSetting(QStringLiteral("use_custom_storage"), Settings::values.use_custom_storage, false);
     WriteSetting(QStringLiteral("nand_directory"),
-                 QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::NANDDir)),
+                 QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::NANDDir)),
                  QStringLiteral(""));
     WriteSetting(QStringLiteral("sdmc_directory"),
-                 QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir)),
+                 QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::SDMCDir)),
                  QStringLiteral(""));
 
     qt_config->endGroup();
