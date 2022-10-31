@@ -12,10 +12,7 @@
 #include <thread>
 #include <vector>
 #ifdef _WIN32
-#include <share.h>   // For _SH_DENYWR
 #include <windows.h> // For OutputDebugStringW
-#else
-#define _SH_DENYWR 0
 #endif
 #include "common/assert.h"
 #include "common/fs/fs.h"
@@ -145,17 +142,16 @@ void LogcatBackend::Write(const Entry& entry) {
     PrintMessageToLogcat(entry);
 }
 
-FileBackend::FileBackend(const std::string& filename) : bytes_written(0) {
-    if (Common::FS::Exists(filename + ".old.txt")) {
-        Common::FS::RemoveFile(filename + ".old.txt");
-    }
-    if (Common::FS::Exists(filename)) {
-        Common::FS::RenameFile(filename, filename + ".old.txt");
-    }
+FileBackend::FileBackend(const std::filesystem::path& filename) : bytes_written(0) {
+    auto old_filename = filename;
+    old_filename += ".old.txt";
 
-    // _SH_DENYWR allows read only access to the file for other programs.
-    // It is #defined to 0 on other platforms
-    file = Common::FS::IOFile(filename, "w", _SH_DENYWR);
+    // Existence checks are done within the functions themselves.
+    // We don't particularly care if these succeed or not.
+    static_cast<void>(Common::FS::RemoveFile(old_filename));
+    static_cast<void>(Common::FS::RenameFile(filename, old_filename));
+
+    file = Common::FS::IOFile(filename, Common::FS::FileAccessMode::Write, Common::FS::FileType::TextFile);
 }
 
 void FileBackend::Write(const Entry& entry) {

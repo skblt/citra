@@ -5,6 +5,7 @@
 #pragma once
 
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -100,7 +101,7 @@ public:
  */
 class FileBackend : public Backend {
 public:
-    explicit FileBackend(const std::string& filename);
+    explicit FileBackend(const std::filesystem::path& filename);
 
     static const char* Name() {
         return "file";
