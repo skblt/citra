@@ -8,8 +8,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include "common/file_util.h"
-#include "common/logging/filter.h"
+#include "common/fs/file.h"
 #include "common/logging/log.h"
 
 namespace Log {

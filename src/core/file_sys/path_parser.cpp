@@ -4,7 +4,7 @@
 
 #include <algorithm>
 #include <set>
-#include "common/file_util.h"
+#include "common/fs/fs.h"
 #include "common/string_util.h"
 #include "core/file_sys/path_parser.h"
 
@@ -59,7 +59,7 @@ PathParser::PathParser(const Path& path) {
 
 PathParser::HostStatus PathParser::GetHostStatus(std::string_view mount_point) const {
     std::string path{mount_point};
-    if (!Common::FS::IsDirectory(path))
+    if (!Common::FS::IsDir(path))
         return InvalidMountPoint;
     if (path_sequence.empty()) {
         return DirectoryFound;
@@ -72,7 +72,7 @@ PathParser::HostStatus PathParser::GetHostStatus(std::string_view mount_point) c
 
         if (!Common::FS::Exists(path))
             return PathNotFound;
-        if (Common::FS::IsDirectory(path))
+        if (Common::FS::IsDir(path))
             continue;
         return FileInPath;
     }
@@ -80,7 +80,7 @@ PathParser::HostStatus PathParser::GetHostStatus(std::string_view mount_point) c
     path += "/" + path_sequence.back();
     if (!Common::FS::Exists(path))
         return NotFound;
-    if (Common::FS::IsDirectory(path))
+    if (Common::FS::IsDir(path))
         return DirectoryFound;
     return FileFound;
 }

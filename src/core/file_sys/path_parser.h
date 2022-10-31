@@ -5,6 +5,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 #include "core/file_sys/archive_backend.h"
 

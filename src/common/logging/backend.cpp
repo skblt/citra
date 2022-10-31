@@ -18,6 +18,7 @@
 #define _SH_DENYWR 0
 #endif
 #include "common/assert.h"
+#include "common/fs/fs.h"
 #include "common/logging/backend.h"
 #include "common/logging/log.h"
 #include "common/logging/text_formatter.h"
@@ -146,10 +147,10 @@ void LogcatBackend::Write(const Entry& entry) {
 
 FileBackend::FileBackend(const std::string& filename) : bytes_written(0) {
     if (Common::FS::Exists(filename + ".old.txt")) {
-        Common::FS::Delete(filename + ".old.txt");
+        Common::FS::RemoveFile(filename + ".old.txt");
     }
     if (Common::FS::Exists(filename)) {
-        Common::FS::Rename(filename, filename + ".old.txt");
+        Common::FS::RenameFile(filename, filename + ".old.txt");
     }
 
     // _SH_DENYWR allows read only access to the file for other programs.
