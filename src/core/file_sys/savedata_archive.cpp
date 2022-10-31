@@ -200,7 +200,7 @@ static ResultCode DeleteDirectoryHelper(const Path& path, const std::string& mou
 }
 
 ResultCode SaveDataArchive::DeleteDirectory(const Path& path) const {
-    return DeleteDirectoryHelper(path, mount_point, Common::FS::DeleteDir);
+    return DeleteDirectoryHelper(path, mount_point, Common::FS::Delete);
 }
 
 ResultCode SaveDataArchive::DeleteDirectoryRecursively(const Path& path) const {

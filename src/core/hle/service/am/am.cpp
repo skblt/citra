@@ -285,7 +285,7 @@ bool CIAFile::Close() const {
     // Install aborted
     if (!complete) {
         LOG_ERROR(Service_AM, "CIAFile closed prematurely, aborting install...");
-        Common::FS::DeleteDir(GetTitlePath(media_type, container.GetTitleMetadata().GetTitleID()));
+        Common::FS::Delete(GetTitlePath(media_type, container.GetTitleMetadata().GetTitleID()));
         return true;
     }
 

@@ -218,7 +218,7 @@ static ResultCode DeleteDirectoryHelper(const Path& path, const std::string& mou
 }
 
 ResultCode SDMCArchive::DeleteDirectory(const Path& path) const {
-    return DeleteDirectoryHelper(path, mount_point, Common::FS::DeleteDir);
+    return DeleteDirectoryHelper(path, mount_point, Common::FS::Delete);
 }
 
 ResultCode SDMCArchive::DeleteDirectoryRecursively(const Path& path) const {
