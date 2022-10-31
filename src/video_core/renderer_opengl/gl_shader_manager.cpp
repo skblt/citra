@@ -11,7 +11,7 @@
 #include "video_core/renderer_opengl/gl_shader_disk_cache.h"
 #include "video_core/renderer_opengl/gl_shader_manager.h"
 #include "video_core/renderer_opengl/gl_state.h"
-#include "video_core/renderer_opengl/gl_vars.h"
+#include "video_core/renderer_opengl/gl_driver.h"
 #include "video_core/video_core.h"
 
 namespace OpenGL {
@@ -327,12 +327,13 @@ using FragmentShaders = ShaderCache<PicaFSConfig, &GenerateFragmentShader, GL_FR
 
 class ShaderProgramManager::Impl {
 public:
-    explicit Impl(bool separable, bool is_amd)
-        : is_amd(is_amd), separable(separable), programmable_vertex_shaders(separable),
+    explicit Impl(bool separable)
+        : separable(separable), programmable_vertex_shaders(separable),
           trivial_vertex_shader(separable), fixed_geometry_shaders(separable),
           fragment_shaders(separable), disk_cache(separable) {
-        if (separable)
+        if (separable) {
             pipeline.Create();
+        }
     }
 
     struct ShaderTuple {
@@ -361,25 +362,19 @@ public:
     static_assert(offsetof(ShaderTuple, fs_hash) == sizeof(std::size_t) * 2,
                   "ShaderTuple layout changed!");
 
-    bool is_amd;
     bool separable;
-
     ShaderTuple current;
-
     ProgrammableVertexShaders programmable_vertex_shaders;
     TrivialVertexShader trivial_vertex_shader;
-
     FixedGeometryShaders fixed_geometry_shaders;
-
     FragmentShaders fragment_shaders;
     std::unordered_map<u64, OGLProgram> program_cache;
     OGLPipeline pipeline;
     ShaderDiskCache disk_cache;
 };
 
-ShaderProgramManager::ShaderProgramManager(Frontend::EmuWindow& emu_window_, bool separable,
-                                           bool is_amd)
-    : impl(std::make_unique<Impl>(separable, is_amd)), emu_window{emu_window_} {}
+ShaderProgramManager::ShaderProgramManager(Frontend::EmuWindow& emu_window_, Driver& driver, bool separable)
+    : impl(std::make_unique<Impl>(separable)), emu_window{emu_window_}, driver{driver} {}
 
 ShaderProgramManager::~ShaderProgramManager() = default;
 
@@ -441,10 +436,7 @@ void ShaderProgramManager::UseFragmentShader(const Pica::Regs& regs) {
 
 void ShaderProgramManager::ApplyTo(OpenGLState& state) {
     if (impl->separable) {
-        if (impl->is_amd) {
-            // Without this reseting, AMD sometimes freezes when one stage is changed but not
-            // for the others. On the other hand, including this reset seems to introduce memory
-            // leak in Intel Graphics.
+        if (driver.HasBug(DriverBug::ShaderStageChangeFreeze)) {
             glUseProgramStages(
                 impl->pipeline.handle,
                 GL_VERTEX_SHADER_BIT | GL_GEOMETRY_SHADER_BIT | GL_FRAGMENT_SHADER_BIT, 0);

@@ -20,19 +20,14 @@
 
 namespace OpenGL {
 
-static bool IsVendorAmd() {
-    const std::string_view gpu_vendor{reinterpret_cast<char const*>(glGetString(GL_VENDOR))};
-    return gpu_vendor == "ATI Technologies Inc." || gpu_vendor == "Advanced Micro Devices, Inc.";
-}
-#ifdef __APPLE__
-static bool IsVendorIntel() {
-    std::string gpu_vendor{reinterpret_cast<char const*>(glGetString(GL_VENDOR))};
-    return gpu_vendor == "Intel Inc.";
-}
-#endif
+constexpr std::size_t VERTEX_BUFFER_SIZE = 16 * 1024 * 1024;
+constexpr std::size_t INDEX_BUFFER_SIZE = 1 * 1024 * 1024;
+constexpr std::size_t UNIFORM_BUFFER_SIZE = 2 * 1024 * 1024;
+constexpr std::size_t TEXTURE_BUFFER_SIZE = 1 * 1024 * 1024;
 
 RasterizerOpenGL::RasterizerOpenGL(Frontend::EmuWindow& emu_window, Driver& driver)
-    : driver{driver}, runtime{driver}, res_cache{*this, runtime}, is_amd(IsVendorAmd()),
+    : driver{driver}, runtime{driver}, res_cache{*this, runtime},
+      shader_program_manager{emu_window, driver, !driver.IsOpenGLES()},
       vertex_buffer{GL_ARRAY_BUFFER, VERTEX_BUFFER_SIZE},
       uniform_buffer{GL_UNIFORM_BUFFER, UNIFORM_BUFFER_SIZE},
       index_buffer{GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE},
@@ -44,8 +39,7 @@ RasterizerOpenGL::RasterizerOpenGL(Frontend::EmuWindow& emu_window, Driver& driv
 
     // Create a 1x1 clear texture to use in the NULL case,
     // instead of OpenGL's default of solid black
-    glGenTextures(1, &default_texture);
-    glBindTexture(GL_TEXTURE_2D, default_texture);
+    default_texture.Create();
     // For some reason alpha 0 wraps around to 1.0, so use 1/255 instead
     u8 framebuffer_data[4] = {0, 0, 0, 1};
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, framebuffer_data);
@@ -128,17 +122,6 @@ RasterizerOpenGL::RasterizerOpenGL(Frontend::EmuWindow& emu_window, Driver& driv
     state.Apply();
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer.GetHandle());
 
-#ifdef __APPLE__
-    if (IsVendorIntel()) {
-        shader_program_manager = std::make_unique<ShaderProgramManager>(
-            emu_window, VideoCore::g_separable_shader_enabled, is_amd);
-    } else {
-        shader_program_manager = std::make_unique<ShaderProgramManager>(emu_window, true, is_amd);
-    }
-#else
-    shader_program_manager = std::make_unique<ShaderProgramManager>(emu_window, !GLES, is_amd);
-#endif
-
     glEnable(GL_BLEND);
 
     // Explicitly call the derived version to avoid warnings about calling virtual
@@ -150,7 +133,7 @@ RasterizerOpenGL::~RasterizerOpenGL() = default;
 
 void RasterizerOpenGL::LoadDiskResources(const std::atomic_bool& stop_loading,
                                          const VideoCore::DiskResourceLoadCallback& callback) {
-    shader_program_manager->LoadDiskCache(stop_loading, callback);
+    shader_program_manager.LoadDiskCache(stop_loading, callback);
 }
 
 void RasterizerOpenGL::SyncEntireState() {
@@ -285,7 +268,7 @@ void RasterizerOpenGL::SetupVertexArray(u8* array_ptr, GLintptr buffer_offset,
 MICROPROFILE_DEFINE(OpenGL_VS, "OpenGL", "Vertex Shader Setup", MP_RGB(192, 128, 128));
 bool RasterizerOpenGL::SetupVertexShader() {
     MICROPROFILE_SCOPE(OpenGL_VS);
-    return shader_program_manager->UseProgrammableVertexShader(Pica::g_state.regs,
+    return shader_program_manager.UseProgrammableVertexShader(Pica::g_state.regs,
                                                                Pica::g_state.vs);
 }
 
@@ -299,7 +282,7 @@ bool RasterizerOpenGL::SetupGeometryShader() {
         return false;
     }
 
-    shader_program_manager->UseFixedGeometryShader(regs);
+    shader_program_manager.UseFixedGeometryShader(regs);
     return true;
 }
 
@@ -360,7 +343,7 @@ bool RasterizerOpenGL::AccelerateDrawBatchInternal(bool is_indexed) {
     SetupVertexArray(buffer_ptr, buffer_offset, vs_input_index_min, vs_input_index_max);
     vertex_buffer.Unmap(vs_input_size);
 
-    shader_program_manager->ApplyTo(state);
+    shader_program_manager.ApplyTo(state);
     state.Apply();
 
     if (is_indexed) {
@@ -623,7 +606,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                 // the geometry in question.
                 // For example: a bug in Pokemon X/Y causes NULL-texture squares to be drawn
                 // on the male character's face, which in the OpenGL default appear black.
-                state.texture_units[texture_index].texture_2d = default_texture;
+                state.texture_units[texture_index].texture_2d = default_texture.handle;
             }
         } else {
             state.texture_units[texture_index].texture_2d = 0;
@@ -687,9 +670,9 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
     } else {
         state.draw.vertex_array = sw_vao.handle;
         state.draw.vertex_buffer = vertex_buffer.GetHandle();
-        shader_program_manager->UseTrivialVertexShader();
-        shader_program_manager->UseTrivialGeometryShader();
-        shader_program_manager->ApplyTo(state);
+        shader_program_manager.UseTrivialVertexShader();
+        shader_program_manager.UseTrivialGeometryShader();
+        shader_program_manager.ApplyTo(state);
         state.Apply();
 
         std::size_t max_vertices = 3 * (VERTEX_BUFFER_SIZE / (3 * sizeof(HardwareVertex)));
@@ -784,7 +767,7 @@ void RasterizerOpenGL::NotifyPicaRegisterChanged(u32 id) {
 
     // Blending
     case PICA_REG_INDEX(framebuffer.output_merger.alphablend_enable):
-        if (GLES) {
+        if (driver.IsOpenGLES()) {
             // With GLES, we need this in the fragment shader to emulate logic operations
             shader_dirty = true;
         }
@@ -908,7 +891,7 @@ void RasterizerOpenGL::NotifyPicaRegisterChanged(u32 id) {
 
     // Logic op
     case PICA_REG_INDEX(framebuffer.output_merger.logic_op):
-        if (GLES) {
+        if (driver.IsOpenGLES()) {
             // With GLES, we need this in the fragment shader to emulate logic operations
             shader_dirty = true;
         }
@@ -1519,7 +1502,7 @@ void RasterizerOpenGL::SamplerInfo::SyncWithConfig(
 }
 
 void RasterizerOpenGL::SetShader() {
-    shader_program_manager->UseFragmentShader(Pica::g_state.regs);
+    shader_program_manager.UseFragmentShader(Pica::g_state.regs);
 }
 
 void RasterizerOpenGL::SyncClipEnabled() {
@@ -1595,7 +1578,7 @@ void RasterizerOpenGL::SyncLogicOp() {
     const auto& regs = Pica::g_state.regs;
     state.logic_op = PicaToGL::LogicOp(regs.framebuffer.output_merger.logic_op);
 
-    if (GLES) {
+    if (driver.IsOpenGLES()) {
         if (!regs.framebuffer.output_merger.alphablend_enable) {
             if (regs.framebuffer.output_merger.logic_op == Pica::FramebufferRegs::LogicOp::NoOp) {
                 // Color output is disabled by logic operation. We use color write mask to skip
@@ -1608,7 +1591,7 @@ void RasterizerOpenGL::SyncLogicOp() {
 
 void RasterizerOpenGL::SyncColorWriteMask() {
     const auto& regs = Pica::g_state.regs;
-    if (GLES) {
+    if (driver.IsOpenGLES()) {
         if (!regs.framebuffer.output_merger.alphablend_enable) {
             if (regs.framebuffer.output_merger.logic_op == Pica::FramebufferRegs::LogicOp::NoOp) {
                 // Color output is disabled by logic operation. We use color write mask to skip

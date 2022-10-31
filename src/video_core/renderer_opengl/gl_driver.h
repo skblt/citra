@@ -10,7 +10,7 @@ namespace OpenGL {
 enum class Vendor { Unknown = 0, AMD = 1, Nvidia = 2, Intel = 3, Generic = 4 };
 
 enum class DriverBug {
-    // AMD drivers sometimes freeze when one shader stage is changed but not the others.
+    // AMD drivers sometimes freezes when one shader stage is changed but not the others.
     ShaderStageChangeFreeze = 1 << 0,
     // On AMD drivers there is a strange crash in indexed drawing. The crash happens when the buffer
     // read position is near the end and is an out-of-bound access to the vertex buffer. This is
