@@ -233,7 +233,7 @@ void PipelineCache::UseTrivialGeometryShader() {
 }
 
 void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
-    const PicaFSConfig config{regs};
+    const PicaFSConfig config{regs, instance};
 
     scheduler.Record([this, config](vk::CommandBuffer, vk::CommandBuffer) {
         auto [handle, result] = fragment_shaders.Get(config, vk::ShaderStageFlagBits::eFragment,
@@ -452,7 +452,7 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .colorWriteMask = static_cast<vk::ColorComponentFlags>(info.blending.color_write_mask)};
 
     const vk::PipelineColorBlendStateCreateInfo color_blending = {
-        .logicOpEnable = !info.blending.blend_enable.Value(),
+        .logicOpEnable = !info.blending.blend_enable.Value() && !instance.NeedsLogicOpEmulation(),
         .logicOp = PicaToVK::LogicOp(info.blending.logic_op.Value()),
         .attachmentCount = 1,
         .pAttachments = &colorblend_attachment,

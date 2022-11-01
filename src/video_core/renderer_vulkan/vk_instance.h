@@ -85,6 +85,11 @@ public:
         return present_queue;
     }
 
+    /// Returns true if logic operations need shader emulation
+    bool NeedsLogicOpEmulation() const {
+        return !device_features.logicOp;
+    }
+
     /// Returns true when VK_KHR_timeline_semaphore is supported
     bool IsTimelineSemaphoreSupported() const {
         return timeline_semaphores;
@@ -145,6 +150,7 @@ private:
     vk::Instance instance;
     vk::SurfaceKHR surface;
     vk::PhysicalDeviceProperties device_properties;
+    vk::PhysicalDeviceFeatures device_features;
     VmaAllocator allocator;
     vk::Queue present_queue;
     vk::Queue graphics_queue;

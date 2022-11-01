@@ -13,6 +13,8 @@
 
 namespace Vulkan {
 
+class Instance;
+
 enum Attributes {
     ATTRIBUTE_POSITION,
     ATTRIBUTE_COLOR,
@@ -51,7 +53,7 @@ struct PicaFSConfigState {
         BitField<17, 1, Pica::RasterizerRegs::DepthBuffering> depthmap_enable;
         BitField<18, 3, Pica::TexturingRegs::FogMode> fog_mode;
         BitField<21, 1, u32> fog_flip;
-        BitField<22, 1, u32> alphablend_enable;
+        BitField<22, 1, u32> emulate_logic_op;
         BitField<23, 4, Pica::FramebufferRegs::LogicOp> logic_op;
         BitField<27, 1, u32> shadow_rendering;
         BitField<28, 1, u32> shadow_texture_orthographic;
@@ -132,7 +134,7 @@ struct PicaFSConfigState {
  * two separate shaders sharing the same key.
  */
 struct PicaFSConfig : Common::HashableStruct<PicaFSConfigState> {
-    PicaFSConfig(const Pica::Regs& regs);
+    PicaFSConfig(const Pica::Regs& regs, const Instance& instance);
 
     bool TevStageUpdatesCombinerBufferColor(unsigned stage_index) const {
         return (stage_index < 4) && (state.combiner_buffer_input & (1 << stage_index));

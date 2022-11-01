@@ -805,6 +805,9 @@ void RasterizerVulkan::NotifyPicaRegisterChanged(u32 id) {
 
     // Blending
     case PICA_REG_INDEX(framebuffer.output_merger.alphablend_enable):
+        if (instance.NeedsLogicOpEmulation()) {
+            shader_dirty = true;
+        }
         SyncBlendEnabled();
         break;
     case PICA_REG_INDEX(framebuffer.output_merger.alpha_blending):
@@ -925,6 +928,9 @@ void RasterizerVulkan::NotifyPicaRegisterChanged(u32 id) {
 
     // Logic op
     case PICA_REG_INDEX(framebuffer.output_merger.logic_op):
+        if (instance.NeedsLogicOpEmulation()) {
+            shader_dirty = true;
+        }
         SyncLogicOp();
         break;
 
@@ -1594,12 +1600,34 @@ void RasterizerVulkan::SyncBlendColor() {
 
 void RasterizerVulkan::SyncLogicOp() {
     const auto& regs = Pica::g_state.regs;
-    pipeline_info.blending.logic_op.Assign(regs.framebuffer.output_merger.logic_op);
+
+    const bool is_logic_op_emulated =
+            instance.NeedsLogicOpEmulation() && !regs.framebuffer.output_merger.alphablend_enable;
+    const bool is_logic_op_noop =
+            regs.framebuffer.output_merger.logic_op == Pica::FramebufferRegs::LogicOp::NoOp;
+    if (is_logic_op_emulated && is_logic_op_noop) {
+        // Color output is disabled by logic operation. We use color write mask to skip
+        // color but allow depth write.
+        pipeline_info.blending.color_write_mask.Assign(0);
+    } else {
+        pipeline_info.blending.logic_op.Assign(regs.framebuffer.output_merger.logic_op);
+    }
 }
 
 void RasterizerVulkan::SyncColorWriteMask() {
     const auto& regs = Pica::g_state.regs;
     const u32 color_mask = (regs.framebuffer.output_merger.depth_color_mask >> 8) & 0xF;
+
+    const bool is_logic_op_emulated =
+            instance.NeedsLogicOpEmulation() && !regs.framebuffer.output_merger.alphablend_enable;
+    const bool is_logic_op_noop =
+            regs.framebuffer.output_merger.logic_op == Pica::FramebufferRegs::LogicOp::NoOp;
+    if (is_logic_op_emulated && is_logic_op_noop) {
+        // Color output is disabled by logic operation. We use color write mask to skip
+        // color but allow depth write. Return early to avoid overwriting this.
+        return;
+    }
+
     pipeline_info.blending.color_write_mask.Assign(color_mask);
 }
 
