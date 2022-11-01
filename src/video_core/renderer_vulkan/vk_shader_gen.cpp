@@ -11,6 +11,7 @@
 #include "video_core/regs_framebuffer.h"
 #include "video_core/renderer_opengl/gl_shader_decompiler.h"
 #include "video_core/renderer_vulkan/vk_shader_gen.h"
+#include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/video_core.h"
 
 using Pica::FramebufferRegs;
@@ -100,7 +101,7 @@ out gl_PerVertex {
     return out;
 }
 
-PicaFSConfig::PicaFSConfig(const Pica::Regs& regs) {
+PicaFSConfig::PicaFSConfig(const Pica::Regs& regs, const Instance& instance) {
     state.scissor_test_mode.Assign(regs.rasterizer.scissor_test.mode);
 
     state.depthmap_enable.Assign(regs.rasterizer.depthmap_enable);
@@ -113,8 +114,16 @@ PicaFSConfig::PicaFSConfig(const Pica::Regs& regs) {
 
     state.texture2_use_coord1.Assign(regs.texturing.main_config.texture2_use_coord1 != 0);
 
-    state.alphablend_enable.Assign(0);
-    state.logic_op.Assign(Pica::FramebufferRegs::LogicOp::Clear);
+    // Emulate logic op in the shader if not supported. This is mostly for mobile GPUs
+    const bool emulate_logic_op = instance.NeedsLogicOpEmulation() &&
+            !Pica::g_state.regs.framebuffer.output_merger.alphablend_enable;
+
+    state.emulate_logic_op.Assign(emulate_logic_op);
+    if (emulate_logic_op) {
+        state.logic_op.Assign(regs.framebuffer.output_merger.logic_op);
+    } else {
+        state.logic_op.Assign(Pica::FramebufferRegs::LogicOp::NoOp);
+    }
 
     // Copy relevant tev stages fields.
     // We don't sync const_color here because of the high variance, it is a
@@ -1532,6 +1541,30 @@ do {
         out += "gl_FragDepth = depth;\n";
         // Round the final fragment color to maintain the PICA's 8 bits of precision
         out += "color = byteround(last_tex_env_out);\n";
+    }
+
+    if (state.emulate_logic_op) {
+        switch (state.logic_op) {
+        case FramebufferRegs::LogicOp::Clear:
+            out += "color = vec4(0);\n";
+            break;
+        case FramebufferRegs::LogicOp::Set:
+            out += "color = vec4(1);\n";
+            break;
+        case FramebufferRegs::LogicOp::Copy:
+            // Take the color output as-is
+            break;
+        case FramebufferRegs::LogicOp::CopyInverted:
+            out += "color = ~color;\n";
+            break;
+        case FramebufferRegs::LogicOp::NoOp:
+            // We need to discard the color, but not necessarily the depth. This is not possible
+            // with fragment shader alone, so we emulate this behavior with the color mask.
+            break;
+        default:
+            LOG_CRITICAL(HW_GPU, "Unhandled logic_op {:x}", static_cast<u32>(state.logic_op.Value()));
+            UNIMPLEMENTED();
+        }
     }
 
     out += '}';

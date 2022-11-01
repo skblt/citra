@@ -253,6 +253,7 @@ bool Instance::CreateDevice() {
 
     // Not having geometry shaders will cause issues with accelerated rendering.
     const vk::PhysicalDeviceFeatures available = feature_chain.get().features;
+    device_features = available;
     if (!available.geometryShader) {
         LOG_WARNING(Render_Vulkan,
                     "Geometry shaders not availabe! Accelerated rendering not possible!");
