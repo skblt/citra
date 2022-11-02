@@ -157,6 +157,7 @@ struct PicaShaderConfigCommon {
     u32 main_offset;
     bool sanitize_mul;
     std::array<Pica::PipelineRegs::VertexAttributeFormat, 16> attrib_types;
+    std::array<u8, 16> emulated_attrib_locations;
 
     u32 num_outputs;
 

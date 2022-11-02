@@ -114,7 +114,7 @@ void Swapchain::Present() {
                                                  .swapchainCount = 1,
                                                  .pSwapchains = &swapchain,
                                                  .pImageIndices = &index};
-
+        MICROPROFILE_SCOPE(Vulkan_Present);
         vk::Queue present_queue = instance.GetPresentQueue();
         try {
             [[maybe_unused]] vk::Result result = present_queue.presentKHR(present_info);
