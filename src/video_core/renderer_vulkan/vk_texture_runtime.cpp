@@ -150,7 +150,7 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
 
     ImageAlloc alloc{};
     alloc.format = format;
-    alloc.levels = std::bit_width(std::max(width, height));
+    alloc.levels = std::log2(std::max(width, height)) + 1;
     alloc.layers = type == VideoCore::TextureType::CubeMap ? 6 : 1;
     alloc.aspect = GetImageAspect(format);
 

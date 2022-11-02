@@ -121,12 +121,14 @@ void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::spa
 OGLTexture TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
                                     VideoCore::TextureType type) {
     const u32 layers = type == VideoCore::TextureType::CubeMap ? 6 : 1;
+    const u32 levels = std::log2(std::max(width, height)) + 1;
     const GLenum target =
         type == VideoCore::TextureType::CubeMap ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+
+    // Attempt to recycle an unused texture
     const VideoCore::HostTextureTag key = {
         .format = format, .width = width, .height = height, .layers = layers};
 
-    // Attempt to recycle an unused texture
     if (auto it = texture_recycler.find(key); it != texture_recycler.end()) {
         OGLTexture texture = std::move(it->second);
         texture_recycler.erase(it);
@@ -144,8 +146,7 @@ OGLTexture TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(target, texture.handle);
 
-    glTexStorage2D(target, std::bit_width(std::max(width, height)), tuple.internal_format, width,
-                   height);
+    glTexStorage2D(target, levels, tuple.internal_format, width, height);
 
     glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
