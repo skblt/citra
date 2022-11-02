@@ -60,7 +60,7 @@ u32 UnpackDepthStencil(const StagingData& data, vk::Format dest) {
     return depth_offset;
 }
 
-constexpr u32 UPLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
+constexpr u32 UPLOAD_BUFFER_SIZE = 64 * 1024 * 1024;
 constexpr u32 DOWNLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 
 TextureRuntime::TextureRuntime(const Instance& instance, Scheduler& scheduler,
@@ -124,7 +124,6 @@ void TextureRuntime::FlushBuffers() {
 MICROPROFILE_DEFINE(Vulkan_Finish, "Vulkan", "Scheduler Finish", MP_RGB(52, 192, 235));
 void TextureRuntime::Finish() {
     MICROPROFILE_SCOPE(Vulkan_Finish);
-    renderpass_cache.ExitRenderpass();
     scheduler.Finish();
     download_buffer.Invalidate();
 }

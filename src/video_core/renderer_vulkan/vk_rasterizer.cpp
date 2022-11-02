@@ -109,7 +109,6 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
 }
 
 RasterizerVulkan::~RasterizerVulkan() {
-    renderpass_cache.ExitRenderpass();
     scheduler.Finish();
 
     vk::Device device = instance.GetDevice();
@@ -178,21 +177,24 @@ void RasterizerVulkan::SyncFixedState() {
 
 void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min,
                                         u32 vs_input_index_max) {
-    const u32 vertex_size = vs_input_size + sizeof(Common::Vec4f) * 16;
-    auto [array_ptr, array_offset, invalidate] = vertex_buffer.Map(vertex_size, 4);
+    auto [array_ptr, array_offset, invalidate] = vertex_buffer.Map(vs_input_size, 4);
 
-    // The Nintendo 3DS has 12 attribute loaders which are used to tell the GPU
-    // how to interpret vertex data. The program firsts sets GPUREG_ATTR_BUF_BASE to the base
-    // address containing the vertex array data. The data for each attribute loader (i) can be found
-    // by adding GPUREG_ATTR_BUFi_OFFSET to the base address. Attribute loaders can be thought
-    // as something analogous to Vulkan bindings. The user can store attributes in separate loaders
-    // or interleave them in the same loader.
+    /**
+    * The Nintendo 3DS has 12 attribute loaders which are used to tell the GPU
+    * how to interpret vertex data. The program firsts sets GPUREG_ATTR_BUF_BASE to the base
+    * address containing the vertex array data. The data for each attribute loader (i) can be found
+    * by adding GPUREG_ATTR_BUFi_OFFSET to the base address. Attribute loaders can be thought
+    * as something analogous to Vulkan bindings. The user can store attributes in separate loaders
+    * or interleave them in the same loader.
+    **/
     const auto& regs = Pica::g_state.regs;
     const auto& vertex_attributes = regs.pipeline.vertex_attributes;
     PAddr base_address = vertex_attributes.GetPhysicalBaseAddress(); // GPUREG_ATTR_BUF_BASE
 
-    std::array<bool, 16> enable_attributes{};
-    VertexLayout layout{};
+    VertexLayout& layout = pipeline_info.vertex_layout;
+    layout.attribute_count = 0;
+    layout.binding_count = 0;
+    enable_attributes.fill(false);
 
     u32 buffer_offset = 0;
     for (const auto& loader : vertex_attributes.attribute_loaders) {
@@ -250,12 +252,33 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
         buffer_offset += Common::AlignUp(data_size, 16);
     }
 
-    array_ptr += buffer_offset;
+    binding_offsets[layout.binding_count] = array_offset + buffer_offset;
+    vertex_buffer.Commit(buffer_offset);
+
+    // Assign the rest of the attributes to the last binding
+    SetupFixedAttribs();
+
+    // Bind the generated bindings
+    scheduler.Record([this, layout = pipeline_info.vertex_layout,
+                     offsets = binding_offsets](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        std::array<vk::Buffer, 16> buffers;
+        buffers.fill(vertex_buffer.GetHandle());
+        render_cmdbuf.bindVertexBuffers(0, layout.binding_count, buffers.data(),
+                                         offsets.data());
+    });
+}
+
+void RasterizerVulkan::SetupFixedAttribs() {
+    const auto& regs = Pica::g_state.regs;
+    const auto& vertex_attributes = regs.pipeline.vertex_attributes;
+    VertexLayout& layout = pipeline_info.vertex_layout;
+
+    auto [fixed_ptr, fixed_offset, _] = vertex_buffer.Map(16 * sizeof(Common::Vec4f));
 
     // Reserve the last binding for fixed and default attributes
     // Place the default attrib at offset zero for easy access
-    const Common::Vec4f default_attrib = Common::MakeVec(0.f, 0.f, 0.f, 1.f);
-    std::memcpy(array_ptr, default_attrib.AsArray(), sizeof(Common::Vec4f));
+    static const Common::Vec4f default_attrib{0.f, 0.f, 0.f, 1.f};
+    std::memcpy(fixed_ptr, default_attrib.AsArray(), sizeof(Common::Vec4f));
 
     // Find all fixed attributes and assign them to the last binding
     u32 offset = sizeof(Common::Vec4f);
@@ -268,7 +291,7 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
                                          attr.w.ToFloat32()};
 
                 const u32 data_size = sizeof(float) * static_cast<u32>(data.size());
-                std::memcpy(array_ptr + offset, data.data(), data_size);
+                std::memcpy(fixed_ptr + offset, data.data(), data_size);
 
                 VertexAttribute& attribute = layout.attributes[layout.attribute_count++];
                 attribute.binding.Assign(layout.binding_count);
@@ -299,26 +322,16 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
 
     // Define the fixed+default binding
     VertexBinding& binding = layout.bindings[layout.binding_count];
-    binding.binding.Assign(layout.binding_count);
+    binding.binding.Assign(layout.binding_count++);
     binding.fixed.Assign(1);
     binding.stride.Assign(offset);
 
-    binding_offsets[layout.binding_count++] = array_offset + buffer_offset;
-    ASSERT(buffer_offset + offset <= vertex_size);
-    vertex_buffer.Commit(buffer_offset + offset);
-
-    // Update the pipeline vertex layout
-    pipeline_info.vertex_layout = layout;
-
-    scheduler.Record([this, layout, offsets = binding_offsets](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        std::array<vk::Buffer, 16> buffers;
-        buffers.fill(vertex_buffer.GetHandle());
-        render_cmdbuf.bindVertexBuffers(0, layout.binding_count, buffers.data(),
-                                         offsets.data());
-    });
+    vertex_buffer.Commit(offset);
 }
 
+MICROPROFILE_DEFINE(Vulkan_VS, "Vulkan", "Vertex Shader Setup", MP_RGB(192, 128, 128));
 bool RasterizerVulkan::SetupVertexShader() {
+    MICROPROFILE_SCOPE(Vulkan_VS);
     return pipeline_cache.UseProgrammableVertexShader(Pica::g_state.regs, Pica::g_state.vs,
                                                       pipeline_info.vertex_layout);
 }
@@ -354,7 +367,7 @@ bool RasterizerVulkan::AccelerateDrawBatch(bool is_indexed) {
 bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
     const auto& regs = Pica::g_state.regs;
 
-    auto [vs_input_index_min, vs_input_index_max, vs_input_size] = AnalyzeVertexArray(is_indexed);
+    const auto [vs_input_index_min, vs_input_index_max, vs_input_size] = AnalyzeVertexArray(is_indexed);
 
     if (vs_input_size > VERTEX_BUFFER_SIZE) {
         LOG_WARNING(Render_Vulkan, "Too large vertex input size {}", vs_input_size);

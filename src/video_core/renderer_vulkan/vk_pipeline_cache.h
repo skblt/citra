@@ -126,7 +126,6 @@ class DescriptorManager;
 
 /**
  * Stores a collection of rasterizer pipelines used during rendering.
- * In addition handles descriptor set management.
  */
 class PipelineCache {
 public:

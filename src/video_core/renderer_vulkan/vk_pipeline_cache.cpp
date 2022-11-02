@@ -17,21 +17,21 @@
 
 namespace Vulkan {
 
-u32 AttribBytes(VertexAttribute attrib) {
-    switch (attrib.type) {
+u32 AttribBytes(Pica::PipelineRegs::VertexAttributeFormat format, u32 size) {
+    switch (format) {
     case Pica::PipelineRegs::VertexAttributeFormat::FLOAT:
-        return sizeof(float) * attrib.size;
+        return sizeof(float) * size;
     case Pica::PipelineRegs::VertexAttributeFormat::SHORT:
-        return sizeof(u16) * attrib.size;
+        return sizeof(u16) * size;
     case Pica::PipelineRegs::VertexAttributeFormat::BYTE:
     case Pica::PipelineRegs::VertexAttributeFormat::UBYTE:
-        return sizeof(u8) * attrib.size;
+        return sizeof(u8) * size;
     }
 
     return 0;
 }
 
-vk::Format ToVkAttributeFormat(VertexAttribute attrib) {
+vk::Format ToVkAttributeFormat(Pica::PipelineRegs::VertexAttributeFormat format, u32 size) {
     constexpr std::array attribute_formats = {
         std::array{vk::Format::eR8Sint, vk::Format::eR8G8Sint, vk::Format::eR8G8B8Sint,
                    vk::Format::eR8G8B8A8Sint},
@@ -42,8 +42,8 @@ vk::Format ToVkAttributeFormat(VertexAttribute attrib) {
         std::array{vk::Format::eR32Sfloat, vk::Format::eR32G32Sfloat, vk::Format::eR32G32B32Sfloat,
                    vk::Format::eR32G32B32A32Sfloat}};
 
-    ASSERT(attrib.size <= 4);
-    return attribute_formats[static_cast<u32>(attrib.type.Value())][attrib.size.Value() - 1];
+    ASSERT(size <= 4);
+    return attribute_formats[static_cast<u32>(format)][size - 1];
 }
 
 vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
@@ -61,6 +61,13 @@ vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
 
     return vk::ShaderStageFlagBits::eVertex;
 }
+
+[[nodiscard]] bool IsAttribFormatSupported(const VertexAttribute& attrib, const Instance& instance) {
+    vk::PhysicalDevice physical_device = instance.GetPhysicalDevice();
+    const vk::Format format = ToVkAttributeFormat(attrib.type, attrib.size);
+    const vk::FormatFeatureFlags features = physical_device.getFormatProperties(format).bufferFeatures;
+    return (features & vk::FormatFeatureFlagBits::eVertexBuffer) == vk::FormatFeatureFlagBits::eVertexBuffer;
+};
 
 PipelineCache::PipelineCache(const Instance& instance, Scheduler& scheduler,
                              RenderpassCache& renderpass_cache, DescriptorManager& desc_manager)
@@ -179,21 +186,26 @@ void PipelineCache::BindPipeline(const PipelineInfo& info) {
     desc_manager.BindDescriptorSets();
 }
 
-MICROPROFILE_DEFINE(Vulkan_VS, "Vulkan", "Vertex Shader Setup", MP_RGB(192, 128, 128));
 bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
                                                 Pica::Shader::ShaderSetup& setup,
                                                 const VertexLayout& layout) {
-    MICROPROFILE_SCOPE(Vulkan_VS);
-
     PicaVSConfig config{regs.vs, setup};
+
+    u32 emulated_attrib_loc = MAX_VERTEX_ATTRIBUTES;
     for (u32 i = 0; i < layout.attribute_count; i++) {
         const auto& attrib = layout.attributes[i];
-        config.state.attrib_types[attrib.location.Value()] = attrib.type.Value();
+        const u32 location = attrib.location.Value();
+        const bool is_supported = IsAttribFormatSupported(attrib, instance);
+        ASSERT(is_supported || attrib.size == 3);
+
+        config.state.attrib_types[location] = attrib.type.Value();
+        config.state.emulated_attrib_locations[location] =
+                is_supported ? 0 : emulated_attrib_loc++;
     }
 
     auto [handle, result] =
         programmable_vertex_shaders.Get(config, setup, vk::ShaderStageFlagBits::eVertex,
-                                        instance.GetDevice(), ShaderOptimization::Debug);
+                                        instance.GetDevice(), ShaderOptimization::High);
     if (!handle) {
         LOG_ERROR(Render_Vulkan, "Failed to retrieve programmable vertex shader");
         return false;
@@ -410,20 +422,36 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
                                                : vk::VertexInputRate::eVertex};
     }
 
-    // Populate vertex attribute structures
-    std::array<vk::VertexInputAttributeDescription, MAX_VERTEX_ATTRIBUTES> attributes;
+    u32 emulated_attrib_count = 0;
+    std::array<vk::VertexInputAttributeDescription, MAX_VERTEX_ATTRIBUTES * 2> attributes;
     for (u32 i = 0; i < info.vertex_layout.attribute_count; i++) {
-        const auto& attr = info.vertex_layout.attributes[i];
-        attributes[i] = vk::VertexInputAttributeDescription{.location = attr.location,
-                                                            .binding = attr.binding,
-                                                            .format = ToVkAttributeFormat(attr),
-                                                            .offset = attr.offset};
+        const VertexAttribute& attrib = info.vertex_layout.attributes[i];
+        const vk::Format format = ToVkAttributeFormat(attrib.type, attrib.size);
+        const bool is_supported = IsAttribFormatSupported(attrib, instance);
+        ASSERT_MSG(is_supported || attrib.size == 3);
+
+        attributes[i] = vk::VertexInputAttributeDescription{.location = attrib.location,
+                                                            .binding = attrib.binding,
+                                                            .format = is_supported ? format
+                                                                                   : ToVkAttributeFormat(attrib.type, 2),
+                                                            .offset = attrib.offset};
+
+        // When the requested 3-component vertex format is unsupported by the hardware
+        // is it emulated by breaking it into a vec2 + vec1. These are combined to a vec3
+        // by the vertex shader.
+        if (!is_supported) {
+            const u32 location = MAX_VERTEX_ATTRIBUTES + emulated_attrib_count++;
+            attributes[location] = vk::VertexInputAttributeDescription{.location = location,
+                                                                       .binding = attrib.binding,
+                                                                       .format = ToVkAttributeFormat(attrib.type, 1),
+                                                                       .offset = attrib.offset + AttribBytes(attrib.type, 2)};
+        }
     }
 
     const vk::PipelineVertexInputStateCreateInfo vertex_input_info = {
         .vertexBindingDescriptionCount = info.vertex_layout.binding_count,
         .pVertexBindingDescriptions = bindings.data(),
-        .vertexAttributeDescriptionCount = info.vertex_layout.attribute_count,
+        .vertexAttributeDescriptionCount = info.vertex_layout.attribute_count + emulated_attrib_count,
         .pVertexAttributeDescriptions = attributes.data()};
 
     const vk::PipelineInputAssemblyStateCreateInfo input_assembly = {

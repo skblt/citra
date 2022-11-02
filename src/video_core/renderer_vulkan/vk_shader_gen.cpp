@@ -1667,7 +1667,7 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
                 prefix = "u";
                 break;
             default:
-                LOG_CRITICAL(Render_Vulkan, "Unknown attrib type {}", config.state.attrib_types[i]);
+                LOG_CRITICAL(Render_Vulkan, "Unknown attrib format {}", config.state.attrib_types[i]);
                 UNREACHABLE();
             }
 
@@ -1675,12 +1675,42 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
                 fmt::format("layout(location = {0}) in {1}vec4 vs_in_typed_reg{0};\n", i, prefix);
         }
     }
+
+    // Some 3-component attributes might be emulated by breaking them to vec2 + scalar.
+    // Define them here and combine them below
+    for (std::size_t i = 0; i < used_regs.size(); ++i) {
+        if (const u32 location = config.state.emulated_attrib_locations[i]; location != 0 && used_regs[i]) {
+            std::string_view type;
+            switch (config.state.attrib_types[i]) {
+            case Pica::PipelineRegs::VertexAttributeFormat::FLOAT:
+                type = "float";
+                break;
+            case Pica::PipelineRegs::VertexAttributeFormat::BYTE:
+            case Pica::PipelineRegs::VertexAttributeFormat::SHORT:
+                type = "int";
+                break;
+            case Pica::PipelineRegs::VertexAttributeFormat::UBYTE:
+                type = "uint";
+                break;
+            default:
+                LOG_CRITICAL(Render_Vulkan, "Unknown attrib format {}", config.state.attrib_types[i]);
+                UNREACHABLE();
+            }
+
+            out += fmt::format("layout(location = {}) in {} vs_in_typed_reg{}_part2;\n", location, type, i);
+        }
+    }
+
     out += '\n';
 
     // cast input registers to float to avoid computational errors
     for (std::size_t i = 0; i < used_regs.size(); ++i) {
         if (used_regs[i]) {
-            out += fmt::format("vec4 vs_in_reg{0} = vec4(vs_in_typed_reg{0});\n", i);
+            if (config.state.emulated_attrib_locations[i] != 0) {
+                out += fmt::format("vec4 vs_in_reg{0} = vec4(vec2(vs_in_typed_reg{0}), float(vs_in_typed_reg{0}_part2), 0.f);\n", i);
+            } else {
+                out += fmt::format("vec4 vs_in_reg{0} = vec4(vs_in_typed_reg{0});\n", i);
+            }
         }
     }
     out += '\n';

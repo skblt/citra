@@ -158,11 +158,11 @@ private:
     /// Internal implementation for AccelerateDrawBatch
     bool AccelerateDrawBatchInternal(bool is_indexed);
 
-    /// Copies vertex data performing needed convertions and casts
-    void PaddedVertexCopy(u32 stride, u32 vertex_num, u8* data);
-
     /// Setup vertex array for AccelerateDrawBatch
     void SetupVertexArray(u32 vs_input_size, u32 vs_input_index_min, u32 vs_input_index_max);
+
+    /// Setup the fixed attribute emulation in vulkan
+    void SetupFixedAttribs();
 
     /// Setup vertex shader for AccelerateDrawBatch
     bool SetupVertexShader();
@@ -190,6 +190,7 @@ private:
 
     VertexLayout software_layout;
     std::array<u64, 16> binding_offsets{};
+    std::array<bool, 16> enable_attributes{};
     vk::Sampler default_sampler;
     Surface null_surface;
     Surface null_storage_surface;

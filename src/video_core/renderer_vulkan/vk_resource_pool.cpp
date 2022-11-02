@@ -121,11 +121,12 @@ void DescriptorPool::RefreshTick() {
 }
 
 void DescriptorPool::Allocate(std::size_t begin, std::size_t end) {
+    LOG_INFO(Render_Vulkan, "Allocating new descriptor pool");
     vk::DescriptorPool& pool = pools.emplace_back();
 
     // Choose a sane pool size good for most games
     static constexpr std::array<vk::DescriptorPoolSize, 5> pool_sizes = {{
-        {vk::DescriptorType::eUniformBuffer, 2048},
+        {vk::DescriptorType::eUniformBuffer, 4096},
         {vk::DescriptorType::eSampledImage, 4096},
         {vk::DescriptorType::eSampler, 4096},
         {vk::DescriptorType::eUniformTexelBuffer, 2048},

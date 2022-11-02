@@ -152,7 +152,8 @@ struct ScreenRectVertex {
 constexpr u32 VERTEX_BUFFER_SIZE = sizeof(ScreenRectVertex) * 8192;
 
 RendererVulkan::RendererVulkan(Frontend::EmuWindow& window)
-    : RendererBase{window}, instance{window, Settings::values.physical_device}, scheduler{instance, *this},
+    : RendererBase{window}, instance{window, Settings::values.physical_device},
+      scheduler{instance, renderpass_cache, *this},
       renderpass_cache{instance, scheduler}, desc_manager{instance, scheduler},
       runtime{instance, scheduler, renderpass_cache, desc_manager},
       swapchain{instance, scheduler, renderpass_cache},
@@ -890,7 +891,6 @@ void RendererVulkan::SwapBuffers() {
     PrepareRendertarget();
 
     const auto RecreateSwapchain = [&] {
-        renderpass_cache.ExitRenderpass();
         scheduler.Finish();
         const Layout::FramebufferLayout layout = render_window.GetFramebufferLayout();
         swapchain.Create(layout.width, layout.height);
