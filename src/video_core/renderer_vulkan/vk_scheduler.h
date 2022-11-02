@@ -151,7 +151,7 @@ private:
                 return false;
             }
             Command* const current_last = last;
-            last = std::construct_at(reinterpret_cast<FuncType*>(data.data() + command_offset), std::move(command));
+            last = new (data.data() + command_offset) FuncType(std::move(command));
 
             if (current_last) {
                 current_last->SetNext(last);
@@ -185,7 +185,7 @@ private:
     };
 
 private:
-    void WorkerThread(std::stop_token stop_token);
+    void WorkerThread();
 
     void AllocateWorkerCommandBuffers();
 
@@ -209,7 +209,8 @@ private:
     std::mutex work_mutex;
     std::condition_variable_any work_cv;
     std::condition_variable wait_cv;
-    std::jthread worker_thread;
+    std::thread worker_thread;
+    std::atomic_bool stop_requested;
     bool use_worker_thread;
 };
 
