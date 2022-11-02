@@ -8,7 +8,6 @@
 #elif defined(_WIN32)
 #define VK_USE_PLATFORM_WIN32_KHR
 #elif defined(__APPLE__)
-#define VK_USE_PLATFORM_MACOS_MVK
 #define VK_USE_PLATFORM_METAL_EXT
 #else
 #define VK_USE_PLATFORM_WAYLAND_KHR
@@ -63,6 +62,17 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& e
             UNREACHABLE();
         }
     }
+#elif defined(VK_USE_PLATFORM_METAL_EXT)
+    if (window_info.type == Frontend::WindowSystemType::MacOS) {
+        const vk::MetalSurfaceCreateInfoEXT macos_ci = {
+          .pLayer = static_cast<const CAMetalLayer*>(window_info.render_surface)
+        };
+
+        if (instance.createMetalSurfaceEXT(&macos_ci, nullptr, &surface) != vk::Result::eSuccess) {
+          LOG_CRITICAL(Render_Vulkan, "Failed to initialize MacOS surface");
+          UNREACHABLE();
+        }
+    }
 #endif
 
     if (!surface) {
@@ -97,6 +107,10 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
         break;
     case Frontend::WindowSystemType::Wayland:
         extensions.push_back(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
+        break;
+#elif defined(VK_USE_PLATFORM_METAL_EXT)
+    case Frontend::WindowSystemType::MacOS:
+        extensions.push_back(VK_EXT_METAL_SURFACE_EXTENSION_NAME);
         break;
 #endif
     default:

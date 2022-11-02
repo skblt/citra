@@ -18,7 +18,9 @@ namespace Frontend {
 /// WindowInformation
 enum class WindowSystemType : u8 {
     Headless,
+    Android,
     Windows,
+    MacOS,
     X11,
     Wayland,
 };
