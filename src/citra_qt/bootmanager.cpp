@@ -24,6 +24,10 @@
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 
+#if defined(__APPLE__)
+#include "citra_qt/applesurfacehelper.h"
+#endif
+
 #if !defined(WIN32)
 #include <qpa/qplatformnativeinterface.h>
 #endif
@@ -332,8 +336,10 @@ static Frontend::EmuWindow::WindowSystemInfo GetWindowSystemInfo(QWindow* window
     wsi.type = GetWindowSystemType();
 
     // Our Win32 Qt external doesn't have the private API.
-#if defined(WIN32) || defined(__APPLE__)
+#if defined(WIN32)
     wsi.render_surface = window ? reinterpret_cast<void*>(window->winId()) : nullptr;
+#elif defined(__APPLE__)
+    wsi.render_surface = window ? AppleSurfaceHelper::GetSurfaceLayer(reinterpret_cast<void*>(window->winId())) : nullptr;
 #else
     QPlatformNativeInterface* pni = QGuiApplication::platformNativeInterface();
     wsi.display_connection = pni->nativeResourceForWindow("display", window);
