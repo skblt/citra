@@ -244,6 +244,8 @@ if (APPLE)
     set_target_properties(citra-qt PROPERTIES MACOSX_BUNDLE TRUE)
     set_target_properties(citra-qt PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist)
     target_sources(citra-qt PRIVATE
+        applesurfacehelper.h
+        applesurfacehelper.mm
         macos_authorization.h
         macos_authorization.mm
     )
