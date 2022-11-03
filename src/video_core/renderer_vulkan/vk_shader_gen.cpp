@@ -1601,6 +1601,7 @@ void main() {
     normquat = vert_normquat;
     view = vert_view;
     gl_Position = vert_position;
+    gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;
 
     gl_ClipDistance[0] = -vert_position.z; // fixed PICA clipping plane z <= 0
     if (enable_clip1) {
@@ -1770,6 +1771,7 @@ struct Vertex {
            semantic(VSOutputAttributes::POSITION_Z) + ", " +
            semantic(VSOutputAttributes::POSITION_W) + ");\n";
     out += "    gl_Position = vtx_pos;\n";
+    out += "    gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;\n";
     out += "#if !defined(CITRA_GLES) || defined(GL_EXT_clip_cull_distance)\n";
     out += "    gl_ClipDistance[0] = -vtx_pos.z;\n"; // fixed PICA clipping plane z <= 0
     out += "    gl_ClipDistance[1] = dot(clip_coef, vtx_pos);\n";

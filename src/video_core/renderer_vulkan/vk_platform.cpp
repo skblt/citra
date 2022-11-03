@@ -49,9 +49,7 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& e
             LOG_ERROR(Render_Vulkan, "Failed to initialize Xlib surface");
             UNREACHABLE();
         }
-    }
-
-    if (window_info.type == Frontend::WindowSystemType::Wayland) {
+    } else if (window_info.type == Frontend::WindowSystemType::Wayland) {
         const vk::WaylandSurfaceCreateInfoKHR wayland_ci = {
             .display = static_cast<wl_display*>(window_info.display_connection),
             .surface = static_cast<wl_surface*>(window_info.render_surface)};
@@ -73,10 +71,22 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& e
           UNREACHABLE();
         }
     }
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+    if (window_info.type == Frontend::WindowSystemType::Android) {
+        vk::AndroidSurfaceCreateInfoKHR android_ci = {
+            .window = reinterpret_cast<ANativeWindow*>(window_info.render_surface)
+        };
+
+        if (instance.createAndroidSurfaceKHR(&android_ci, nullptr, &surface) != vk::Result::eSuccess) {
+            LOG_CRITICAL(Render_Vulkan, "Failed to initialize Android surface");
+            UNREACHABLE();
+        }
+    }
 #endif
 
     if (!surface) {
         LOG_CRITICAL(Render_Vulkan, "Presentation not supported on this platform");
+        UNREACHABLE();
     }
 
     return surface;
@@ -111,6 +121,10 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
 #elif defined(VK_USE_PLATFORM_METAL_EXT)
     case Frontend::WindowSystemType::MacOS:
         extensions.push_back(VK_EXT_METAL_SURFACE_EXTENSION_NAME);
+        break;
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+    case Frontend::WindowSystemType::Android:
+        extensions.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
         break;
 #endif
     default:

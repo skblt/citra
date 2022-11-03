@@ -6,7 +6,6 @@
 #include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
-#include "common/microprofile.h"
 #include "core/settings.h"
 #include "video_core/renderer_vulkan/pica_to_vk.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
@@ -491,11 +490,7 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
 
     const vk::Rect2D scissor = {.offset = {0, 0}, .extent = {1, 1}};
 
-    vk::PipelineViewportDepthClipControlCreateInfoEXT depth_clip_control = {.negativeOneToOne =
-                                                                                true};
-
     const vk::PipelineViewportStateCreateInfo viewport_info = {
-        .pNext = &depth_clip_control,
         .viewportCount = 1,
         .pViewports = &viewport,
         .scissorCount = 1,

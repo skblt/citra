@@ -285,7 +285,6 @@ bool Instance::CreateDevice() {
     };
 
     AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    AddExtension(VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME);
     AddExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME);
     timeline_semaphores = AddExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
