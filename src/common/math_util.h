@@ -10,6 +10,8 @@
 
 namespace Common {
 
+constexpr float PI = 3.14159265f;
+
 template <class T>
 struct Rectangle {
     T left{};

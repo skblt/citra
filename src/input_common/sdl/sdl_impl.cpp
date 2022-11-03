@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 #include <SDL.h>
+#include "common/assert.h"
+#include "common/math_util.h"
 #include "common/logging/log.h"
 #include "common/param_package.h"
 #include "common/threadsafe_queue.h"
@@ -596,9 +598,9 @@ void SDLState::HandleGameControllerEvent(const SDL_Event& event) {
                                    event.csensor.data[2] / SDL_STANDARD_GRAVITY);
                 break;
             case SDL_SENSOR_GYRO:
-                joystick->SetGyro(-event.csensor.data[0] * (180.0f / std::numbers::pi),
-                                  event.csensor.data[1] * (180.0f / std::numbers::pi),
-                                  -event.csensor.data[2] * (180.0f / std::numbers::pi));
+                joystick->SetGyro(-event.csensor.data[0] * (180.0f / Common::PI),
+                                  event.csensor.data[1] * (180.0f / Common::PI),
+                                  -event.csensor.data[2] * (180.0f / Common::PI));
                 break;
             }
         }
