@@ -104,6 +104,10 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
     std::vector<const char*> extensions;
     extensions.reserve(6);
 
+#if defined(__APPLE__)
+    extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+#endif
+
     switch (window_type) {
     case Frontend::WindowSystemType::Headless:
         break;
@@ -152,6 +156,14 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
     }
 
     return extensions;
+}
+
+vk::InstanceCreateFlags GetInstanceFlags() {
+#if defined(__APPLE__)
+    return vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
+#else
+    return static_cast<vk::InstanceCreateFlags>(0);
+#endif
 }
 
 } // namespace Vulkan

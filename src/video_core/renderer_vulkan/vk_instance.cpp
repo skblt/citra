@@ -46,6 +46,12 @@ Instance::Instance(bool validation, bool dump_command_buffers) {
         dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
+    // Enable the instance extensions the platform requires
+    auto extensions = GetInstanceExtensions(Frontend::WindowSystemType::Headless, false);
+
+    // Use required platform-specific flags
+    auto flags = GetInstanceFlags();
+
     const vk::ApplicationInfo application_info = {.pApplicationName = "Citra",
                                                   .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
                                                   .pEngineName = "Citra Vulkan",
@@ -62,9 +68,13 @@ Instance::Instance(bool validation, bool dump_command_buffers) {
         layers[layer_count++] = "VK_LAYER_LUNARG_api_dump";
     }
 
-    const vk::InstanceCreateInfo instance_info = {.pApplicationInfo = &application_info,
+    const vk::InstanceCreateInfo instance_info = {.flags = flags,
+                                                  .pApplicationInfo = &application_info,
                                                   .enabledLayerCount = layer_count,
-                                                  .ppEnabledLayerNames = layers.data()};
+                                                  .ppEnabledLayerNames = layers.data(),
+                                                  .enabledExtensionCount =
+                                                      static_cast<u32>(extensions.size()),
+                                                  .ppEnabledExtensionNames = extensions.data()};
 
     instance = vk::createInstance(instance_info);
 
@@ -90,6 +100,9 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) {
     // Enable the instance extensions the backend uses
     auto extensions = GetInstanceExtensions(window_info.type, true);
 
+    // Use required platform-specific flags
+    auto flags = GetInstanceFlags();
+
     // We require a Vulkan 1.1 driver
     const u32 available_version = vk::enumerateInstanceVersion();
     if (available_version < VK_API_VERSION_1_1) {
@@ -113,7 +126,8 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) {
         layers[layer_count++] = "VK_LAYER_LUNARG_api_dump";
     }
 
-    const vk::InstanceCreateInfo instance_info = {.pApplicationInfo = &application_info,
+    const vk::InstanceCreateInfo instance_info = {.flags = flags,
+                                                  .pApplicationInfo = &application_info,
                                                   .enabledLayerCount = layer_count,
                                                   .ppEnabledLayerNames = layers.data(),
                                                   .enabledExtensionCount =
