@@ -286,7 +286,7 @@ bool Instance::CreateDevice() {
     auto AddExtension = [&](std::string_view name) -> bool {
         auto result =
             std::find_if(extension_list.begin(), extension_list.end(),
-                         [&](const auto& prop) { return name.compare(prop.extensionName.data()); });
+                         [&](const auto& prop) { return name.compare(prop.extensionName.data()) == 0; });
 
         if (result != extension_list.end()) {
             LOG_INFO(Render_Vulkan, "Enabling extension: {}", name);
