@@ -18,6 +18,8 @@ namespace Vulkan {
 std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window_type,
                                                bool enable_debug_utils);
 
+vk::InstanceCreateFlags GetInstanceFlags();
+
 vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::EmuWindow& emu_window);
 
 } // namespace Vulkan
