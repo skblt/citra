@@ -244,12 +244,10 @@ void PipelineCache::UseTrivialGeometryShader() {
     });
 }
 
-MICROPROFILE_DEFINE(Vulkan_FragmentGeneration, "Vulkan", "Fragment Shader Compilation", MP_RGB(255, 100, 100));
 void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
     const PicaFSConfig config{regs, instance};
 
     scheduler.Record([this, config](vk::CommandBuffer, vk::CommandBuffer) {
-        MICROPROFILE_SCOPE(Vulkan_FragmentGeneration);
         vk::ShaderModule handle = fragment_shaders.Get(config, vk::ShaderStageFlagBits::eFragment,
                                                        instance.GetDevice(), ShaderOptimization::Debug);
         current_shaders[ProgramType::FS] = handle;
