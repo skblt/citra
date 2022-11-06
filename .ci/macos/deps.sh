@@ -3,7 +3,7 @@
 brew update
 brew unlink python@2 || true
 rm '/usr/local/bin/2to3' || true
-brew install qt5 p7zip ccache ninja || true
+brew install qt5 molten-vk vulkan-loader p7zip ccache ninja || true
 pip3 install macpack
 
 export SDL_VER=2.0.16
