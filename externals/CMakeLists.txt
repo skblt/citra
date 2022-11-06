@@ -67,6 +67,9 @@ set(ENABLE_SPVREMAPPER OFF)
 set(ENABLE_CTEST OFF)
 add_subdirectory(glslang)
 
+# Sirit
+add_subdirectory(sirit)
+
 # glm
 add_subdirectory(glm)
 
