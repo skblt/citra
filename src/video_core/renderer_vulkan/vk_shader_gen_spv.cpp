@@ -2,7 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#include <fstream>
+#include "common/microprofile.h"
 #include "video_core/regs.h"
 #include "video_core/renderer_vulkan/vk_shader_gen_spv.h"
 #include "video_core/shader/shader_uniforms.h"
@@ -893,7 +893,9 @@ void FragmentModule::DefineInterface() {
     Decorate(gl_frag_depth_id, spv::Decoration::BuiltIn, spv::BuiltIn::FragDepth);
 }
 
+MICROPROFILE_DEFINE(Vulkan_FragmentGenerationSPV, "Vulkan", "SPIRV Fragment Shader Compilation", MP_RGB(255, 100, 100));
 std::vector<u32> GenerateFragmentShaderSPV(const PicaFSConfig& config) {
+    MICROPROFILE_SCOPE(Vulkan_FragmentGenerationSPV)
     FragmentModule module{config};
     module.Generate();
     return module.Assemble();
