@@ -10,7 +10,7 @@
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/regs.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
-#include "video_core/renderer_vulkan/vk_shader_gen.h"
+#include "video_core/renderer_vulkan/vk_shader_gen_spv.h"
 #include "video_core/shader/shader_cache.h"
 
 namespace Vulkan {
@@ -117,7 +117,7 @@ using FixedGeometryShaders = Pica::Shader::ShaderCache<PicaFixedGSConfig, vk::Sh
                                                        &Compile, &GenerateFixedGeometryShader>;
 
 using FragmentShaders =
-    Pica::Shader::ShaderCache<PicaFSConfig, vk::ShaderModule, &Compile, &GenerateFragmentShader>;
+    Pica::Shader::ShaderCache<PicaFSConfig, vk::ShaderModule, &CompileSPV, &GenerateFragmentShaderSPV>;
 
 class Instance;
 class Scheduler;
@@ -209,8 +209,6 @@ private:
     std::unordered_map<u64, vk::Pipeline, Common::IdentityHash<u64>> graphics_pipelines;
     vk::Pipeline current_pipeline{};
     PipelineInfo current_info{};
-    vk::Viewport current_viewport{};
-    vk::Rect2D current_scissor{};
 
     // Bound shader modules
     enum ProgramType : u32 { VS = 0, GS = 2, FS = 1 };

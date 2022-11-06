@@ -178,6 +178,8 @@ vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage, v
                        includer)) {
         LOG_CRITICAL(Render_Vulkan, "Shader Info Log:\n{}\n{}", shader->getInfoLog(),
                      shader->getInfoDebugLog());
+        LOG_CRITICAL(Render_Vulkan, "{}", code);
+        ASSERT(false);
         return VK_NULL_HANDLE;
     }
 
@@ -215,10 +217,21 @@ vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage, v
         LOG_INFO(Render_Vulkan, "SPIR-V conversion messages: {}", spv_messages);
     }
 
-    const vk::ShaderModuleCreateInfo shader_info = {.codeSize = out_code.size() * sizeof(u32),
-                                                    .pCode = out_code.data()};
+    return CompileSPV(out_code, stage, device, level);
+}
 
-    return device.createShaderModule(shader_info);
+vk::ShaderModule CompileSPV(std::vector<u32> code, vk::ShaderStageFlagBits stage, vk::Device device,
+                            ShaderOptimization) {
+    const vk::ShaderModuleCreateInfo shader_info = {.codeSize = code.size() * sizeof(u32),
+                                                    .pCode = code.data()};
+    try {
+        return device.createShaderModule(shader_info);
+    } catch (vk::SystemError& err) {
+        LOG_CRITICAL(Render_Vulkan, "{}", err.what());
+        UNREACHABLE();
+    }
+
+    return VK_NULL_HANDLE;
 }
 
 } // namespace Vulkan

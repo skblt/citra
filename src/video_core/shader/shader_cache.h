@@ -15,7 +15,7 @@ template <typename ShaderType>
 using ShaderCacheResult = std::pair<ShaderType, std::optional<std::string>>;
 
 template <typename KeyType, typename ShaderType, auto ModuleCompiler,
-          std::string (*CodeGenerator)(const KeyType&)>
+          auto (*CodeGenerator)(const KeyType&)>
 class ShaderCache {
 public:
     ShaderCache() {}
@@ -23,17 +23,17 @@ public:
 
     /// Returns a shader handle generated from the provided config
     template <typename... Args>
-    auto Get(const KeyType& config, Args&&... args) -> ShaderCacheResult<ShaderType> {
+    auto Get(const KeyType& config, Args&&... args) {
         auto [iter, new_shader] = shaders.emplace(config, ShaderType{});
         auto& shader = iter->second;
 
         if (new_shader) {
-            std::string code = CodeGenerator(config);
+            const auto code = CodeGenerator(config);
             shader = ModuleCompiler(code, args...);
-            return std::make_pair(shader, code);
+            return shader;
         }
 
-        return std::make_pair(shader, std::nullopt);
+        return shader;
     }
 
     void Inject(const KeyType& key, ShaderType&& shader) {

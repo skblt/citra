@@ -5,6 +5,7 @@
 #include <filesystem>
 #include "common/common_paths.h"
 #include "common/file_util.h"
+#include "common/microprofile.h"
 #include "common/logging/log.h"
 #include "core/settings.h"
 #include "video_core/renderer_vulkan/pica_to_vk.h"
@@ -229,8 +230,8 @@ void PipelineCache::UseFixedGeometryShader(const Pica::Regs& regs) {
     const PicaFixedGSConfig gs_config{regs};
 
     scheduler.Record([this, gs_config](vk::CommandBuffer, vk::CommandBuffer) {
-        auto [handle, _] = fixed_geometry_shaders.Get(gs_config, vk::ShaderStageFlagBits::eGeometry,
-                                                      instance.GetDevice(), ShaderOptimization::High);
+        vk::ShaderModule handle = fixed_geometry_shaders.Get(gs_config, vk::ShaderStageFlagBits::eGeometry,
+                                                             instance.GetDevice(), ShaderOptimization::High);
         current_shaders[ProgramType::GS] = handle;
         shader_hashes[ProgramType::GS] = gs_config.Hash();
     });
@@ -243,12 +244,14 @@ void PipelineCache::UseTrivialGeometryShader() {
     });
 }
 
+MICROPROFILE_DEFINE(Vulkan_FragmentGeneration, "Vulkan", "Fragment Shader Compilation", MP_RGB(255, 100, 100));
 void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
     const PicaFSConfig config{regs, instance};
 
     scheduler.Record([this, config](vk::CommandBuffer, vk::CommandBuffer) {
-        auto [handle, result] = fragment_shaders.Get(config, vk::ShaderStageFlagBits::eFragment,
-                                                     instance.GetDevice(), ShaderOptimization::High);
+        MICROPROFILE_SCOPE(Vulkan_FragmentGeneration);
+        vk::ShaderModule handle = fragment_shaders.Get(config, vk::ShaderStageFlagBits::eFragment,
+                                                       instance.GetDevice(), ShaderOptimization::Debug);
         current_shaders[ProgramType::FS] = handle;
         shader_hashes[ProgramType::FS] = config.Hash();
     });
@@ -283,27 +286,17 @@ void PipelineCache::BindSampler(u32 binding, vk::Sampler sampler) {
 }
 
 void PipelineCache::SetViewport(float x, float y, float width, float height) {
-    const bool is_dirty = scheduler.IsStateDirty(StateFlags::Pipeline);
     const vk::Viewport viewport{x, y, width, height, 0.f, 1.f};
-
-    if (viewport != current_viewport || is_dirty) {
-        scheduler.Record([viewport](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-            render_cmdbuf.setViewport(0, viewport);
-        });
-        current_viewport = viewport;
-    }
+    scheduler.Record([viewport](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.setViewport(0, viewport);
+    });
 }
 
 void PipelineCache::SetScissor(s32 x, s32 y, u32 width, u32 height) {
-    const bool is_dirty = scheduler.IsStateDirty(StateFlags::Pipeline);
     const vk::Rect2D scissor{{x, y}, {width, height}};
-
-    if (scissor != current_scissor || is_dirty) {
-        scheduler.Record([scissor](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-            render_cmdbuf.setScissor(0, scissor);
-        });
-        current_scissor = scissor;
-    }
+    scheduler.Record([scissor](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        render_cmdbuf.setScissor(0, scissor);
+    });
 }
 
 void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
@@ -407,10 +400,12 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
             .stage = ToVkShaderStage(i), .module = shader, .pName = "main"};
     }
 
-    // Vulkan doesn't intuitively support fixed attributes. To avoid duplicating the data and
-    // increasing data upload, when the fixed flag is true, we specify VK_VERTEX_INPUT_RATE_INSTANCE
-    // as the input rate. Since one instance is all we render, the shader will always read the
-    // single attribute.
+    /**
+    * Vulkan doesn't intuitively support fixed attributes. To avoid duplicating the data and
+    * increasing data upload, when the fixed flag is true, we specify VK_VERTEX_INPUT_RATE_INSTANCE
+    * as the input rate. Since one instance is all we render, the shader will always read the
+    * single attribute.
+    **/
     std::array<vk::VertexInputBindingDescription, MAX_VERTEX_BINDINGS> bindings;
     for (u32 i = 0; i < info.vertex_layout.binding_count; i++) {
         const auto& binding = info.vertex_layout.bindings[i];
@@ -440,6 +435,7 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         // by the vertex shader.
         if (!is_supported) {
             const u32 location = MAX_VERTEX_ATTRIBUTES + emulated_attrib_count++;
+            LOG_WARNING(Render_Vulkan, "\nEmulating attrib {} at location {}\n", attrib.location, location);
             attributes[location] = vk::VertexInputAttributeDescription{.location = location,
                                                                        .binding = attrib.binding,
                                                                        .format = ToVkAttributeFormat(attrib.type, 1),

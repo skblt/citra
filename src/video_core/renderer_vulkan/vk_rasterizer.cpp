@@ -461,6 +461,10 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     auto [color_surface, depth_surface, surfaces_rect] =
         res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb, viewport_rect_unscaled);
 
+    if (!color_surface && shadow_rendering) {
+        return true;
+    }
+
     pipeline_info.color_attachment =
         color_surface ? color_surface->pixel_format : VideoCore::PixelFormat::Invalid;
     pipeline_info.depth_attachment =
@@ -667,7 +671,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     // Sync and bind the shader
     if (shader_dirty) {
-        SetShader();
+        pipeline_cache.UseFragmentShader(regs);
         shader_dirty = false;
     }
 
@@ -1559,10 +1563,6 @@ void RasterizerVulkan::FlushBuffers() {
     index_buffer.Flush();
     texture_buffer.Flush();
     texture_lf_buffer.Flush();
-}
-
-void RasterizerVulkan::SetShader() {
-    pipeline_cache.UseFragmentShader(Pica::g_state.regs);
 }
 
 void RasterizerVulkan::SyncClipEnabled() {

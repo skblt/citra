@@ -498,33 +498,33 @@ static void AppendColorCombiner(std::string& out, TevStageConfig::Operation oper
     using Operation = TevStageConfig::Operation;
     switch (operation) {
     case Operation::Replace:
-        out += fmt::format("{}[0]", variable_name);
+        out += "color_results_1";
         break;
     case Operation::Modulate:
-        out += fmt::format("{0}[0] * {0}[1]", variable_name);
+        out += "color_results_1 * color_results_2";
         break;
     case Operation::Add:
-        out += fmt::format("{0}[0] + {0}[1]", variable_name);
+        out += "color_results_1 + color_results_2";
         break;
     case Operation::AddSigned:
-        out += fmt::format("{0}[0] + {0}[1] - vec3(0.5)", variable_name);
+        out += "color_results_1 + color_results_2 - vec3(0.5)";
         break;
     case Operation::Lerp:
-        out += fmt::format("{0}[0] * {0}[2] + {0}[1] * (vec3(1.0) - {0}[2])", variable_name);
+        out += "color_results_1 * color_results_3 + color_results_2 * (vec3(1.0) - color_results_3)";
         break;
     case Operation::Subtract:
-        out += fmt::format("{0}[0] - {0}[1]", variable_name);
+        out += "color_results_1 - color_results_2";
         break;
     case Operation::MultiplyThenAdd:
-        out += fmt::format("{0}[0] * {0}[1] + {0}[2]", variable_name);
+        out += "color_results_1 * color_results_2 + color_results_3";
         break;
     case Operation::AddThenMultiply:
-        out += fmt::format("min({0}[0] + {0}[1], vec3(1.0)) * {0}[2]", variable_name);
+        out += "min(color_results_1 + color_results_2, vec3(1.0)) * color_results_3";
         break;
     case Operation::Dot3_RGB:
     case Operation::Dot3_RGBA:
         out +=
-            fmt::format("vec3(dot({0}[0] - vec3(0.5), {0}[1] - vec3(0.5)) * 4.0)", variable_name);
+            "vec3(dot(color_results_1 - vec3(0.5), color_results_2 - vec3(0.5)) * 4.0)";
         break;
     default:
         out += "vec3(0.0)";
@@ -541,28 +541,28 @@ static void AppendAlphaCombiner(std::string& out, TevStageConfig::Operation oper
     using Operation = TevStageConfig::Operation;
     switch (operation) {
     case Operation::Replace:
-        out += fmt::format("{}[0]", variable_name);
+        out += "alpha_results_1";
         break;
     case Operation::Modulate:
-        out += fmt::format("{0}[0] * {0}[1]", variable_name);
+        out += "alpha_results_1 * alpha_results_2";
         break;
     case Operation::Add:
-        out += fmt::format("{0}[0] + {0}[1]", variable_name);
+        out += "alpha_results_1 + alpha_results_2";
         break;
     case Operation::AddSigned:
-        out += fmt::format("{0}[0] + {0}[1] - 0.5", variable_name);
+        out += "alpha_results_1 + alpha_results_2 - 0.5";
         break;
     case Operation::Lerp:
-        out += fmt::format("{0}[0] * {0}[2] + {0}[1] * (1.0 - {0}[2])", variable_name);
+        out += "alpha_results_1 * alpha_results_3 + alpha_results_2 * (1.0 - alpha_results_3)";
         break;
     case Operation::Subtract:
-        out += fmt::format("{0}[0] - {0}[1]", variable_name);
+        out += "alpha_results_1 - alpha_results_2";
         break;
     case Operation::MultiplyThenAdd:
-        out += fmt::format("{0}[0] * {0}[1] + {0}[2]", variable_name);
+        out += "alpha_results_1 * alpha_results_2 + alpha_results_3";
         break;
     case Operation::AddThenMultiply:
-        out += fmt::format("min({0}[0] + {0}[1], 1.0) * {0}[2]", variable_name);
+        out += "min(alpha_results_1 + alpha_results_2, 1.0) * alpha_results_3";
         break;
     default:
         out += "0.0";
@@ -608,38 +608,34 @@ static void WriteTevStage(std::string& out, const PicaFSConfig& config, unsigned
     if (!IsPassThroughTevStage(stage)) {
         const std::string index_name = std::to_string(index);
 
-        out += fmt::format("vec3 color_results_{}_1 = ", index_name);
+        out += fmt::format("color_results_1 = ", index_name);
         AppendColorModifier(out, config, stage.color_modifier1, stage.color_source1, index_name);
-        out += fmt::format(";\nvec3 color_results_{}_2 = ", index_name);
+        out += fmt::format(";\ncolor_results_2 = ", index_name);
         AppendColorModifier(out, config, stage.color_modifier2, stage.color_source2, index_name);
-        out += fmt::format(";\nvec3 color_results_{}_3 = ", index_name);
+        out += fmt::format(";\ncolor_results_3 = ", index_name);
         AppendColorModifier(out, config, stage.color_modifier3, stage.color_source3, index_name);
-        out += fmt::format(";\nvec3 color_results_{}[3] = vec3[3](color_results_{}_1, "
-                           "color_results_{}_2, color_results_{}_3);\n",
-                           index_name, index_name, index_name, index_name);
 
         // Round the output of each TEV stage to maintain the PICA's 8 bits of precision
-        out += fmt::format("vec3 color_output_{} = byteround(", index_name);
-        AppendColorCombiner(out, stage.color_op, "color_results_" + index_name);
+        out += fmt::format(";\nvec3 color_output_{} = byteround(", index_name);
+        AppendColorCombiner(out, stage.color_op, "color_results");
         out += ");\n";
 
         if (stage.color_op == TevStageConfig::Operation::Dot3_RGBA) {
             // result of Dot3_RGBA operation is also placed to the alpha component
             out += fmt::format("float alpha_output_{0} = color_output_{0}[0];\n", index_name);
         } else {
-            out += fmt::format("float alpha_results_{}[3] = float[3](", index_name);
+            out += fmt::format("alpha_results_1 = ", index_name);
             AppendAlphaModifier(out, config, stage.alpha_modifier1, stage.alpha_source1,
                                 index_name);
-            out += ", ";
+            out += fmt::format(";\nalpha_results_2 = ", index_name);
             AppendAlphaModifier(out, config, stage.alpha_modifier2, stage.alpha_source2,
                                 index_name);
-            out += ", ";
+            out += fmt::format(";\nalpha_results_3 = ", index_name);
             AppendAlphaModifier(out, config, stage.alpha_modifier3, stage.alpha_source3,
                                 index_name);
-            out += ");\n";
 
-            out += fmt::format("float alpha_output_{} = byteround(", index_name);
-            AppendAlphaCombiner(out, stage.alpha_op, "alpha_results_" + index_name);
+            out += fmt::format(";\nfloat alpha_output_{} = byteround(", index_name);
+            AppendAlphaCombiner(out, stage.alpha_op, "alpha_results");
             out += ");\n";
         }
 
@@ -1475,6 +1471,14 @@ vec4 secondary_fragment_color = vec4(0.0);
            "vec4 next_combiner_buffer = tev_combiner_buffer_color;\n"
            "vec4 last_tex_env_out = vec4(0.0);\n";
 
+    out += "vec3 color_results_1 = vec3(0.0);\n"
+           "vec3 color_results_2 = vec3(0.0);\n"
+           "vec3 color_results_3 = vec3(0.0);\n";
+
+    out += "float alpha_results_1 = 0.0;\n"
+           "float alpha_results_2 = 0.0;\n"
+           "float alpha_results_3 = 0.0;\n";
+
     for (std::size_t index = 0; index < state.tev_stages.size(); ++index) {
         WriteTevStage(out, config, static_cast<u32>(index));
     }
@@ -1537,6 +1541,7 @@ do {
 
 } while ((old = imageAtomicCompSwap(shadow_buffer, image_coord, old, new)) != old2);
 )";
+        LOG_INFO(Render_Vulkan, "{}", out);
     } else {
         out += "gl_FragDepth = depth;\n";
         // Round the final fragment color to maintain the PICA's 8 bits of precision

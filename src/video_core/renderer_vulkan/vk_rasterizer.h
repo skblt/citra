@@ -112,9 +112,6 @@ private:
     /// Syncs the clip coefficients to match the PICA register
     void SyncClipCoef();
 
-    /// Sets the OpenGL shader in accordance with the current PICA register state
-    void SetShader();
-
     /// Syncs the cull mode to match the PICA register
     void SyncCullMode();
 

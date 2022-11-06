@@ -929,6 +929,7 @@ void RendererVulkan::SwapBuffers() {
         if (swapchain.NeedsRecreation()) {
             RecreateSwapchain();
         }
+        scheduler.WaitWorker();
         swapchain.AcquireNextImage();
     } while (swapchain.NeedsRecreation());
 
