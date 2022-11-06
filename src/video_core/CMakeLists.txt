@@ -111,6 +111,8 @@ add_library(video_core STATIC
     renderer_vulkan/vk_renderpass_cache.h
     renderer_vulkan/vk_shader_gen.cpp
     renderer_vulkan/vk_shader_gen.h
+    renderer_vulkan/vk_shader_gen_spv.cpp
+    renderer_vulkan/vk_shader_gen_spv.h
     renderer_vulkan/vk_shader_util.cpp
     renderer_vulkan/vk_shader_util.h
     renderer_vulkan/vk_stream_buffer.cpp
@@ -202,7 +204,8 @@ if (NOT MSVC)
 endif()
 
 target_link_libraries(video_core PUBLIC common core)
-target_link_libraries(video_core PRIVATE glad vma vulkan-headers glm::glm SPIRV glslang nihstro-headers Boost::serialization)
+target_link_libraries(video_core PRIVATE nihstro-headers Boost::serialization glm::glm)
+target_link_libraries(video_core PRIVATE vulkan-headers vma sirit SPIRV glslang glad)
 set_target_properties(video_core PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})
 
 if (ARCHITECTURE_x86_64)
