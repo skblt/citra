@@ -14,8 +14,7 @@ namespace Pica::Shader {
 template <typename ShaderType>
 using ShaderCacheResult = std::pair<ShaderType, std::optional<std::string>>;
 
-template <typename KeyType, typename ShaderType, auto ModuleCompiler,
-          auto (*CodeGenerator)(const KeyType&)>
+template <typename KeyType, typename ShaderType, auto ModuleCompiler, auto CodeGenerator>
 class ShaderCache {
 public:
     ShaderCache() {}
@@ -51,9 +50,7 @@ public:
  * program buffer from the previous shader, which is hashed into the config, resulting several
  * different config values from the same shader program.
  */
-template <typename KeyType, typename ShaderType, auto ModuleCompiler,
-          std::optional<std::string> (*CodeGenerator)(const Pica::Shader::ShaderSetup&,
-                                                      const KeyType&)>
+template <typename KeyType, typename ShaderType, auto ModuleCompiler, auto CodeGenerator>
 class ShaderDoubleCache {
 public:
     ShaderDoubleCache() = default;
