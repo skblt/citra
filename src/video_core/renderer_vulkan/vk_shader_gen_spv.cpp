@@ -893,9 +893,7 @@ void FragmentModule::DefineInterface() {
     Decorate(gl_frag_depth_id, spv::Decoration::BuiltIn, spv::BuiltIn::FragDepth);
 }
 
-MICROPROFILE_DEFINE(Vulkan_FragmentGenerationSPV, "Vulkan", "SPIRV Fragment Shader Compilation", MP_RGB(255, 100, 100));
 std::vector<u32> GenerateFragmentShaderSPV(const PicaFSConfig& config) {
-    MICROPROFILE_SCOPE(Vulkan_FragmentGenerationSPV);
     FragmentModule module{config};
     module.Generate();
     return module.Assemble();

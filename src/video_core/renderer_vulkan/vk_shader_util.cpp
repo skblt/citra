@@ -6,6 +6,7 @@
 #include <glslang/Include/ResourceLimits.h>
 #include <glslang/Public/ShaderLang.h>
 #include "common/assert.h"
+#include "common/microprofile.h"
 #include "common/logging/log.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 
@@ -217,11 +218,12 @@ vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage, v
         LOG_INFO(Render_Vulkan, "SPIR-V conversion messages: {}", spv_messages);
     }
 
-    return CompileSPV(out_code, stage, device, level);
+    return CompileSPV(out_code, device);
 }
 
-vk::ShaderModule CompileSPV(std::vector<u32> code, vk::ShaderStageFlagBits stage, vk::Device device,
-                            ShaderOptimization) {
+MICROPROFILE_DEFINE(Vulkan_SPVCompilation, "Vulkan", "SPIR-V Shader Compilation", MP_RGB(100, 255, 52));
+vk::ShaderModule CompileSPV(std::vector<u32> code, vk::Device device) {
+    MICROPROFILE_SCOPE(Vulkan_SPVCompilation);
     const vk::ShaderModuleCreateInfo shader_info = {.codeSize = code.size() * sizeof(u32),
                                                     .pCode = code.data()};
     try {

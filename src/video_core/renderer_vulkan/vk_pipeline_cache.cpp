@@ -92,7 +92,11 @@ PipelineCache::~PipelineCache() {
         device.destroyShaderModule(module);
     }
 
-    for (auto& [key, module] : fragment_shaders.shaders) {
+    for (auto& [key, module] : fragment_shaders_glsl.shaders) {
+        device.destroyShaderModule(module);
+    }
+
+    for (auto& [key, module] : fragment_shaders_spv.shaders) {
         device.destroyShaderModule(module);
     }
 
@@ -244,12 +248,21 @@ void PipelineCache::UseTrivialGeometryShader() {
     });
 }
 
+MICROPROFILE_DEFINE(Vulkan_FragmentGeneration, "Vulkan", "Fragment Shader Compilation", MP_RGB(255, 100, 100));
 void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
     const PicaFSConfig config{regs, instance};
 
     scheduler.Record([this, config](vk::CommandBuffer, vk::CommandBuffer) {
-        vk::ShaderModule handle = fragment_shaders.Get(config, vk::ShaderStageFlagBits::eFragment,
-                                                       instance.GetDevice(), ShaderOptimization::Debug);
+        MICROPROFILE_SCOPE(Vulkan_FragmentGeneration);
+
+        vk::ShaderModule handle{};
+        if (Settings::values.spirv_shader_gen) {
+            handle = fragment_shaders_spv.Get(config, instance.GetDevice());
+        } else {
+            handle = fragment_shaders_glsl.Get(config, vk::ShaderStageFlagBits::eFragment,
+                                              instance.GetDevice(), ShaderOptimization::Debug);
+        }
+
         current_shaders[ProgramType::FS] = handle;
         shader_hashes[ProgramType::FS] = config.Hash();
     });
