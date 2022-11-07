@@ -85,6 +85,7 @@ void ConfigureGraphics::SetConfiguration() {
     ui->graphics_api_combo->setCurrentIndex(static_cast<int>(Settings::values.graphics_api));
     ui->physical_device_combo->setCurrentIndex(static_cast<int>(Settings::values.physical_device));
     ui->toggle_async_recording->setChecked(Settings::values.async_command_recording);
+    ui->spirv_shader_gen->setChecked(Settings::values.spirv_shader_gen);
 }
 
 void ConfigureGraphics::ApplyConfiguration() {
@@ -99,6 +100,7 @@ void ConfigureGraphics::ApplyConfiguration() {
         static_cast<Settings::GraphicsAPI>(ui->graphics_api_combo->currentIndex());
     Settings::values.physical_device = static_cast<u16>(ui->physical_device_combo->currentIndex());
     Settings::values.async_command_recording = ui->toggle_async_recording->isChecked();
+    Settings::values.spirv_shader_gen = ui->spirv_shader_gen->isChecked();
 }
 
 void ConfigureGraphics::RetranslateUI() {
@@ -121,4 +123,5 @@ void ConfigureGraphics::SetPhysicalDeviceComboVisibility(int index) {
     const bool is_visible = graphics_api == Settings::GraphicsAPI::Vulkan;
     ui->physical_device_label->setVisible(is_visible);
     ui->physical_device_combo->setVisible(is_visible);
+    ui->spirv_shader_gen->setVisible(is_visible);
 }

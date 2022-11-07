@@ -116,7 +116,10 @@ using ProgrammableVertexShaders = Pica::Shader::ShaderDoubleCache<PicaVSConfig, 
 using FixedGeometryShaders = Pica::Shader::ShaderCache<PicaFixedGSConfig, vk::ShaderModule,
                                                        &Compile, &GenerateFixedGeometryShader>;
 
-using FragmentShaders =
+using FragmentShadersGLSL =
+    Pica::Shader::ShaderCache<PicaFSConfig, vk::ShaderModule, &Compile, &GenerateFragmentShader>;
+
+using FragmentShadersSPV =
     Pica::Shader::ShaderCache<PicaFSConfig, vk::ShaderModule, &CompileSPV, &GenerateFragmentShaderSPV>;
 
 class Instance;
@@ -217,7 +220,8 @@ private:
     std::array<u64, MAX_SHADER_STAGES> shader_hashes;
     ProgrammableVertexShaders programmable_vertex_shaders;
     FixedGeometryShaders fixed_geometry_shaders;
-    FragmentShaders fragment_shaders;
+    FragmentShadersGLSL fragment_shaders_glsl;
+    FragmentShadersSPV fragment_shaders_spv;
     vk::ShaderModule trivial_vertex_shader;
 };
 

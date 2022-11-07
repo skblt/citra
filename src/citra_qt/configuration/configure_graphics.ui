@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>430</height>
+    <height>513</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -69,6 +69,13 @@
          <widget class="QComboBox" name="physical_device_combo"/>
         </item>
        </layout>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="spirv_shader_gen">
+        <property name="text">
+         <string>SPIR-V Shader Generation</string>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>

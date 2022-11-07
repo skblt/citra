@@ -167,6 +167,7 @@ struct Values {
     // Renderer
     GraphicsAPI graphics_api;
     u16 physical_device;
+    bool spirv_shader_gen;
     bool renderer_debug;
     bool dump_command_buffers;
     bool async_command_recording;
