@@ -14,7 +14,7 @@
 #include "common/file_util.h"
 #include "core/hw/gpu.h"
 #include "core/perf_stats.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 using namespace std::chrono_literals;
 using DoubleSecs = std::chrono::duration<double, std::chrono::seconds::period>;

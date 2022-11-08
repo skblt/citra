@@ -10,7 +10,7 @@
 #include "common/logging/log.h"
 #include "common/scm_rev.h"
 #include "core/core.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "core/telemetry_session.h"
 #include "network/network_settings.h"
 

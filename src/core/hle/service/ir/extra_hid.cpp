@@ -8,7 +8,7 @@
 #include "core/core_timing.h"
 #include "core/hle/service/ir/extra_hid.h"
 #include "core/movie.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 namespace Service::IR {
 

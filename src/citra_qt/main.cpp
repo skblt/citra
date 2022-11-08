@@ -85,7 +85,7 @@
 #include "core/loader/loader.h"
 #include "core/movie.h"
 #include "core/savestate.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "game_list_p.h"
 #include "input_common/main.h"
 #include "network/network_settings.h"

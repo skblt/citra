@@ -11,7 +11,7 @@
 #include "core/file_sys/disk_archive.h"
 #include "core/file_sys/errors.h"
 #include "core/file_sys/path_parser.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // FileSys namespace

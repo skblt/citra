@@ -7,7 +7,7 @@
 #include <QUrl>
 #include "citra_qt/configuration/configure_storage.h"
 #include "core/core.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "ui_configure_storage.h"
 
 ConfigureStorage::ConfigureStorage(QWidget* parent)

@@ -13,7 +13,7 @@
 #include "core/hle/service/ir/ir_rst.h"
 #include "core/hle/service/ir/ir_user.h"
 #include "core/hle/service/mic_u.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 

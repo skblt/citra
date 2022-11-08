@@ -3,7 +3,7 @@
 // Refer to the license.txt file included.
 
 #include "core/3ds.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "input_common/touch_from_button.h"
 
 namespace InputCommon {

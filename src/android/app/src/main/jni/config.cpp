@@ -14,7 +14,7 @@
 #include "core/core.h"
 #include "core/hle/service/cfg/cfg.h"
 #include "core/hle/service/service.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "input_common/main.h"
 #include "input_common/udp/client.h"
 #include "jni/camera/ndk_camera.h"

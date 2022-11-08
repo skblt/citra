@@ -45,7 +45,7 @@
 #include "core/loader/loader.h"
 #include "core/movie.h"
 #include "core/rpc/rpc_server.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "network/network.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"

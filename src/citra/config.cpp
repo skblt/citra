@@ -15,7 +15,7 @@
 #include "common/param_package.h"
 #include "core/frontend/mic.h"
 #include "core/hle/service/service.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "input_common/main.h"
 #include "input_common/udp/client.h"
 #include "network/network_settings.h"

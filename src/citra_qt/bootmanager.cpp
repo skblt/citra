@@ -19,7 +19,7 @@
 #include "core/core.h"
 #include "core/frontend/scope_acquire_context.h"
 #include "core/perf_stats.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "input_common/keyboard.h"
 #include "input_common/main.h"
 #include "input_common/motion_emu.h"

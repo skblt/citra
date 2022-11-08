@@ -6,7 +6,7 @@
 
 #include <memory>
 #include "core/frontend/input.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "input_common/gcadapter/gc_adapter.h"
 #include "input_common/main.h"
 

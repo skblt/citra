@@ -28,7 +28,7 @@
 #include "core/hle/service/service.h"
 #include "core/hw/aes/ccm.h"
 #include "core/hw/aes/key.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 SERVICE_CONSTRUCT_IMPL(Service::APT::Module)
 

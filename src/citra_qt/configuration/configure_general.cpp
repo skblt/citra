@@ -9,7 +9,7 @@
 #include "citra_qt/configuration/configure_general.h"
 #include "citra_qt/uisettings.h"
 #include "core/core.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "ui_configure_general.h"
 
 // The QSlider doesn't have an easy way to set a custom step amount,

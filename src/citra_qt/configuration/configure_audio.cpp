@@ -12,7 +12,7 @@
 #include "citra_qt/configuration/configure_audio.h"
 #include "core/core.h"
 #include "core/frontend/mic.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "ui_configure_audio.h"
 
 #if defined(__APPLE__)

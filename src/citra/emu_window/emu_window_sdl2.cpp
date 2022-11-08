@@ -14,7 +14,7 @@
 #include "common/scm_rev.h"
 #include "core/3ds.h"
 #include "core/core.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "input_common/keyboard.h"
 #include "input_common/main.h"
 #include "input_common/motion_emu.h"

@@ -25,7 +25,7 @@
 #include "core/hle/service/cfg/cfg_nor.h"
 #include "core/hle/service/cfg/cfg_s.h"
 #include "core/hle/service/cfg/cfg_u.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 SERIALIZE_EXPORT_IMPL(Service::CFG::Module)
 

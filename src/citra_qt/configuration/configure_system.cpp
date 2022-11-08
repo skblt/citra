@@ -9,7 +9,7 @@
 #include "core/core.h"
 #include "core/hle/service/cfg/cfg.h"
 #include "core/hle/service/ptm/ptm.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "ui_configure_system.h"
 
 static const std::array<int, 12> days_in_month = {{

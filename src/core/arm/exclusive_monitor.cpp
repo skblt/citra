@@ -6,7 +6,7 @@
 #endif
 #include "core/arm/exclusive_monitor.h"
 #include "core/memory.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 namespace Core {
 

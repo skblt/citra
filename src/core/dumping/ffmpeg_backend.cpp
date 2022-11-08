@@ -10,7 +10,7 @@
 #include "common/string_util.h"
 #include "core/dumping/ffmpeg_backend.h"
 #include "core/hw/gpu.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 

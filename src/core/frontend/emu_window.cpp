@@ -6,7 +6,7 @@
 #include <mutex>
 #include "core/frontend/emu_window.h"
 #include "core/frontend/input.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 namespace Frontend {
 /// We need a global touch state that is shared across the different window instances

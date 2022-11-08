@@ -12,7 +12,7 @@
 #include "common/logging/filter.h"
 #include "common/logging/log.h"
 #include "core/core.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "ui_configure_debug.h"
 
 ConfigureDebug::ConfigureDebug(QWidget* parent)

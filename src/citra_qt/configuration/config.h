@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 #include <QVariant>
-#include "core/settings.h"
+#include "common/settings.h"
 
 class QSettings;
 

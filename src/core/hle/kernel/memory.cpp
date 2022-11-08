@@ -19,7 +19,7 @@
 #include "core/hle/kernel/vm_manager.h"
 #include "core/hle/result.h"
 #include "core/memory.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

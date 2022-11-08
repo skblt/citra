@@ -5,7 +5,7 @@
 #include <memory>
 #include "common/archives.h"
 #include "common/logging/log.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "video_core/pica.h"
 #include "video_core/pica_state.h"
 #include "video_core/renderer_base.h"

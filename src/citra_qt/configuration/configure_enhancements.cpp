@@ -5,7 +5,7 @@
 #include <QColorDialog>
 #include "citra_qt/configuration/configure_enhancements.h"
 #include "core/core.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "ui_configure_enhancements.h"
 #include "video_core/renderer_opengl/post_processing_opengl.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"

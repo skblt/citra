@@ -13,7 +13,7 @@
 #include "core/hle/kernel/thread.h"
 #include "core/hle/kernel/timer.h"
 #include "core/hle/kernel/wait_object.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 namespace {
 

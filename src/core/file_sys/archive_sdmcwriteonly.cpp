@@ -9,7 +9,7 @@
 #include "core/file_sys/directory_backend.h"
 #include "core/file_sys/errors.h"
 #include "core/file_sys/file_backend.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // FileSys namespace

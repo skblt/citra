@@ -17,7 +17,7 @@
 #include "core/hle/service/ptm/ptm_sets.h"
 #include "core/hle/service/ptm/ptm_sysm.h"
 #include "core/hle/service/ptm/ptm_u.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 SERIALIZE_EXPORT_IMPL(Service::PTM::Module)
 

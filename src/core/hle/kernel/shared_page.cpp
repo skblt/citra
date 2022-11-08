@@ -11,7 +11,7 @@
 #include "core/hle/kernel/shared_page.h"
 #include "core/hle/service/ptm/ptm.h"
 #include "core/movie.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -19,7 +19,7 @@
 #include "core/hle/service/cam/cam_s.h"
 #include "core/hle/service/cam/cam_u.h"
 #include "core/memory.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 SERVICE_CONSTRUCT_IMPL(Service::CAM::Module)
 

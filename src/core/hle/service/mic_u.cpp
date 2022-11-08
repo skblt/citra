@@ -14,7 +14,7 @@
 #include "core/hle/kernel/kernel.h"
 #include "core/hle/kernel/shared_memory.h"
 #include "core/hle/service/mic_u.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 SERVICE_CONSTRUCT_IMPL(Service::MIC::MIC_U)
 SERIALIZE_EXPORT_IMPL(Service::MIC::MIC_U)

@@ -8,7 +8,7 @@
 #endif
 #include "citra_qt/configuration/configure_graphics.h"
 #include "core/core.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "ui_configure_graphics.h"
 #include "video_core/renderer_opengl/post_processing_opengl.h"
 

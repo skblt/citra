@@ -16,7 +16,7 @@
 #include "core/core_timing.h"
 #include "core/frontend/input.h"
 #include "core/hle/service/service.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 namespace Core {
 class System;

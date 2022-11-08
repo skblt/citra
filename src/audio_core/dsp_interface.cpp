@@ -9,7 +9,7 @@
 #include "common/assert.h"
 #include "core/core.h"
 #include "core/dumping/backend.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 namespace AudioCore {
 

@@ -7,7 +7,7 @@
 #include "common/assert.h"
 #include "core/3ds.h"
 #include "core/frontend/framebuffer_layout.h"
-#include "core/settings.h"
+#include "common/settings.h"
 
 namespace Layout {
 

@@ -8,7 +8,7 @@
 #include <memory>
 #include <thread>
 #include "common/threadsafe_queue.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "input_common/sdl/sdl.h"
 
 union SDL_Event;

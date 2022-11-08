@@ -7,7 +7,7 @@
 #include "citra_qt/configuration/config.h"
 #include "citra_qt/configuration/configure_dialog.h"
 #include "citra_qt/hotkeys.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "ui_configure.h"
 
 ConfigureDialog::ConfigureDialog(QWidget* parent, HotkeyRegistry& registry, bool enable_web_config)
