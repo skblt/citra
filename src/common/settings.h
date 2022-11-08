@@ -424,10 +424,10 @@ struct Values {
     Setting<bool> use_custom_storage{false, "use_custom_storage"};
 
     // System
-    Setting<s32> region_value{REGION_VALUE_AUTO_SELECT, "region_value"};
-    Setting<InitClock> init_clock{InitClock::SystemTime, "init_clock"};
-    Setting<u64> init_time{946681277ULL, "init_time"};
-    Setting<s64> init_time_offset{0, "init_time_offset"};
+    SwitchableSetting<s32> region_value{REGION_VALUE_AUTO_SELECT, "region_value"};
+    SwitchableSetting<InitClock> init_clock{InitClock::SystemTime, "init_clock"};
+    SwitchableSetting<u64> init_time{946681277ULL, "init_time"};
+    SwitchableSetting<s64> init_time_offset{0, "init_time_offset"};
 
     // Renderer
     Setting<bool> use_gles{false, "use_gles"};
@@ -457,9 +457,9 @@ struct Values {
     Setting<u16> custom_bottom_right{360, "custom_bottom_right"};
     Setting<u16> custom_bottom_bottom{480, "custom_bottom_bottom"};
 
-    SwitchableSetting<float> bg_red{0.f, "bg_red"};
-    SwitchableSetting<float> bg_green{0.f, "bg_green"};
-    SwitchableSetting<float> bg_blue{0.f, "bg_blue"};
+    SwitchableSetting<double> bg_red{0.f, "bg_red"};
+    SwitchableSetting<double> bg_green{0.f, "bg_green"};
+    SwitchableSetting<double> bg_blue{0.f, "bg_blue"};
 
     SwitchableSetting<StereoRenderOption> render_3d{StereoRenderOption::Off, "render_3d"};
     SwitchableSetting<u32> factor_3d{0, "factor_3d"};
@@ -480,9 +480,9 @@ struct Values {
     bool audio_muted;
     SwitchableSetting<bool> enable_dsp_lle{false, "enable_dsp_lle"};
     SwitchableSetting<bool> enable_dsp_lle_multithread{false, "enable_dsp_lle_multithread"};
-    Setting<std::string> sink_id{"auto", "sink_id"};
+    Setting<std::string> sink_id{"auto", "output_engine"};
     SwitchableSetting<bool> enable_audio_stretching{true, "enable_audio_stretching"};
-    Setting<std::string> audio_device_id{"auto", "audio_device_id"};
+    Setting<std::string> audio_device_id{"auto", "output_device"};
     SwitchableSetting<float> volume{1.f, "volume"};
     Setting<MicInputType> mic_input_type{MicInputType::None, "mic_input_type"};
     Setting<std::string> mic_input_device{"Default", "mic_input_device"};

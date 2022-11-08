@@ -1864,6 +1864,7 @@ void GMainWindow::OnLoadState() {
 }
 
 void GMainWindow::OnConfigure() {
+    Settings::SetConfiguringGlobal(true);
     ConfigureDialog configureDialog(this, hotkey_registry,
                                     !multiplayer_state->IsHostingPublicRoom());
     connect(&configureDialog, &ConfigureDialog::LanguageChanged, this,
@@ -2463,23 +2464,17 @@ void GMainWindow::OnConfigurePerGame() {
 
 void GMainWindow::OpenPerGameConfiguration(u64 title_id, const QString& file_name) {
     Core::System& system = Core::System::GetInstance();
-    //const auto v_file = Core::GetGameFileFromPath(vfs, file_name);
 
     Settings::SetConfiguringGlobal(false);
     ConfigurePerGame dialog(this, title_id, file_name, system);
     const auto result = dialog.exec();
 
-    if (result != QDialog::Accepted /*&& !UISettings::values.configuration_applied*/) {
+    if (result != QDialog::Accepted) {
         Settings::RestoreGlobalState(system.IsPoweredOn());
         return;
     } else if (result == QDialog::Accepted) {
         dialog.ApplyConfiguration();
     }
-
-    /*const auto reload = UISettings::values.is_game_list_reload_pending.exchange(false);
-    if (reload) {
-        game_list->PopulateAsync(UISettings::values.game_dirs);
-    }*/
 
     // Do not cause the global config to write local settings into the config file
     const bool is_powered_on = system.IsPoweredOn();
