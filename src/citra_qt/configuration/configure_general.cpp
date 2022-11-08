@@ -32,13 +32,19 @@ ConfigureGeneral::ConfigureGeneral(QWidget* parent)
     // This scales across DPIs, and is acceptable for uncapitalized strings.
     ui->emulation_speed_display_label->setMinimumWidth(tr("unthrottled").size() * 6);
 
+    if (!Settings::IsConfiguringGlobal()) {
+        ui->groupBox->setVisible(false);
+        ui->updateBox->setVisible(false);
+        ui->screenshot_group->setVisible(false);
+    }
+
     SetConfiguration();
 
     ui->updateBox->setVisible(UISettings::values.updater_found);
     connect(ui->button_reset_defaults, &QPushButton::clicked, this,
             &ConfigureGeneral::ResetDefaults);
 
-    connect(ui->frame_limit, &QSlider::valueChanged, [&](int value) {
+    connect(ui->frame_limit, &QSlider::valueChanged, this, [&](int value) {
         if (value == ui->frame_limit->maximum()) {
             ui->emulation_speed_display_label->setText(tr("unthrottled"));
         } else {
@@ -49,7 +55,7 @@ ConfigureGeneral::ConfigureGeneral(QWidget* parent)
         }
     });
 
-    connect(ui->frame_limit_alternate, &QSlider::valueChanged, [&](int value) {
+    connect(ui->frame_limit_alternate, &QSlider::valueChanged, this, [&](int value) {
         if (value == ui->frame_limit_alternate->maximum()) {
             ui->emulation_speed_alternate_display_label->setText(tr("unthrottled"));
         } else {
@@ -73,12 +79,24 @@ ConfigureGeneral::ConfigureGeneral(QWidget* parent)
 ConfigureGeneral::~ConfigureGeneral() = default;
 
 void ConfigureGeneral::SetConfiguration() {
-    ui->toggle_check_exit->setChecked(UISettings::values.confirm_before_closing);
-    ui->toggle_background_pause->setChecked(UISettings::values.pause_when_in_background);
-    ui->toggle_hide_mouse->setChecked(UISettings::values.hide_mouse);
+    if (Settings::IsConfiguringGlobal()) {
+        ui->toggle_check_exit->setChecked(UISettings::values.confirm_before_closing);
+        ui->toggle_background_pause->setChecked(UISettings::values.pause_when_in_background);
+        ui->toggle_hide_mouse->setChecked(UISettings::values.hide_mouse);
 
-    ui->toggle_update_check->setChecked(UISettings::values.check_for_update_on_start);
-    ui->toggle_auto_update->setChecked(UISettings::values.update_on_close);
+        ui->toggle_update_check->setChecked(UISettings::values.check_for_update_on_start);
+        ui->toggle_auto_update->setChecked(UISettings::values.update_on_close);
+
+        QString screenshot_path = UISettings::values.screenshot_path;
+        if (screenshot_path.isEmpty()) {
+            screenshot_path =
+                QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::UserDir));
+            screenshot_path.append(QStringLiteral("screenshots/"));
+            FileUtil::CreateFullPath(screenshot_path.toStdString());
+            UISettings::values.screenshot_path = screenshot_path;
+        }
+        ui->screenshot_dir_path->setText(screenshot_path);
+    }
 
     // The first item is "auto-select" with actual value -1, so plus one here will do the trick
     ui->region_combobox->setCurrentIndex(Settings::values.region_value.GetValue() + 1);
@@ -113,16 +131,6 @@ void ConfigureGeneral::SetConfiguration() {
                 .arg(SliderToSettings(ui->frame_limit_alternate->value()))
                 .rightJustified(tr("unthrottled").size()));
     }
-
-    QString screenshot_path = UISettings::values.screenshot_path;
-    if (screenshot_path.isEmpty()) {
-        screenshot_path =
-            QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::UserDir));
-        screenshot_path.append(QStringLiteral("screenshots/"));
-        FileUtil::CreateFullPath(screenshot_path.toStdString());
-        UISettings::values.screenshot_path = screenshot_path;
-    }
-    ui->screenshot_dir_path->setText(screenshot_path);
 }
 
 void ConfigureGeneral::ResetDefaults() {

@@ -34,6 +34,7 @@
 #include "citra_qt/compatibility_list.h"
 #include "citra_qt/configuration/config.h"
 #include "citra_qt/configuration/configure_dialog.h"
+#include "citra_qt/configuration/configure_per_game.h"
 #include "citra_qt/debugger/console.h"
 #include "citra_qt/debugger/graphics/graphics.h"
 #include "citra_qt/debugger/graphics/graphics_breakpoints.h"
@@ -707,6 +708,9 @@ void GMainWindow::ConnectWidgetEvents() {
     connect(game_list, &GameList::ShowList, this, &GMainWindow::OnGameListShowList);
     connect(game_list, &GameList::PopulatingCompleted, this,
             [this] { multiplayer_state->UpdateGameList(game_list->GetModel()); });
+
+    connect(game_list, &GameList::OpenPerGameGeneralRequested, this,
+            &GMainWindow::OnGameListOpenPerGameProperties);
 
     connect(this, &GMainWindow::EmulationStarting, render_window,
             &GRenderWindow::OnEmulationStarting);
@@ -1519,6 +1523,19 @@ void GMainWindow::OnGameListShowList(bool show) {
     game_list->setVisible(show);
     game_list_placeholder->setVisible(!show);
 };
+
+void GMainWindow::OnGameListOpenPerGameProperties(const QString& file) {
+    u64 title_id{};
+    const auto loader = Loader::GetLoader(file.toStdString());
+
+    if (loader == nullptr || loader->ReadProgramId(title_id) != Loader::ResultStatus::Success) {
+        QMessageBox::information(this, tr("Properties"),
+                                 tr("The game properties could not be loaded."));
+        return;
+    }
+
+    OpenPerGameConfiguration(title_id, file);
+}
 
 void GMainWindow::OnMenuLoadFile() {
     const QString extensions = QStringLiteral("*.").append(
@@ -2438,6 +2455,43 @@ void GMainWindow::OnLanguageChanged(const QString& locale) {
         ui->action_Start->setText(tr("Continue"));
 }
 
+void GMainWindow::OnConfigurePerGame() {
+    u64 title_id{};
+    Core::System::GetInstance().GetAppLoader().ReadProgramId(title_id);
+    OpenPerGameConfiguration(title_id, game_path);
+}
+
+void GMainWindow::OpenPerGameConfiguration(u64 title_id, const QString& file_name) {
+    Core::System& system = Core::System::GetInstance();
+    //const auto v_file = Core::GetGameFileFromPath(vfs, file_name);
+
+    Settings::SetConfiguringGlobal(false);
+    ConfigurePerGame dialog(this, title_id, file_name, system);
+    const auto result = dialog.exec();
+
+    if (result != QDialog::Accepted /*&& !UISettings::values.configuration_applied*/) {
+        Settings::RestoreGlobalState(system.IsPoweredOn());
+        return;
+    } else if (result == QDialog::Accepted) {
+        dialog.ApplyConfiguration();
+    }
+
+    /*const auto reload = UISettings::values.is_game_list_reload_pending.exchange(false);
+    if (reload) {
+        game_list->PopulateAsync(UISettings::values.game_dirs);
+    }*/
+
+    // Do not cause the global config to write local settings into the config file
+    const bool is_powered_on = system.IsPoweredOn();
+    Settings::RestoreGlobalState(is_powered_on);
+
+    //UISettings::values.configuration_applied = false;
+
+    if (!is_powered_on) {
+        config->Save();
+    }
+}
+
 void GMainWindow::OnMoviePlaybackCompleted() {
     OnPauseGame();
     QMessageBox::information(this, tr("Playback Completed"), tr("Movie playback completed."));
@@ -2556,11 +2610,13 @@ int main(int argc, char* argv[]) {
 
     // Register frontend applets
     Frontend::RegisterDefaultApplets();
-    Core::System::GetInstance().RegisterMiiSelector(std::make_shared<QtMiiSelector>(main_window));
-    Core::System::GetInstance().RegisterSoftwareKeyboard(std::make_shared<QtKeyboard>(main_window));
+
+    Core::System& system = Core::System::GetInstance();
+    system.RegisterMiiSelector(std::make_shared<QtMiiSelector>(main_window));
+    system.RegisterSoftwareKeyboard(std::make_shared<QtKeyboard>(main_window));
 
     // Register Qt image interface
-    Core::System::GetInstance().RegisterImageInterface(std::make_shared<QtImageInterface>());
+    system.RegisterImageInterface(std::make_shared<QtImageInterface>());
 
     main_window.show();
 

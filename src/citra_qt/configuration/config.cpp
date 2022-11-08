@@ -17,13 +17,9 @@
 #include "network/network.h"
 #include "network/network_settings.h"
 
-Config::Config() {
-    // TODO: Don't hardcode the path; let the frontend decide where to put the config files.
-    qt_config_loc = FileUtil::GetUserPath(FileUtil::UserPath::ConfigDir) + "qt-config.ini";
-    FileUtil::CreateFullPath(qt_config_loc);
-    qt_config =
-        std::make_unique<QSettings>(QString::fromStdString(qt_config_loc), QSettings::IniFormat);
-    Reload();
+Config::Config(const std::string& config_name, ConfigType config_type) : type{config_type} {
+    global = config_type == ConfigType::GlobalConfig;
+    Initialize(config_name);
 }
 
 Config::~Config() {
@@ -84,6 +80,85 @@ const std::array<UISettings::Shortcut, 24> default_hotkeys{
      {QStringLiteral("Toggle Status Bar"),        QStringLiteral("Main Window"), {QStringLiteral("Ctrl+S"), Qt::WindowShortcut}},
      {QStringLiteral("Toggle Texture Dumping"),   QStringLiteral("Main Window"), {QStringLiteral("Ctrl+D"), Qt::ApplicationShortcut}}}};
 // clang-format on
+
+void Config::Initialize(const std::string& config_name) {
+    const std::string fs_config_loc = FileUtil::GetUserPath(FileUtil::UserPath::ConfigDir);
+    const std::string config_file = fmt::format("{}.ini", config_name);
+
+    switch (type) {
+    case ConfigType::GlobalConfig:
+        qt_config_loc = fmt::format("{}/{}", fs_config_loc, config_file);
+        break;
+    case ConfigType::PerGameConfig:
+        qt_config_loc = fmt::format("{}/custom/{}", fs_config_loc, config_file);
+        break;
+    }
+
+    FileUtil::CreateFullPath(qt_config_loc);
+    qt_config = std::make_unique<QSettings>(QString::fromStdString(qt_config_loc),
+                                            QSettings::IniFormat);
+    Reload();
+}
+
+/* {Read,Write}BasicSetting and WriteGlobalSetting templates must be defined here before their
+ * usages later in this file. This allows explicit definition of some types that don't work
+ * nicely with the general version.
+ */
+
+// Explicit std::string definition: Qt can't implicitly convert a std::string to a QVariant, nor
+// can it implicitly convert a QVariant back to a {std::,Q}string
+template <>
+void Config::ReadBasicSetting(Settings::Setting<std::string>& setting) {
+    const QString name = QString::fromStdString(setting.GetLabel());
+    const auto default_value = QString::fromStdString(setting.GetDefault());
+    if (qt_config->value(name + QStringLiteral("/default"), false).toBool()) {
+        setting.SetValue(default_value.toStdString());
+    } else {
+        setting.SetValue(qt_config->value(name, default_value).toString().toStdString());
+    }
+}
+
+template <typename Type, bool ranged>
+void Config::ReadBasicSetting(Settings::Setting<Type, ranged>& setting) {
+    const QString name = QString::fromStdString(setting.GetLabel());
+    const Type default_value = setting.GetDefault();
+    if (qt_config->value(name + QStringLiteral("/default"), false).toBool()) {
+        setting.SetValue(default_value);
+    } else {
+        setting.SetValue(
+            static_cast<QVariant>(qt_config->value(name, default_value)).value<Type>());
+    }
+}
+
+// Explicit std::string definition: Qt can't implicitly convert a std::string to a QVariant
+template <>
+void Config::WriteBasicSetting(const Settings::Setting<std::string>& setting) {
+    const QString name = QString::fromStdString(setting.GetLabel());
+    const std::string& value = setting.GetValue();
+    qt_config->setValue(name + QStringLiteral("/default"), value == setting.GetDefault());
+    qt_config->setValue(name, QString::fromStdString(value));
+}
+
+template <typename Type, bool ranged>
+void Config::WriteBasicSetting(const Settings::Setting<Type, ranged>& setting) {
+    const QString name = QString::fromStdString(setting.GetLabel());
+    const Type value = setting.GetValue();
+    qt_config->setValue(name + QStringLiteral("/default"), value == setting.GetDefault());
+    qt_config->setValue(name, value);
+}
+
+template <typename Type, bool ranged>
+void Config::WriteGlobalSetting(const Settings::SwitchableSetting<Type, ranged>& setting) {
+    const QString name = QString::fromStdString(setting.GetLabel());
+    const Type& value = setting.GetValue(global);
+    if (!global) {
+        qt_config->setValue(name + QStringLiteral("/use_global"), setting.UsingGlobal());
+    }
+    if (global || !setting.UsingGlobal()) {
+        qt_config->setValue(name + QStringLiteral("/default"), value == setting.GetDefault());
+        qt_config->setValue(name, value);
+    }
+}
 
 void Config::ReadValues() {
     ReadControlValues();
@@ -1193,6 +1268,27 @@ QVariant Config::ReadSetting(const QString& name, const QVariant& default_value)
     return result;
 }
 
+template <typename Type, bool ranged>
+void Config::ReadGlobalSetting(Settings::SwitchableSetting<Type, ranged>& setting) {
+    QString name = QString::fromStdString(setting.GetLabel());
+    const bool use_global = qt_config->value(name + QStringLiteral("/use_global"), true).toBool();
+    setting.SetGlobal(use_global);
+    if (global || !use_global) {
+        setting.SetValue(static_cast<QVariant>(
+                             ReadSetting(name, QVariant::fromValue<Type>(setting.GetDefault())))
+                             .value<Type>());
+    }
+}
+
+template <typename Type>
+void Config::ReadSettingGlobal(Type& setting, const QString& name,
+                               const QVariant& default_value) const {
+    const bool use_global = qt_config->value(name + QStringLiteral("/use_global"), true).toBool();
+    if (global || !use_global) {
+        setting = ReadSetting(name, default_value).value<Type>();
+    }
+}
+
 void Config::WriteSetting(const QString& name, const QVariant& value) {
     qt_config->setValue(name, value);
 }
@@ -1201,6 +1297,17 @@ void Config::WriteSetting(const QString& name, const QVariant& value,
                           const QVariant& default_value) {
     qt_config->setValue(name + QStringLiteral("/default"), value == default_value);
     qt_config->setValue(name, value);
+}
+
+void Config::WriteSetting(const QString& name, const QVariant& value, const QVariant& default_value,
+                          bool use_global) {
+    if (!global) {
+        qt_config->setValue(name + QStringLiteral("/use_global"), use_global);
+    }
+    if (global || !use_global) {
+        qt_config->setValue(name + QStringLiteral("/default"), value == default_value);
+        qt_config->setValue(name, value);
+    }
 }
 
 void Config::Reload() {

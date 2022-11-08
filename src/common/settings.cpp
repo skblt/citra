@@ -20,6 +20,7 @@
 namespace Settings {
 
 Values values = {};
+static bool configuring_global = true;
 
 void Apply() {
     GDBStub::SetServerPort(values.gdbstub_port.GetValue());
@@ -131,11 +132,59 @@ void LogSettings() {
     log_setting("Debugging_GdbstubPort", values.gdbstub_port.GetValue());
 }
 
+bool IsConfiguringGlobal() {
+    return configuring_global;
+}
+
+void SetConfiguringGlobal(bool is_global) {
+    configuring_global = is_global;
+}
+
 float Volume() {
     if (values.audio_muted) {
         return 0.0f;
     }
     return values.volume.GetValue();
+}
+
+void RestoreGlobalState(bool is_powered_on) {
+    // If a game is running, DO NOT restore the global settings state
+    if (is_powered_on) {
+        return;
+    }
+
+    // Audio
+    values.enable_dsp_lle.SetGlobal(true);
+    values.enable_dsp_lle_multithread.SetGlobal(true);
+    values.enable_audio_stretching.SetGlobal(true);
+    values.volume.SetGlobal(true);
+
+    // Core
+    values.cpu_clock_percentage.SetGlobal(true);
+    values.is_new_3ds.SetGlobal(true);
+
+    // Renderer
+    values.use_hw_renderer.SetGlobal(true);
+    values.use_hw_shader.SetGlobal(true);
+    values.separable_shader.SetGlobal(true);
+    values.use_disk_shader_cache.SetGlobal(true);
+    values.shaders_accurate_mul.SetGlobal(true);
+    values.use_vsync_new.SetGlobal(true);
+    values.resolution_factor.SetGlobal(true);
+    values.use_frame_limit_alternate.SetGlobal(true);
+    values.frame_limit.SetGlobal(true);
+    values.frame_limit_alternate.SetGlobal(true);
+    values.texture_filter_name.SetGlobal(true);
+    values.layout_option.SetGlobal(true);
+    values.swap_screen.SetGlobal(true);
+    values.upright_screen.SetGlobal(true);
+    values.bg_red.SetGlobal(true);
+    values.bg_green.SetGlobal(true);
+    values.bg_blue.SetGlobal(true);
+    values.render_3d.SetGlobal(true);
+    values.factor_3d.SetGlobal(true);
+    values.filter_mode.SetGlobal(true);
+    values.pp_shader_name.SetGlobal(true);
 }
 
 void LoadProfile(int index) {

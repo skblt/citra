@@ -148,7 +148,7 @@ public:
      * @param default_val Intial value of the setting, and default value of the setting
      * @param name Label for the setting
      */
-    explicit Setting(const Type& default_val, std::string_view name) requires(!ranged)
+    explicit Setting(const Type& default_val, const std::string& name) requires(!ranged)
         : value{default_val}, default_value{default_val}, label{name} {}
     virtual ~Setting() = default;
 
@@ -161,7 +161,7 @@ public:
      * @param name Label for the setting
      */
     explicit Setting(const Type& default_val, const Type& min_val, const Type& max_val,
-                     std::string_view name) requires(ranged)
+                     const std::string& name) requires(ranged)
         : value{default_val},
           default_value{default_val}, maximum{max_val}, minimum{min_val}, label{name} {}
 
@@ -198,7 +198,7 @@ public:
      *
      * @returns A reference to the label
      */
-    [[nodiscard]] std::string_view GetLabel() const {
+    [[nodiscard]] const std::string& GetLabel() const {
         return label;
     }
 
@@ -249,7 +249,7 @@ public:
      * @param default_val Intial value of the setting, and default value of the setting
      * @param name Label for the setting
      */
-    explicit SwitchableSetting(const Type& default_val, std::string_view name) requires(!ranged)
+    explicit SwitchableSetting(const Type& default_val, const std::string& name) requires(!ranged)
         : Setting<Type>{default_val, name} {}
     virtual ~SwitchableSetting() = default;
 
@@ -262,7 +262,7 @@ public:
      * @param name Label for the setting
      */
     explicit SwitchableSetting(const Type& default_val, const Type& min_val, const Type& max_val,
-                               std::string_view name) requires(ranged)
+                               const std::string& name) requires(ranged)
         : Setting<Type, true>{default_val, min_val, max_val, name} {}
 
     /**
@@ -408,9 +408,6 @@ struct TouchFromButtonMap {
 static constexpr s32 REGION_VALUE_AUTO_SELECT = -1;
 
 struct Values {
-    // CheckNew3DS
-    SwitchableSetting<bool> is_new_3ds{true, "is_new_3ds"};
-
     // Controls
     InputProfile current_input_profile;       ///< The current input profile
     int current_input_profile_index;          ///< The current input profile index
@@ -420,6 +417,7 @@ struct Values {
     // Core
     Setting<bool> use_cpu_jit{true, "use_cpu_jit"};
     SwitchableSetting<s32, true> cpu_clock_percentage{100, 5, 400, "cpu_clock_percentage"};
+    SwitchableSetting<bool> is_new_3ds{true, "is_new_3ds"};
 
     // Data Storage
     Setting<bool> use_virtual_sd{true, "use_virtual_sd"};
@@ -518,10 +516,16 @@ struct Values {
 
 extern Values values;
 
+bool IsConfiguringGlobal();
+void SetConfiguringGlobal(bool is_global);
+
 float Volume();
 
 void Apply();
 void LogSettings();
+
+// Restore the global state of all applicable settings in the Values struct
+void RestoreGlobalState(bool is_powered_on);
 
 // Input profiles
 void LoadProfile(int index);
@@ -529,4 +533,5 @@ void SaveProfile(int index);
 void CreateProfile(std::string name);
 void DeleteProfile(int index);
 void RenameCurrentProfile(std::string new_name);
+
 } // namespace Settings
