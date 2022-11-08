@@ -5,6 +5,7 @@
 #pragma once
 
 #include <array>
+#include <algorithm>
 #include <atomic>
 #include <string>
 #include <unordered_map>
@@ -14,41 +15,41 @@
 
 namespace Settings {
 
-enum class InitClock {
+enum class InitClock : u32 {
     SystemTime = 0,
     FixedTime = 1,
 };
 
-enum class LayoutOption {
-    Default,
-    SingleScreen,
-    LargeScreen,
+enum class LayoutOption : u32 {
+    Default = 0,
+    SingleScreen = 1,
+    LargeScreen = 2,
     SideScreen,
 #ifndef ANDROID
-    SeparateWindows,
+    SeparateWindows = 3,
 #endif
     // Similiar to default, but better for mobile devices in portrait mode. Top screen in clamped to
     // the top of the frame, and the bottom screen is enlarged to match the top screen.
-    MobilePortrait,
+    MobilePortrait = 4,
 
     // Similiar to LargeScreen, but better for mobile devices in landscape mode. The screens are
     // clamped to the top of the frame, and the bottom screen is a bit bigger.
-    MobileLandscape,
+    MobileLandscape = 5,
 };
 
-enum class MicInputType {
-    None,
-    Real,
-    Static,
+enum class MicInputType : u32 {
+    None = 0,
+    Real = 1,
+    Static = 2,
 };
 
-enum class StereoRenderOption {
-    Off,
-    SideBySide,
-    Anaglyph,
-    Interlaced,
-    ReverseInterlaced,
-    CardboardVR
+enum class StereoRenderOption : u32 {
+    Off = 0,
+    SideBySide = 1,
+    Anaglyph = 2,
+    Interlaced = 3,
+    ReverseInterlaced = 4,
+    CardboardVR = 5
 };
 
 namespace NativeButton {
@@ -113,15 +114,276 @@ namespace NativeAnalog {
 enum Values {
     CirclePad,
     CStick,
-
     NumAnalogs,
 };
 
-static const std::array<const char*, NumAnalogs> mapping = {{
+constexpr std::array<const char*, NumAnalogs> mapping = {{
     "circle_pad",
     "c_stick",
 }};
 } // namespace NativeAnalog
+
+/** The Setting class is a simple resource manager. It defines a label and default value alongside
+ * the actual value of the setting for simpler and less-error prone use with frontend
+ * configurations. Specifying a default value and label is required. A minimum and maximum range can
+ * be specified for sanitization.
+ */
+template <typename Type, bool ranged = false>
+class Setting {
+protected:
+    Setting() = default;
+
+    /**
+     * Only sets the setting to the given initializer, leaving the other members to their default
+     * initializers.
+     *
+     * @param global_val Initial value of the setting
+     */
+    explicit Setting(const Type& val) : value{val} {}
+
+public:
+    /**
+     * Sets a default value, label, and setting value.
+     *
+     * @param default_val Intial value of the setting, and default value of the setting
+     * @param name Label for the setting
+     */
+    explicit Setting(const Type& default_val, std::string_view name) requires(!ranged)
+        : value{default_val}, default_value{default_val}, label{name} {}
+    virtual ~Setting() = default;
+
+    /**
+     * Sets a default value, minimum value, maximum value, and label.
+     *
+     * @param default_val Intial value of the setting, and default value of the setting
+     * @param min_val Sets the minimum allowed value of the setting
+     * @param max_val Sets the maximum allowed value of the setting
+     * @param name Label for the setting
+     */
+    explicit Setting(const Type& default_val, const Type& min_val, const Type& max_val,
+                     std::string_view name) requires(ranged)
+        : value{default_val},
+          default_value{default_val}, maximum{max_val}, minimum{min_val}, label{name} {}
+
+    /**
+     *  Returns a reference to the setting's value.
+     *
+     * @returns A reference to the setting
+     */
+    [[nodiscard]] virtual const Type& GetValue() const {
+        return value;
+    }
+
+    /**
+     * Sets the setting to the given value.
+     *
+     * @param val The desired value
+     */
+    virtual void SetValue(const Type& val) {
+        Type temp{ranged ? std::clamp(val, minimum, maximum) : val};
+        std::swap(value, temp);
+    }
+
+    /**
+     * Returns the value that this setting was created with.
+     *
+     * @returns A reference to the default value
+     */
+    [[nodiscard]] const Type& GetDefault() const {
+        return default_value;
+    }
+
+    /**
+     * Returns the label this setting was created with.
+     *
+     * @returns A reference to the label
+     */
+    [[nodiscard]] std::string_view GetLabel() const {
+        return label;
+    }
+
+    /**
+     * Assigns a value to the setting.
+     *
+     * @param val The desired setting value
+     *
+     * @returns A reference to the setting
+     */
+    virtual const Type& operator=(const Type& val) {
+        Type temp{ranged ? std::clamp(val, minimum, maximum) : val};
+        std::swap(value, temp);
+        return value;
+    }
+
+    /**
+     * Returns a reference to the setting.
+     *
+     * @returns A reference to the setting
+     */
+    explicit virtual operator const Type&() const {
+        return value;
+    }
+
+protected:
+    Type value{};               ///< The setting
+    const Type default_value{}; ///< The default value
+    const Type maximum{};       ///< Maximum allowed value of the setting
+    const Type minimum{};       ///< Minimum allowed value of the setting
+    const std::string label{};  ///< The setting's label
+};
+
+/**
+ * The SwitchableSetting class is a slightly more complex version of the Setting class. This adds a
+ * custom setting to switch to when a guest application specifically requires it. The effect is that
+ * other components of the emulator can access the setting's intended value without any need for the
+ * component to ask whether the custom or global setting is needed at the moment.
+ *
+ * By default, the global setting is used.
+ */
+template <typename Type, bool ranged = false>
+class SwitchableSetting : virtual public Setting<Type, ranged> {
+public:
+    /**
+     * Sets a default value, label, and setting value.
+     *
+     * @param default_val Intial value of the setting, and default value of the setting
+     * @param name Label for the setting
+     */
+    explicit SwitchableSetting(const Type& default_val, std::string_view name) requires(!ranged)
+        : Setting<Type>{default_val, name} {}
+    virtual ~SwitchableSetting() = default;
+
+    /**
+     * Sets a default value, minimum value, maximum value, and label.
+     *
+     * @param default_val Intial value of the setting, and default value of the setting
+     * @param min_val Sets the minimum allowed value of the setting
+     * @param max_val Sets the maximum allowed value of the setting
+     * @param name Label for the setting
+     */
+    explicit SwitchableSetting(const Type& default_val, const Type& min_val, const Type& max_val,
+                               std::string_view name) requires(ranged)
+        : Setting<Type, true>{default_val, min_val, max_val, name} {}
+
+    /**
+     * Tells this setting to represent either the global or custom setting when other member
+     * functions are used.
+     *
+     * @param to_global Whether to use the global or custom setting.
+     */
+    void SetGlobal(bool to_global) {
+        use_global = to_global;
+    }
+
+    /**
+     * Returns whether this setting is using the global setting or not.
+     *
+     * @returns The global state
+     */
+    [[nodiscard]] bool UsingGlobal() const {
+        return use_global;
+    }
+
+    /**
+     * Returns either the global or custom setting depending on the values of this setting's global
+     * state or if the global value was specifically requested.
+     *
+     * @param need_global Request global value regardless of setting's state; defaults to false
+     *
+     * @returns The required value of the setting
+     */
+    [[nodiscard]] virtual const Type& GetValue() const override {
+        if (use_global) {
+            return this->value;
+        }
+        return custom;
+    }
+    [[nodiscard]] virtual const Type& GetValue(bool need_global) const {
+        if (use_global || need_global) {
+            return this->value;
+        }
+        return custom;
+    }
+
+    /**
+     * Sets the current setting value depending on the global state.
+     *
+     * @param val The new value
+     */
+    void SetValue(const Type& val) override {
+        Type temp{ranged ? std::clamp(val, this->minimum, this->maximum) : val};
+        if (use_global) {
+            std::swap(this->value, temp);
+        } else {
+            std::swap(custom, temp);
+        }
+    }
+
+    /**
+     * Assigns the current setting value depending on the global state.
+     *
+     * @param val The new value
+     *
+     * @returns A reference to the current setting value
+     */
+    const Type& operator=(const Type& val) override {
+        Type temp{ranged ? std::clamp(val, this->minimum, this->maximum) : val};
+        if (use_global) {
+            std::swap(this->value, temp);
+            return this->value;
+        }
+        std::swap(custom, temp);
+        return custom;
+    }
+
+    /**
+     * Returns the current setting value depending on the global state.
+     *
+     * @returns A reference to the current setting value
+     */
+    virtual explicit operator const Type&() const override {
+        if (use_global) {
+            return this->value;
+        }
+        return custom;
+    }
+
+protected:
+    bool use_global{true}; ///< The setting's global state
+    Type custom{};         ///< The custom value of the setting
+};
+
+/**
+ * The InputSetting class allows for getting a reference to either the global or custom members.
+ * This is required as we cannot easily modify the values of user-defined types within containers
+ * using the SetValue() member function found in the Setting class. The primary purpose of this
+ * class is to store an array of 10 PlayerInput structs for both the global and custom setting and
+ * allows for easily accessing and modifying both settings.
+ */
+template <typename Type>
+class InputSetting final {
+public:
+    InputSetting() = default;
+    explicit InputSetting(Type val) : Setting<Type>(val) {}
+    ~InputSetting() = default;
+    void SetGlobal(bool to_global) {
+        use_global = to_global;
+    }
+    [[nodiscard]] bool UsingGlobal() const {
+        return use_global;
+    }
+    [[nodiscard]] Type& GetValue(bool need_global = false) {
+        if (use_global || need_global) {
+            return global;
+        }
+        return custom;
+    }
+
+private:
+    bool use_global{true}; ///< The setting's global state
+    Type global{};         ///< The setting
+    Type custom{};         ///< The custom setting value
+};
 
 struct InputProfile {
     std::string name;
@@ -141,9 +403,13 @@ struct TouchFromButtonMap {
     std::vector<std::string> buttons;
 };
 
+/// A special region value indicating that citra will automatically select a region
+/// value to fit the region lockout info of the game
+static constexpr s32 REGION_VALUE_AUTO_SELECT = -1;
+
 struct Values {
     // CheckNew3DS
-    bool is_new_3ds;
+    SwitchableSetting<bool> is_new_3ds{true, "is_new_3ds"};
 
     // Controls
     InputProfile current_input_profile;       ///< The current input profile
@@ -152,78 +418,76 @@ struct Values {
     std::vector<TouchFromButtonMap> touch_from_button_maps;
 
     // Core
-    bool use_cpu_jit;
-    int cpu_clock_percentage;
+    Setting<bool> use_cpu_jit{true, "use_cpu_jit"};
+    SwitchableSetting<s32, true> cpu_clock_percentage{100, 5, 400, "cpu_clock_percentage"};
 
     // Data Storage
-    bool use_virtual_sd;
-    bool use_custom_storage;
+    Setting<bool> use_virtual_sd{true, "use_virtual_sd"};
+    Setting<bool> use_custom_storage{false, "use_custom_storage"};
 
     // System
-    int region_value;
-    InitClock init_clock;
-    u64 init_time;
-    s64 init_time_offset;
+    Setting<s32> region_value{REGION_VALUE_AUTO_SELECT, "region_value"};
+    Setting<InitClock> init_clock{InitClock::SystemTime, "init_clock"};
+    Setting<u64> init_time{946681277ULL, "init_time"};
+    Setting<s64> init_time_offset{0, "init_time_offset"};
 
     // Renderer
-    bool use_gles;
-    bool use_hw_renderer;
-    bool use_hw_shader;
-    bool separable_shader;
-    bool use_disk_shader_cache;
-    bool shaders_accurate_mul;
-    bool use_shader_jit;
-    u16 resolution_factor;
-    bool use_frame_limit_alternate;
-    u16 frame_limit;
-    u16 frame_limit_alternate;
-    std::string texture_filter_name;
+    Setting<bool> use_gles{false, "use_gles"};
+    SwitchableSetting<bool> use_hw_renderer{true, "use_hw_renderer"};
+    SwitchableSetting<bool> use_hw_shader{true, "use_hw_shader"};
+    SwitchableSetting<bool> separable_shader{false, "use_separable_shader"};
+    SwitchableSetting<bool> use_disk_shader_cache{true, "use_disk_shader_cache"};
+    SwitchableSetting<bool> shaders_accurate_mul{true, "shaders_accurate_mul"};
+    SwitchableSetting<bool> use_vsync_new{true, "use_vsync_new"};
+    Setting<bool> use_shader_jit{true, "use_shader_jit"};
+    SwitchableSetting<u16, true> resolution_factor{1, 1, 10, "resolution_factor"};
+    SwitchableSetting<bool> use_frame_limit_alternate{false, "use_frame_lit_alternative"};
+    SwitchableSetting<u16, true> frame_limit{100, 5, 1000, "frame_limit"};
+    SwitchableSetting<u16, true> frame_limit_alternate{200, 5, 1000, "frame_limit_alternative"};
+    SwitchableSetting<std::string> texture_filter_name{"none", "texture_filter_name"};
 
-    LayoutOption layout_option;
-    bool swap_screen;
-    bool upright_screen;
-    bool custom_layout;
-    u16 custom_top_left;
-    u16 custom_top_top;
-    u16 custom_top_right;
-    u16 custom_top_bottom;
-    u16 custom_bottom_left;
-    u16 custom_bottom_top;
-    u16 custom_bottom_right;
-    u16 custom_bottom_bottom;
+    SwitchableSetting<LayoutOption> layout_option{LayoutOption::Default, "layout_option"};
+    SwitchableSetting<bool> swap_screen{false, "swap_screen"};
+    SwitchableSetting<bool> upright_screen{false, "upright_screen"};
+    Setting<bool> custom_layout{false, "custom_layout"};
+    Setting<u16> custom_top_left{0, "custom_top_left"};
+    Setting<u16> custom_top_top{0, "custom_top_top"};
+    Setting<u16> custom_top_right{400, "custom_top_right"};
+    Setting<u16> custom_top_bottom{240, "custom_top_bottom"};
+    Setting<u16> custom_bottom_left{40, "custom_bottom_left"};
+    Setting<u16> custom_bottom_top{240, "custom_bottom_top"};
+    Setting<u16> custom_bottom_right{360, "custom_bottom_right"};
+    Setting<u16> custom_bottom_bottom{480, "custom_bottom_bottom"};
 
-    float bg_red;
-    float bg_green;
-    float bg_blue;
+    SwitchableSetting<float> bg_red{0.f, "bg_red"};
+    SwitchableSetting<float> bg_green{0.f, "bg_green"};
+    SwitchableSetting<float> bg_blue{0.f, "bg_blue"};
 
-    StereoRenderOption render_3d;
-    std::atomic<u8> factor_3d;
+    SwitchableSetting<StereoRenderOption> render_3d{StereoRenderOption::Off, "render_3d"};
+    SwitchableSetting<u32> factor_3d{0, "factor_3d"};
 
-    bool mono_render_left_eye;
+    Setting<bool> mono_render_left_eye{false, "mono_render_left_eye"};
+    Setting<s32> cardboard_screen_size{85, "cardboard_screen_size"};
+    Setting<s32> cardboard_x_shift{0, "cardboard_x_shift"};
+    Setting<s32> cardboard_y_shift{0, "cardboard_y_shift"};
 
-    int cardboard_screen_size;
-    int cardboard_x_shift;
-    int cardboard_y_shift;
+    SwitchableSetting<bool> filter_mode{true, "filter_mode"};
+    SwitchableSetting<std::string> pp_shader_name{"none (builtin)", "pp_shader_name"};
 
-    bool filter_mode;
-    std::string pp_shader_name;
-
-    bool dump_textures;
-    bool custom_textures;
-    bool preload_textures;
-
-    bool use_vsync_new;
+    Setting<bool> dump_textures{false, "dump_textures"};
+    Setting<bool> custom_textures{false, "custom_textures"};
+    Setting<bool> preload_textures{false, "preload_textures"};
 
     // Audio
     bool audio_muted;
-    bool enable_dsp_lle;
-    bool enable_dsp_lle_multithread;
-    std::string sink_id;
-    bool enable_audio_stretching;
-    std::string audio_device_id;
-    float volume;
-    MicInputType mic_input_type;
-    std::string mic_input_device;
+    SwitchableSetting<bool> enable_dsp_lle{false, "enable_dsp_lle"};
+    SwitchableSetting<bool> enable_dsp_lle_multithread{false, "enable_dsp_lle_multithread"};
+    Setting<std::string> sink_id{"auto", "sink_id"};
+    SwitchableSetting<bool> enable_audio_stretching{true, "enable_audio_stretching"};
+    Setting<std::string> audio_device_id{"auto", "audio_device_id"};
+    SwitchableSetting<float> volume{1.f, "volume"};
+    Setting<MicInputType> mic_input_type{MicInputType::None, "mic_input_type"};
+    Setting<std::string> mic_input_device{"Default", "mic_input_device"};
 
     // Camera
     std::array<std::string, Service::CAM::NumCameras> camera_name;
@@ -232,10 +496,12 @@ struct Values {
 
     // Debugging
     bool record_frame_times;
-    bool use_gdbstub;
-    u16 gdbstub_port;
-    std::string log_filter;
     std::unordered_map<std::string, bool> lle_modules;
+    Setting<bool> use_gdbstub{false, "use_gdbstub"};
+    Setting<u16> gdbstub_port{24689, "gdbstub_port"};
+
+    // Miscellaneous
+    Setting<std::string> log_filter{"*:Info", "log_filter"};
 
     // Video Dumping
     std::string output_format;
@@ -248,13 +514,11 @@ struct Values {
     std::string audio_encoder;
     std::string audio_encoder_options;
     u64 audio_bitrate;
-} extern values;
+};
+
+extern Values values;
 
 float Volume();
-
-// a special value for Values::region_value indicating that citra will automatically select a region
-// value to fit the region lockout info of the game
-static constexpr int REGION_VALUE_AUTO_SELECT = -1;
 
 void Apply();
 void LogSettings();

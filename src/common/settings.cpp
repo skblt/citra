@@ -22,15 +22,15 @@ namespace Settings {
 Values values = {};
 
 void Apply() {
-    GDBStub::SetServerPort(values.gdbstub_port);
-    GDBStub::ToggleServer(values.use_gdbstub);
+    GDBStub::SetServerPort(values.gdbstub_port.GetValue());
+    GDBStub::ToggleServer(values.use_gdbstub.GetValue());
 
-    VideoCore::g_hw_renderer_enabled = values.use_hw_renderer;
-    VideoCore::g_shader_jit_enabled = values.use_shader_jit;
-    VideoCore::g_hw_shader_enabled = values.use_hw_shader;
-    VideoCore::g_separable_shader_enabled = values.separable_shader;
-    VideoCore::g_hw_shader_accurate_mul = values.shaders_accurate_mul;
-    VideoCore::g_use_disk_shader_cache = values.use_disk_shader_cache;
+    VideoCore::g_hw_renderer_enabled = values.use_hw_renderer.GetValue();
+    VideoCore::g_shader_jit_enabled = values.use_shader_jit.GetValue();
+    VideoCore::g_hw_shader_enabled = values.use_hw_shader.GetValue();
+    VideoCore::g_separable_shader_enabled = values.separable_shader.GetValue();
+    VideoCore::g_hw_shader_accurate_mul = values.shaders_accurate_mul.GetValue();
+    VideoCore::g_use_disk_shader_cache = values.use_disk_shader_cache.GetValue();
 
 #ifndef ANDROID
     if (VideoCore::g_renderer) {
@@ -45,9 +45,9 @@ void Apply() {
 
     auto& system = Core::System::GetInstance();
     if (system.IsPoweredOn()) {
-        system.CoreTiming().UpdateClockSpeed(values.cpu_clock_percentage);
-        Core::DSP().SetSink(values.sink_id, values.audio_device_id);
-        Core::DSP().EnableStretching(values.enable_audio_stretching);
+        system.CoreTiming().UpdateClockSpeed(values.cpu_clock_percentage.GetValue());
+        Core::DSP().SetSink(values.sink_id.GetValue(), values.audio_device_id.GetValue());
+        Core::DSP().EnableStretching(values.enable_audio_stretching.GetValue());
 
         auto hid = Service::HID::GetModule(system);
         if (hid) {
@@ -77,38 +77,38 @@ void LogSettings() {
     };
 
     LOG_INFO(Config, "Citra Configuration:");
-    log_setting("Core_UseCpuJit", values.use_cpu_jit);
-    log_setting("Core_CPUClockPercentage", values.cpu_clock_percentage);
-    log_setting("Renderer_UseGLES", values.use_gles);
-    log_setting("Renderer_UseHwRenderer", values.use_hw_renderer);
-    log_setting("Renderer_UseHwShader", values.use_hw_shader);
-    log_setting("Renderer_SeparableShader", values.separable_shader);
-    log_setting("Renderer_ShadersAccurateMul", values.shaders_accurate_mul);
-    log_setting("Renderer_UseShaderJit", values.use_shader_jit);
-    log_setting("Renderer_UseResolutionFactor", values.resolution_factor);
-    log_setting("Renderer_FrameLimit", values.frame_limit);
-    log_setting("Renderer_UseFrameLimitAlternate", values.use_frame_limit_alternate);
-    log_setting("Renderer_FrameLimitAlternate", values.frame_limit_alternate);
-    log_setting("Renderer_VSyncNew", values.use_vsync_new);
-    log_setting("Renderer_PostProcessingShader", values.pp_shader_name);
-    log_setting("Renderer_FilterMode", values.filter_mode);
-    log_setting("Renderer_TextureFilterName", values.texture_filter_name);
-    log_setting("Stereoscopy_Render3d", values.render_3d);
-    log_setting("Stereoscopy_Factor3d", values.factor_3d);
-    log_setting("Stereoscopy_MonoRenderLeftEye", values.mono_render_left_eye);
-    log_setting("Layout_LayoutOption", values.layout_option);
-    log_setting("Layout_SwapScreen", values.swap_screen);
-    log_setting("Layout_UprightScreen", values.upright_screen);
-    log_setting("Utility_DumpTextures", values.dump_textures);
-    log_setting("Utility_CustomTextures", values.custom_textures);
-    log_setting("Utility_UseDiskShaderCache", values.use_disk_shader_cache);
-    log_setting("Audio_EnableDspLle", values.enable_dsp_lle);
-    log_setting("Audio_EnableDspLleMultithread", values.enable_dsp_lle_multithread);
-    log_setting("Audio_OutputEngine", values.sink_id);
-    log_setting("Audio_EnableAudioStretching", values.enable_audio_stretching);
-    log_setting("Audio_OutputDevice", values.audio_device_id);
-    log_setting("Audio_InputDeviceType", values.mic_input_type);
-    log_setting("Audio_InputDevice", values.mic_input_device);
+    log_setting("Core_UseCpuJit", values.use_cpu_jit.GetValue());
+    log_setting("Core_CPUClockPercentage", values.cpu_clock_percentage.GetValue());
+    log_setting("Renderer_UseGLES", values.use_gles.GetValue());
+    log_setting("Renderer_UseHwRenderer", values.use_hw_renderer.GetValue());
+    log_setting("Renderer_UseHwShader", values.use_hw_shader.GetValue());
+    log_setting("Renderer_SeparableShader", values.separable_shader.GetValue());
+    log_setting("Renderer_ShadersAccurateMul", values.shaders_accurate_mul.GetValue());
+    log_setting("Renderer_UseShaderJit", values.use_shader_jit.GetValue());
+    log_setting("Renderer_UseResolutionFactor", values.resolution_factor.GetValue());
+    log_setting("Renderer_FrameLimit", values.frame_limit.GetValue());
+    log_setting("Renderer_UseFrameLimitAlternate", values.use_frame_limit_alternate.GetValue());
+    log_setting("Renderer_FrameLimitAlternate", values.frame_limit_alternate.GetValue());
+    log_setting("Renderer_VSyncNew", values.use_vsync_new.GetValue());
+    log_setting("Renderer_PostProcessingShader", values.pp_shader_name.GetValue());
+    log_setting("Renderer_FilterMode", values.filter_mode.GetValue());
+    log_setting("Renderer_TextureFilterName", values.texture_filter_name.GetValue());
+    log_setting("Stereoscopy_Render3d", values.render_3d.GetValue());
+    log_setting("Stereoscopy_Factor3d", values.factor_3d.GetValue());
+    log_setting("Stereoscopy_MonoRenderLeftEye", values.mono_render_left_eye.GetValue());
+    log_setting("Layout_LayoutOption", values.layout_option.GetValue());
+    log_setting("Layout_SwapScreen", values.swap_screen.GetValue());
+    log_setting("Layout_UprightScreen", values.upright_screen.GetValue());
+    log_setting("Utility_DumpTextures", values.dump_textures.GetValue());
+    log_setting("Utility_CustomTextures", values.custom_textures.GetValue());
+    log_setting("Utility_UseDiskShaderCache", values.use_disk_shader_cache.GetValue());
+    log_setting("Audio_EnableDspLle", values.enable_dsp_lle.GetValue());
+    log_setting("Audio_EnableDspLleMultithread", values.enable_dsp_lle_multithread.GetValue());
+    log_setting("Audio_OutputEngine", values.sink_id.GetValue());
+    log_setting("Audio_EnableAudioStretching", values.enable_audio_stretching.GetValue());
+    log_setting("Audio_OutputDevice", values.audio_device_id.GetValue());
+    log_setting("Audio_InputDeviceType", values.mic_input_type.GetValue());
+    log_setting("Audio_InputDevice", values.mic_input_device.GetValue());
     using namespace Service::CAM;
     log_setting("Camera_OuterRightName", values.camera_name[OuterRightCamera]);
     log_setting("Camera_OuterRightConfig", values.camera_config[OuterRightCamera]);
@@ -119,23 +119,23 @@ void LogSettings() {
     log_setting("Camera_OuterLeftName", values.camera_name[OuterLeftCamera]);
     log_setting("Camera_OuterLeftConfig", values.camera_config[OuterLeftCamera]);
     log_setting("Camera_OuterLeftFlip", values.camera_flip[OuterLeftCamera]);
-    log_setting("DataStorage_UseVirtualSd", values.use_virtual_sd);
-    log_setting("DataStorage_UseCustomStorage", values.use_custom_storage);
+    log_setting("DataStorage_UseVirtualSd", values.use_virtual_sd.GetValue());
+    log_setting("DataStorage_UseCustomStorage", values.use_custom_storage.GetValue());
     if (values.use_custom_storage) {
         log_setting("DataStorage_SdmcDir", FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir));
         log_setting("DataStorage_NandDir", FileUtil::GetUserPath(FileUtil::UserPath::NANDDir));
     }
-    log_setting("System_IsNew3ds", values.is_new_3ds);
-    log_setting("System_RegionValue", values.region_value);
-    log_setting("Debugging_UseGdbstub", values.use_gdbstub);
-    log_setting("Debugging_GdbstubPort", values.gdbstub_port);
+    log_setting("System_IsNew3ds", values.is_new_3ds.GetValue());
+    log_setting("System_RegionValue", values.region_value.GetValue());
+    log_setting("Debugging_UseGdbstub", values.use_gdbstub.GetValue());
+    log_setting("Debugging_GdbstubPort", values.gdbstub_port.GetValue());
 }
 
 float Volume() {
     if (values.audio_muted) {
         return 0.0f;
     }
-    return values.volume;
+    return values.volume.GetValue();
 }
 
 void LoadProfile(int index) {

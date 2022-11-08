@@ -350,12 +350,12 @@ struct MIC_U::Impl {
 
     void CreateMic() {
         std::unique_ptr<Frontend::Mic::Interface> new_mic;
-        switch (Settings::values.mic_input_type) {
+        switch (Settings::values.mic_input_type.GetValue()) {
         case Settings::MicInputType::None:
             new_mic = std::make_unique<Frontend::Mic::NullMic>();
             break;
         case Settings::MicInputType::Real:
-            new_mic = Frontend::Mic::CreateRealMic(Settings::values.mic_input_device);
+            new_mic = Frontend::Mic::CreateRealMic(Settings::values.mic_input_device.GetValue());
             break;
         case Settings::MicInputType::Static:
             new_mic = std::make_unique<Frontend::Mic::StaticMic>();

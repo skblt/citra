@@ -81,12 +81,12 @@ void ConfigureGeneral::SetConfiguration() {
     ui->toggle_auto_update->setChecked(UISettings::values.update_on_close);
 
     // The first item is "auto-select" with actual value -1, so plus one here will do the trick
-    ui->region_combobox->setCurrentIndex(Settings::values.region_value + 1);
+    ui->region_combobox->setCurrentIndex(Settings::values.region_value.GetValue() + 1);
 
-    if (Settings::values.frame_limit == 0) {
+    if (Settings::values.frame_limit.GetValue() == 0) {
         ui->frame_limit->setValue(ui->frame_limit->maximum());
     } else {
-        ui->frame_limit->setValue(SettingsToSlider(Settings::values.frame_limit));
+        ui->frame_limit->setValue(SettingsToSlider(Settings::values.frame_limit.GetValue()));
     }
     if (ui->frame_limit->value() == ui->frame_limit->maximum()) {
         ui->emulation_speed_display_label->setText(tr("unthrottled"));
@@ -97,13 +97,13 @@ void ConfigureGeneral::SetConfiguration() {
                 .rightJustified(tr("unthrottled").size()));
     }
 
-    ui->toggle_alternate_speed->setChecked(Settings::values.use_frame_limit_alternate);
+    ui->toggle_alternate_speed->setChecked(Settings::values.use_frame_limit_alternate.GetValue());
 
-    if (Settings::values.frame_limit_alternate == 0) {
+    if (Settings::values.frame_limit_alternate.GetValue() == 0) {
         ui->frame_limit_alternate->setValue(ui->frame_limit_alternate->maximum());
     } else {
         ui->frame_limit_alternate->setValue(
-            SettingsToSlider(Settings::values.frame_limit_alternate));
+            SettingsToSlider(Settings::values.frame_limit_alternate.GetValue()));
     }
     if (ui->frame_limit_alternate->value() == ui->frame_limit_alternate->maximum()) {
         ui->emulation_speed_alternate_display_label->setText(tr("unthrottled"));

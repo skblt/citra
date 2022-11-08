@@ -52,7 +52,7 @@ enum N3DSMode : u8 {
 void KernelSystem::MemoryInit(u32 mem_type, u8 n3ds_mode) {
     ASSERT(mem_type != 1);
 
-    const bool is_new_3ds = Settings::values.is_new_3ds;
+    const bool is_new_3ds = Settings::values.is_new_3ds.GetValue();
     u32 reported_mem_type = mem_type;
     if (is_new_3ds) {
         if (n3ds_mode == MemoryMode::Mode6 || n3ds_mode == MemoryMode::Mode6_2) {

@@ -365,7 +365,7 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window,
 
     memory = std::make_unique<Memory::MemorySystem>();
 
-    timing = std::make_unique<Timing>(num_cores, Settings::values.cpu_clock_percentage);
+    timing = std::make_unique<Timing>(num_cores, Settings::values.cpu_clock_percentage.GetValue());
 
     kernel = std::make_unique<Kernel::KernelSystem>(
         *memory, *timing, [this] { PrepareReschedule(); }, system_mode, num_cores, n3ds_mode);
@@ -397,15 +397,15 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window,
 
     if (Settings::values.enable_dsp_lle) {
         dsp_core = std::make_unique<AudioCore::DspLle>(*memory,
-                                                       Settings::values.enable_dsp_lle_multithread);
+                                                       Settings::values.enable_dsp_lle_multithread.GetValue());
     } else {
         dsp_core = std::make_unique<AudioCore::DspHle>(*memory);
     }
 
     memory->SetDSP(*dsp_core);
 
-    dsp_core->SetSink(Settings::values.sink_id, Settings::values.audio_device_id);
-    dsp_core->EnableStretching(Settings::values.enable_audio_stretching);
+    dsp_core->SetSink(Settings::values.sink_id.GetValue(), Settings::values.audio_device_id.GetValue());
+    dsp_core->EnableStretching(Settings::values.enable_audio_stretching.GetValue());
 
     telemetry_session = std::make_unique<Core::TelemetrySession>();
 

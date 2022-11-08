@@ -349,7 +349,7 @@ void Config::ReadLayoutValues() {
         ReadSetting(QStringLiteral("mono_render_left_eye"), true).toBool();
     Settings::values.pp_shader_name =
         ReadSetting(QStringLiteral("pp_shader_name"),
-                    (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph)
+                    (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::Anaglyph)
                         ? QStringLiteral("dubois (builtin)")
                         : QStringLiteral("none (builtin)"))
             .toString()
@@ -738,21 +738,21 @@ void Config::SaveValues() {
 void Config::SaveAudioValues() {
     qt_config->beginGroup(QStringLiteral("Audio"));
 
-    WriteSetting(QStringLiteral("enable_dsp_lle"), Settings::values.enable_dsp_lle, false);
+    WriteSetting(QStringLiteral("enable_dsp_lle"), Settings::values.enable_dsp_lle.GetValue(), false);
     WriteSetting(QStringLiteral("enable_dsp_lle_multithread"),
-                 Settings::values.enable_dsp_lle_multithread, false);
-    WriteSetting(QStringLiteral("output_engine"), QString::fromStdString(Settings::values.sink_id),
+                 Settings::values.enable_dsp_lle_multithread.GetValue(), false);
+    WriteSetting(QStringLiteral("output_engine"), QString::fromStdString(Settings::values.sink_id.GetValue()),
                  QStringLiteral("auto"));
     WriteSetting(QStringLiteral("enable_audio_stretching"),
-                 Settings::values.enable_audio_stretching, true);
+                 Settings::values.enable_audio_stretching.GetValue(), true);
     WriteSetting(QStringLiteral("output_device"),
-                 QString::fromStdString(Settings::values.audio_device_id), QStringLiteral("auto"));
-    WriteSetting(QStringLiteral("volume"), Settings::values.volume, 1.0f);
+                 QString::fromStdString(Settings::values.audio_device_id.GetValue()), QStringLiteral("auto"));
+    WriteSetting(QStringLiteral("volume"), Settings::values.volume.GetValue(), 1.0f);
     WriteSetting(QStringLiteral("mic_input_device"),
-                 QString::fromStdString(Settings::values.mic_input_device),
+                 QString::fromStdString(Settings::values.mic_input_device.GetValue()),
                  QString::fromUtf8(Frontend::Mic::default_device_name));
     WriteSetting(QStringLiteral("mic_input_type"),
-                 static_cast<int>(Settings::values.mic_input_type), 0);
+                 static_cast<int>(Settings::values.mic_input_type.GetValue()), 0);
 
     qt_config->endGroup();
 }
@@ -849,9 +849,9 @@ void Config::SaveControlValues() {
 void Config::SaveUtilityValues() {
     qt_config->beginGroup(QStringLiteral("Utility"));
 
-    WriteSetting(QStringLiteral("dump_textures"), Settings::values.dump_textures, false);
-    WriteSetting(QStringLiteral("custom_textures"), Settings::values.custom_textures, false);
-    WriteSetting(QStringLiteral("preload_textures"), Settings::values.preload_textures, false);
+    WriteSetting(QStringLiteral("dump_textures"), Settings::values.dump_textures.GetValue(), false);
+    WriteSetting(QStringLiteral("custom_textures"), Settings::values.custom_textures.GetValue(), false);
+    WriteSetting(QStringLiteral("preload_textures"), Settings::values.preload_textures.GetValue(), false);
 
     qt_config->endGroup();
 }
@@ -859,8 +859,8 @@ void Config::SaveUtilityValues() {
 void Config::SaveCoreValues() {
     qt_config->beginGroup(QStringLiteral("Core"));
 
-    WriteSetting(QStringLiteral("use_cpu_jit"), Settings::values.use_cpu_jit, true);
-    WriteSetting(QStringLiteral("cpu_clock_percentage"), Settings::values.cpu_clock_percentage,
+    WriteSetting(QStringLiteral("use_cpu_jit"), Settings::values.use_cpu_jit.GetValue(), true);
+    WriteSetting(QStringLiteral("cpu_clock_percentage"), Settings::values.cpu_clock_percentage.GetValue(),
                  100);
 
     qt_config->endGroup();
@@ -869,8 +869,8 @@ void Config::SaveCoreValues() {
 void Config::SaveDataStorageValues() {
     qt_config->beginGroup(QStringLiteral("Data Storage"));
 
-    WriteSetting(QStringLiteral("use_virtual_sd"), Settings::values.use_virtual_sd, true);
-    WriteSetting(QStringLiteral("use_custom_storage"), Settings::values.use_custom_storage, false);
+    WriteSetting(QStringLiteral("use_virtual_sd"), Settings::values.use_virtual_sd.GetValue(), true);
+    WriteSetting(QStringLiteral("use_custom_storage"), Settings::values.use_custom_storage.GetValue(), false);
     WriteSetting(QStringLiteral("nand_directory"),
                  QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::NANDDir)),
                  QStringLiteral(""));
@@ -886,8 +886,8 @@ void Config::SaveDebuggingValues() {
 
     // Intentionally not using the QT default setting as this is intended to be changed in the ini
     qt_config->setValue(QStringLiteral("record_frame_times"), Settings::values.record_frame_times);
-    WriteSetting(QStringLiteral("use_gdbstub"), Settings::values.use_gdbstub, false);
-    WriteSetting(QStringLiteral("gdbstub_port"), Settings::values.gdbstub_port, 24689);
+    WriteSetting(QStringLiteral("use_gdbstub"), Settings::values.use_gdbstub.GetValue(), false);
+    WriteSetting(QStringLiteral("gdbstub_port"), Settings::values.gdbstub_port.GetValue(), 24689);
 
     qt_config->beginGroup(QStringLiteral("LLE"));
     for (const auto& service_module : Settings::values.lle_modules) {
@@ -901,28 +901,28 @@ void Config::SaveDebuggingValues() {
 void Config::SaveLayoutValues() {
     qt_config->beginGroup(QStringLiteral("Layout"));
 
-    WriteSetting(QStringLiteral("render_3d"), static_cast<int>(Settings::values.render_3d), 0);
-    WriteSetting(QStringLiteral("factor_3d"), Settings::values.factor_3d.load(), 0);
-    WriteSetting(QStringLiteral("mono_render_left_eye"), Settings::values.mono_render_left_eye,
-                 false);
+    WriteSetting(QStringLiteral("render_3d"), static_cast<int>(Settings::values.render_3d.GetValue()), 0);
+    WriteSetting(QStringLiteral("factor_3d"), Settings::values.factor_3d.GetValue(), 0);
+    WriteSetting(QStringLiteral("mono_render_left_eye"), Settings::values.mono_render_left_eye.GetValue(),
+                false);
     WriteSetting(QStringLiteral("pp_shader_name"),
-                 QString::fromStdString(Settings::values.pp_shader_name),
-                 (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph)
+                 QString::fromStdString(Settings::values.pp_shader_name.GetValue()),
+                 (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::Anaglyph)
                      ? QStringLiteral("dubois (builtin)")
                      : QStringLiteral("none (builtin)"));
-    WriteSetting(QStringLiteral("filter_mode"), Settings::values.filter_mode, true);
-    WriteSetting(QStringLiteral("layout_option"), static_cast<int>(Settings::values.layout_option));
-    WriteSetting(QStringLiteral("swap_screen"), Settings::values.swap_screen, false);
-    WriteSetting(QStringLiteral("upright_screen"), Settings::values.upright_screen, false);
-    WriteSetting(QStringLiteral("custom_layout"), Settings::values.custom_layout, false);
-    WriteSetting(QStringLiteral("custom_top_left"), Settings::values.custom_top_left, 0);
-    WriteSetting(QStringLiteral("custom_top_top"), Settings::values.custom_top_top, 0);
-    WriteSetting(QStringLiteral("custom_top_right"), Settings::values.custom_top_right, 400);
-    WriteSetting(QStringLiteral("custom_top_bottom"), Settings::values.custom_top_bottom, 240);
-    WriteSetting(QStringLiteral("custom_bottom_left"), Settings::values.custom_bottom_left, 40);
-    WriteSetting(QStringLiteral("custom_bottom_top"), Settings::values.custom_bottom_top, 240);
-    WriteSetting(QStringLiteral("custom_bottom_right"), Settings::values.custom_bottom_right, 360);
-    WriteSetting(QStringLiteral("custom_bottom_bottom"), Settings::values.custom_bottom_bottom,
+    WriteSetting(QStringLiteral("filter_mode"), Settings::values.filter_mode.GetValue(), true);
+    WriteSetting(QStringLiteral("layout_option"), static_cast<int>(Settings::values.layout_option.GetValue()));
+    WriteSetting(QStringLiteral("swap_screen"), Settings::values.swap_screen.GetValue(), false);
+    WriteSetting(QStringLiteral("upright_screen"), Settings::values.upright_screen.GetValue(), false);
+    WriteSetting(QStringLiteral("custom_layout"), Settings::values.custom_layout.GetValue(), false);
+    WriteSetting(QStringLiteral("custom_top_left"), Settings::values.custom_top_left.GetValue(), 0);
+    WriteSetting(QStringLiteral("custom_top_top"), Settings::values.custom_top_top.GetValue(), 0);
+    WriteSetting(QStringLiteral("custom_top_right"), Settings::values.custom_top_right.GetValue(), 400);
+    WriteSetting(QStringLiteral("custom_top_bottom"), Settings::values.custom_top_bottom.GetValue(), 240);
+    WriteSetting(QStringLiteral("custom_bottom_left"), Settings::values.custom_bottom_left.GetValue(), 40);
+    WriteSetting(QStringLiteral("custom_bottom_top"), Settings::values.custom_bottom_top.GetValue(), 240);
+    WriteSetting(QStringLiteral("custom_bottom_right"), Settings::values.custom_bottom_right.GetValue(), 360);
+    WriteSetting(QStringLiteral("custom_bottom_bottom"), Settings::values.custom_bottom_bottom.GetValue(),
                  480);
 
     qt_config->endGroup();
@@ -931,7 +931,7 @@ void Config::SaveLayoutValues() {
 void Config::SaveMiscellaneousValues() {
     qt_config->beginGroup(QStringLiteral("Miscellaneous"));
 
-    WriteSetting(QStringLiteral("log_filter"), QString::fromStdString(Settings::values.log_filter),
+    WriteSetting(QStringLiteral("log_filter"), QString::fromStdString(Settings::values.log_filter.GetValue()),
                  QStringLiteral("*:Info"));
 
     qt_config->endGroup();
@@ -998,33 +998,33 @@ void Config::SavePathValues() {
 void Config::SaveRendererValues() {
     qt_config->beginGroup(QStringLiteral("Renderer"));
 
-    WriteSetting(QStringLiteral("use_hw_renderer"), Settings::values.use_hw_renderer, true);
-    WriteSetting(QStringLiteral("use_hw_shader"), Settings::values.use_hw_shader, true);
+    WriteSetting(QStringLiteral("use_hw_renderer"), Settings::values.use_hw_renderer.GetValue(), true);
+    WriteSetting(QStringLiteral("use_hw_shader"), Settings::values.use_hw_shader.GetValue(), true);
 #ifdef __APPLE__
     // Hardware shader is broken on macos thanks to poor drivers.
     // TODO: enable this for none Intel GPUs
     WriteSetting(QStringLiteral("use_separable_shader"), Settings::values.separable_shader, false);
 #endif
-    WriteSetting(QStringLiteral("shaders_accurate_mul"), Settings::values.shaders_accurate_mul,
+    WriteSetting(QStringLiteral("shaders_accurate_mul"), Settings::values.shaders_accurate_mul.GetValue(),
                  true);
-    WriteSetting(QStringLiteral("use_shader_jit"), Settings::values.use_shader_jit, true);
-    WriteSetting(QStringLiteral("use_disk_shader_cache"), Settings::values.use_disk_shader_cache,
+    WriteSetting(QStringLiteral("use_shader_jit"), Settings::values.use_shader_jit.GetValue(), true);
+    WriteSetting(QStringLiteral("use_disk_shader_cache"), Settings::values.use_disk_shader_cache.GetValue(),
                  true);
-    WriteSetting(QStringLiteral("use_vsync_new"), Settings::values.use_vsync_new, true);
-    WriteSetting(QStringLiteral("resolution_factor"), Settings::values.resolution_factor, 1);
-    WriteSetting(QStringLiteral("frame_limit"), Settings::values.frame_limit, 100);
+    WriteSetting(QStringLiteral("use_vsync_new"), Settings::values.use_vsync_new.GetValue(), true);
+    WriteSetting(QStringLiteral("resolution_factor"), Settings::values.resolution_factor.GetValue(), 1);
+    WriteSetting(QStringLiteral("frame_limit"), Settings::values.frame_limit.GetValue(), 100);
     WriteSetting(QStringLiteral("use_frame_limit_alternate"),
-                 Settings::values.use_frame_limit_alternate, false);
-    WriteSetting(QStringLiteral("frame_limit_alternate"), Settings::values.frame_limit_alternate,
+                 Settings::values.use_frame_limit_alternate.GetValue(), false);
+    WriteSetting(QStringLiteral("frame_limit_alternate"), Settings::values.frame_limit_alternate.GetValue(),
                  200);
 
     // Cast to double because Qt's written float values are not human-readable
-    WriteSetting(QStringLiteral("bg_red"), static_cast<double>(Settings::values.bg_red), 0.0);
-    WriteSetting(QStringLiteral("bg_green"), static_cast<double>(Settings::values.bg_green), 0.0);
-    WriteSetting(QStringLiteral("bg_blue"), static_cast<double>(Settings::values.bg_blue), 0.0);
+    WriteSetting(QStringLiteral("bg_red"), static_cast<double>(Settings::values.bg_red.GetValue()), 0.0);
+    WriteSetting(QStringLiteral("bg_green"), static_cast<double>(Settings::values.bg_green.GetValue()), 0.0);
+    WriteSetting(QStringLiteral("bg_blue"), static_cast<double>(Settings::values.bg_blue.GetValue()), 0.0);
 
     WriteSetting(QStringLiteral("texture_filter_name"),
-                 QString::fromStdString(Settings::values.texture_filter_name),
+                 QString::fromStdString(Settings::values.texture_filter_name.GetValue()),
                  QStringLiteral("none"));
 
     qt_config->endGroup();
@@ -1052,10 +1052,10 @@ void Config::SaveShortcutValues() {
 void Config::SaveSystemValues() {
     qt_config->beginGroup(QStringLiteral("System"));
 
-    WriteSetting(QStringLiteral("is_new_3ds"), Settings::values.is_new_3ds, true);
-    WriteSetting(QStringLiteral("region_value"), Settings::values.region_value,
+    WriteSetting(QStringLiteral("is_new_3ds"), Settings::values.is_new_3ds.GetValue(), true);
+    WriteSetting(QStringLiteral("region_value"), Settings::values.region_value.GetValue(),
                  Settings::REGION_VALUE_AUTO_SELECT);
-    WriteSetting(QStringLiteral("init_clock"), static_cast<u32>(Settings::values.init_clock),
+    WriteSetting(QStringLiteral("init_clock"), static_cast<u32>(Settings::values.init_clock.GetValue()),
                  static_cast<u32>(Settings::InitClock::SystemTime));
     WriteSetting(QStringLiteral("init_time"),
                  static_cast<unsigned long long>(Settings::values.init_time), 946681277ULL);

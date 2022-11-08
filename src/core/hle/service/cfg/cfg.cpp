@@ -189,10 +189,10 @@ void Module::Interface::GetCountryCodeID(Kernel::HLERequestContext& ctx) {
 }
 
 u32 Module::GetRegionValue() {
-    if (Settings::values.region_value == Settings::REGION_VALUE_AUTO_SELECT)
+    if (Settings::values.region_value.GetValue() == Settings::REGION_VALUE_AUTO_SELECT)
         return preferred_region_code;
 
-    return Settings::values.region_value;
+    return Settings::values.region_value.GetValue();
 }
 
 void Module::Interface::SecureInfoGetRegion(Kernel::HLERequestContext& ctx, u16 id) {
@@ -654,7 +654,7 @@ void Module::SetPreferredRegionCodes(const std::vector<u32>& region_codes) {
     preferred_region_code = region;
     LOG_INFO(Service_CFG, "Preferred region code set to {}", preferred_region_code);
 
-    if (Settings::values.region_value == Settings::REGION_VALUE_AUTO_SELECT) {
+    if (Settings::values.region_value.GetValue() == Settings::REGION_VALUE_AUTO_SELECT) {
         if (current_language != adjusted_language) {
             LOG_WARNING(Service_CFG, "System language {} does not fit the region. Adjusted to {}",
                         current_language, adjusted_language);

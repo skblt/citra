@@ -62,13 +62,13 @@ ConfigureGraphics::ConfigureGraphics(QWidget* parent)
 ConfigureGraphics::~ConfigureGraphics() = default;
 
 void ConfigureGraphics::SetConfiguration() {
-    ui->toggle_hw_renderer->setChecked(Settings::values.use_hw_renderer);
-    ui->toggle_hw_shader->setChecked(Settings::values.use_hw_shader);
-    ui->toggle_separable_shader->setChecked(Settings::values.separable_shader);
-    ui->toggle_accurate_mul->setChecked(Settings::values.shaders_accurate_mul);
-    ui->toggle_shader_jit->setChecked(Settings::values.use_shader_jit);
-    ui->toggle_disk_shader_cache->setChecked(Settings::values.use_disk_shader_cache);
-    ui->toggle_vsync_new->setChecked(Settings::values.use_vsync_new);
+    ui->toggle_hw_renderer->setChecked(Settings::values.use_hw_renderer.GetValue());
+    ui->toggle_hw_shader->setChecked(Settings::values.use_hw_shader.GetValue());
+    ui->toggle_separable_shader->setChecked(Settings::values.separable_shader.GetValue());
+    ui->toggle_accurate_mul->setChecked(Settings::values.shaders_accurate_mul.GetValue());
+    ui->toggle_shader_jit->setChecked(Settings::values.use_shader_jit.GetValue());
+    ui->toggle_disk_shader_cache->setChecked(Settings::values.use_disk_shader_cache.GetValue());
+    ui->toggle_vsync_new->setChecked(Settings::values.use_vsync_new.GetValue());
 }
 
 void ConfigureGraphics::ApplyConfiguration() {

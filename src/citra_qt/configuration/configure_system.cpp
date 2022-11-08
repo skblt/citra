@@ -261,9 +261,9 @@ ConfigureSystem::~ConfigureSystem() = default;
 void ConfigureSystem::SetConfiguration() {
     enabled = !Core::System::GetInstance().IsPoweredOn();
 
-    ui->combo_init_clock->setCurrentIndex(static_cast<u8>(Settings::values.init_clock));
+    ui->combo_init_clock->setCurrentIndex(static_cast<u8>(Settings::values.init_clock.GetValue()));
     QDateTime date_time;
-    date_time.setTime_t(Settings::values.init_time);
+    date_time.setTime_t(Settings::values.init_time.GetValue());
     ui->edit_init_time->setDateTime(date_time);
 
     long long init_time_offset = Settings::values.init_time_offset;
@@ -287,11 +287,11 @@ void ConfigureSystem::SetConfiguration() {
         ui->label_disable_info->hide();
     }
 
-    ui->slider_clock_speed->setValue(SettingsToSlider(Settings::values.cpu_clock_percentage));
+    ui->slider_clock_speed->setValue(SettingsToSlider(Settings::values.cpu_clock_percentage.GetValue()));
     ui->clock_display_label->setText(
-        QStringLiteral("%1%").arg(Settings::values.cpu_clock_percentage));
+        QStringLiteral("%1%").arg(Settings::values.cpu_clock_percentage.GetValue()));
 
-    ui->toggle_new_3ds->setChecked(Settings::values.is_new_3ds);
+    ui->toggle_new_3ds->setChecked(Settings::values.is_new_3ds.GetValue());
 }
 
 void ConfigureSystem::ReadSystemSettings() {

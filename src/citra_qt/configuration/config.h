@@ -68,8 +68,24 @@ private:
     void SaveWebServiceValues();
     void SaveVideoDumpingValues();
 
+    /**
+     * Reads a setting from the qt_config.
+     *
+     * @param name The setting's identifier
+     * @param default_value The value to use when the setting is not already present in the config
+     */
     QVariant ReadSetting(const QString& name) const;
     QVariant ReadSetting(const QString& name, const QVariant& default_value) const;
+
+    /**
+     * Writes a setting to the qt_config.
+     *
+     * @param name The setting's idetentifier
+     * @param value Value of the setting
+     * @param default_value Default of the setting if not present in qt_config
+     * @param use_global Specifies if the custom or global config should be in use, for custom
+     * configs
+     */
     void WriteSetting(const QString& name, const QVariant& value);
     void WriteSetting(const QString& name, const QVariant& value, const QVariant& default_value);
 

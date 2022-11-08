@@ -174,7 +174,7 @@ static void OnStatusMessageReceived(const Network::StatusMessageEntry& msg) {
 
 static void InitializeLogging() {
     Log::Filter log_filter(Log::Level::Debug);
-    log_filter.ParseFilterString(Settings::values.log_filter);
+    log_filter.ParseFilterString(Settings::values.log_filter.GetValue());
     Log::SetGlobalFilter(log_filter);
 
     Log::AddBackend(std::make_unique<Log::ColorConsoleBackend>());
@@ -192,8 +192,8 @@ int main(int argc, char** argv) {
     Common::DetachedTasks detached_tasks;
     Config config;
     int option_index = 0;
-    bool use_gdbstub = Settings::values.use_gdbstub;
-    u32 gdb_port = static_cast<u32>(Settings::values.gdbstub_port);
+    bool use_gdbstub = Settings::values.use_gdbstub.GetValue();
+    u32 gdb_port = static_cast<u32>(Settings::values.gdbstub_port.GetValue());
     std::string movie_record;
     std::string movie_record_author;
     std::string movie_play;

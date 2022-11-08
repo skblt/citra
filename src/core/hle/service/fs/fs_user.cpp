@@ -350,7 +350,7 @@ void FS_USER::IsSdmcDetected(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x817, 0, 0);
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(RESULT_SUCCESS);
-    rb.Push(Settings::values.use_virtual_sd);
+    rb.Push(Settings::values.use_virtual_sd.GetValue());
 }
 
 void FS_USER::IsSdmcWriteable(Kernel::HLERequestContext& ctx) {
@@ -358,7 +358,7 @@ void FS_USER::IsSdmcWriteable(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(RESULT_SUCCESS);
     // If the SD isn't enabled, it can't be writeable...else, stubbed true
-    rb.Push(Settings::values.use_virtual_sd);
+    rb.Push(Settings::values.use_virtual_sd.GetValue());
     LOG_DEBUG(Service_FS, " (STUBBED)");
 }
 

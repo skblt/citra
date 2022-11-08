@@ -143,7 +143,7 @@ const int GMainWindow::max_recent_files_item;
 
 static void InitializeLogging() {
     Log::Filter log_filter;
-    log_filter.ParseFilterString(Settings::values.log_filter);
+    log_filter.ParseFilterString(Settings::values.log_filter.GetValue());
     Log::SetGlobalFilter(log_filter);
 
     const std::string& log_dir = FileUtil::GetUserPath(FileUtil::UserPath::LogDir);
@@ -554,21 +554,24 @@ void GMainWindow::InitializeHotkeys() {
     static constexpr u16 SPEED_LIMIT_STEP = 5;
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Increase Speed Limit"), this),
             &QShortcut::activated, this, [&] {
-                if (Settings::values.use_frame_limit_alternate) {
-                    if (Settings::values.frame_limit_alternate == 0) {
+                if (Settings::values.use_frame_limit_alternate.GetValue()) {
+                    if (Settings::values.frame_limit_alternate.GetValue() == 0) {
                         return;
                     }
-                    if (Settings::values.frame_limit_alternate < 995 - SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit_alternate += SPEED_LIMIT_STEP;
+
+                    if (Settings::values.frame_limit_alternate.GetValue() < 995 - SPEED_LIMIT_STEP) {
+                        Settings::values.frame_limit_alternate.SetValue(
+                                    Settings::values.frame_limit_alternate.GetValue() + SPEED_LIMIT_STEP);
                     } else {
                         Settings::values.frame_limit_alternate = 0;
                     }
                 } else {
-                    if (Settings::values.frame_limit == 0) {
+                    if (Settings::values.frame_limit.GetValue() == 0) {
                         return;
                     }
-                    if (Settings::values.frame_limit < 995 - SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit += SPEED_LIMIT_STEP;
+                    if (Settings::values.frame_limit.GetValue() < 995 - SPEED_LIMIT_STEP) {
+                        Settings::values.frame_limit.SetValue(
+                                    Settings::values.frame_limit.GetValue() + SPEED_LIMIT_STEP);
                     } else {
                         Settings::values.frame_limit = 0;
                     }
@@ -578,16 +581,18 @@ void GMainWindow::InitializeHotkeys() {
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Decrease Speed Limit"), this),
             &QShortcut::activated, this, [&] {
                 if (Settings::values.use_frame_limit_alternate) {
-                    if (Settings::values.frame_limit_alternate == 0) {
+                    if (Settings::values.frame_limit_alternate.GetValue() == 0) {
                         Settings::values.frame_limit_alternate = 995;
-                    } else if (Settings::values.frame_limit_alternate > SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit_alternate -= SPEED_LIMIT_STEP;
+                    } else if (Settings::values.frame_limit_alternate.GetValue() > SPEED_LIMIT_STEP) {
+                        Settings::values.frame_limit_alternate.SetValue(
+                                    Settings::values.frame_limit_alternate.GetValue() - SPEED_LIMIT_STEP);
                     }
                 } else {
-                    if (Settings::values.frame_limit == 0) {
+                    if (Settings::values.frame_limit.GetValue() == 0) {
                         Settings::values.frame_limit = 995;
-                    } else if (Settings::values.frame_limit > SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit -= SPEED_LIMIT_STEP;
+                    } else if (Settings::values.frame_limit.GetValue() > SPEED_LIMIT_STEP) {
+                        Settings::values.frame_limit.SetValue(
+                                    Settings::values.frame_limit.GetValue() - SPEED_LIMIT_STEP);
                         UpdateStatusBar();
                     }
                 }
@@ -1786,7 +1791,7 @@ void GMainWindow::ChangeScreenLayout() {
 
 void GMainWindow::ToggleScreenLayout() {
     const Settings::LayoutOption new_layout = []() {
-        switch (Settings::values.layout_option) {
+        switch (Settings::values.layout_option.GetValue()) {
         case Settings::LayoutOption::Default:
             return Settings::LayoutOption::SingleScreen;
         case Settings::LayoutOption::SingleScreen:
@@ -1798,7 +1803,7 @@ void GMainWindow::ToggleScreenLayout() {
         case Settings::LayoutOption::SeparateWindows:
             return Settings::LayoutOption::Default;
         default:
-            LOG_ERROR(Frontend, "Unknown layout option {}", Settings::values.layout_option);
+            LOG_ERROR(Frontend, "Unknown layout option {}", Settings::values.layout_option.GetValue());
             return Settings::LayoutOption::Default;
         }
     }();
@@ -2145,21 +2150,21 @@ void GMainWindow::UpdateStatusBar() {
     auto results = Core::System::GetInstance().GetAndResetPerfStats();
 
     if (Settings::values.use_frame_limit_alternate) {
-        if (Settings::values.frame_limit_alternate == 0) {
+        if (Settings::values.frame_limit_alternate.GetValue() == 0) {
             emu_speed_label->setText(
                 tr("Speed: %1%").arg(results.emulation_speed * 100.0, 0, 'f', 0));
 
         } else {
             emu_speed_label->setText(tr("Speed: %1% / %2%")
                                          .arg(results.emulation_speed * 100.0, 0, 'f', 0)
-                                         .arg(Settings::values.frame_limit_alternate));
+                                         .arg(Settings::values.frame_limit_alternate.GetValue()));
         }
-    } else if (Settings::values.frame_limit == 0) {
+    } else if (Settings::values.frame_limit.GetValue() == 0) {
         emu_speed_label->setText(tr("Speed: %1%").arg(results.emulation_speed * 100.0, 0, 'f', 0));
     } else {
         emu_speed_label->setText(tr("Speed: %1% / %2%")
                                      .arg(results.emulation_speed * 100.0, 0, 'f', 0)
-                                     .arg(Settings::values.frame_limit));
+                                     .arg(Settings::values.frame_limit.GetValue()));
     }
     game_fps_label->setText(tr("Game: %1 FPS").arg(results.game_fps, 0, 'f', 0));
     emu_frametime_label->setText(tr("Frame: %1 ms").arg(results.frametime * 1000.0, 0, 'f', 2));
@@ -2467,18 +2472,18 @@ void GMainWindow::UpdateUISettings() {
 }
 
 void GMainWindow::SyncMenuUISettings() {
-    ui->action_Screen_Layout_Default->setChecked(Settings::values.layout_option ==
+    ui->action_Screen_Layout_Default->setChecked(Settings::values.layout_option.GetValue() ==
                                                  Settings::LayoutOption::Default);
-    ui->action_Screen_Layout_Single_Screen->setChecked(Settings::values.layout_option ==
+    ui->action_Screen_Layout_Single_Screen->setChecked(Settings::values.layout_option.GetValue() ==
                                                        Settings::LayoutOption::SingleScreen);
-    ui->action_Screen_Layout_Large_Screen->setChecked(Settings::values.layout_option ==
+    ui->action_Screen_Layout_Large_Screen->setChecked(Settings::values.layout_option.GetValue() ==
                                                       Settings::LayoutOption::LargeScreen);
-    ui->action_Screen_Layout_Side_by_Side->setChecked(Settings::values.layout_option ==
+    ui->action_Screen_Layout_Side_by_Side->setChecked(Settings::values.layout_option.GetValue() ==
                                                       Settings::LayoutOption::SideScreen);
-    ui->action_Screen_Layout_Separate_Windows->setChecked(Settings::values.layout_option ==
+    ui->action_Screen_Layout_Separate_Windows->setChecked(Settings::values.layout_option.GetValue() ==
                                                           Settings::LayoutOption::SeparateWindows);
-    ui->action_Screen_Layout_Swap_Screens->setChecked(Settings::values.swap_screen);
-    ui->action_Screen_Layout_Upright_Screens->setChecked(Settings::values.upright_screen);
+    ui->action_Screen_Layout_Swap_Screens->setChecked(Settings::values.swap_screen.GetValue());
+    ui->action_Screen_Layout_Upright_Screens->setChecked(Settings::values.upright_screen.GetValue());
 }
 
 void GMainWindow::RetranslateStatusBar() {

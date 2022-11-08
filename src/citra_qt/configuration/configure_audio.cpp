@@ -64,9 +64,9 @@ void ConfigureAudio::SetConfiguration() {
 
     SetAudioDeviceFromDeviceID();
 
-    ui->toggle_audio_stretching->setChecked(Settings::values.enable_audio_stretching);
+    ui->toggle_audio_stretching->setChecked(Settings::values.enable_audio_stretching.GetValue());
     ui->volume_slider->setValue(
-        static_cast<int>(Settings::values.volume * ui->volume_slider->maximum()));
+        static_cast<int>(Settings::values.volume.GetValue() * ui->volume_slider->maximum()));
     SetVolumeIndicatorText(ui->volume_slider->sliderPosition());
 
     int selection;
@@ -81,7 +81,7 @@ void ConfigureAudio::SetConfiguration() {
     }
     ui->emulation_combo_box->setCurrentIndex(selection);
 
-    int index = static_cast<int>(Settings::values.mic_input_type);
+    s32 index = static_cast<s32>(Settings::values.mic_input_type.GetValue());
     ui->input_type_combo_box->setCurrentIndex(index);
 
     UpdateAudioInputDevices(index);
@@ -90,7 +90,7 @@ void ConfigureAudio::SetConfiguration() {
 void ConfigureAudio::SetOutputSinkFromSinkID() {
     int new_sink_index = 0;
 
-    const QString sink_id = QString::fromStdString(Settings::values.sink_id);
+    const QString sink_id = QString::fromStdString(Settings::values.sink_id.GetValue());
     for (int index = 0; index < ui->output_sink_combo_box->count(); index++) {
         if (ui->output_sink_combo_box->itemText(index) == sink_id) {
             new_sink_index = index;
@@ -104,7 +104,7 @@ void ConfigureAudio::SetOutputSinkFromSinkID() {
 void ConfigureAudio::SetAudioDeviceFromDeviceID() {
     int new_device_index = -1;
 
-    const QString device_id = QString::fromStdString(Settings::values.audio_device_id);
+    const QString device_id = QString::fromStdString(Settings::values.audio_device_id.GetValue());
     for (int index = 0; index < ui->audio_device_combo_box->count(); index++) {
         if (ui->audio_device_combo_box->itemText(index) == device_id) {
             new_device_index = index;
@@ -157,9 +157,9 @@ void ConfigureAudio::UpdateAudioInputDevices(int index) {
         AppleAuthorization::CheckAuthorizationForMicrophone();
     }
 #endif
-    if (Settings::values.mic_input_device != Frontend::Mic::default_device_name) {
+    if (Settings::values.mic_input_device.GetValue() != Frontend::Mic::default_device_name) {
         ui->input_device_combo_box->setCurrentText(
-            QString::fromStdString(Settings::values.mic_input_device));
+            QString::fromStdString(Settings::values.mic_input_device.GetValue()));
     }
 }
 
