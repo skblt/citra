@@ -395,11 +395,12 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window,
     kernel->SetCPUs(cpu_cores);
     kernel->SetRunningCPU(cpu_cores[0].get());
 
-    if (Settings::values.enable_dsp_lle) {
-        dsp_core = std::make_unique<AudioCore::DspLle>(*memory,
-                                                       Settings::values.enable_dsp_lle_multithread.GetValue());
-    } else {
+    const auto audio_emulation = Settings::values.audio_emulation.GetValue();
+    if (audio_emulation == Settings::AudioEmulation::HLE) {
         dsp_core = std::make_unique<AudioCore::DspHle>(*memory);
+    } else {
+        const bool multithread = audio_emulation == Settings::AudioEmulation::LLEMultithreaded;
+        dsp_core = std::make_unique<AudioCore::DspLle>(*memory, multithread);
     }
 
     memory->SetDSP(*dsp_core);

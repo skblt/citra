@@ -23,7 +23,9 @@ Config::Config(const std::string& config_name, ConfigType config_type) : type{co
 }
 
 Config::~Config() {
-    Save();
+    if (global) {
+        Save();
+    }
 }
 
 const std::array<int, Settings::NativeButton::NumButtons> Config::default_buttons = {
@@ -240,8 +242,7 @@ void Config::ReadValues() {
 void Config::ReadAudioValues() {
     qt_config->beginGroup(QStringLiteral("Audio"));
 
-    ReadGlobalSetting(Settings::values.enable_dsp_lle);
-    ReadGlobalSetting(Settings::values.enable_dsp_lle_multithread);
+    ReadGlobalSetting(Settings::values.audio_emulation);
     ReadGlobalSetting(Settings::values.enable_audio_stretching);
     ReadGlobalSetting(Settings::values.volume);
 
@@ -844,21 +845,9 @@ void Config::SaveValues() {
 void Config::SaveAudioValues() {
     qt_config->beginGroup(QStringLiteral("Audio"));
 
-    WriteGlobalSetting(Settings::values.enable_dsp_lle);
-    WriteGlobalSetting(Settings::values.enable_dsp_lle_multithread);
+    WriteGlobalSetting(Settings::values.audio_emulation);
     WriteGlobalSetting(Settings::values.enable_audio_stretching);
     WriteGlobalSetting(Settings::values.volume);
-
-    WriteSetting(QStringLiteral("enable_audio_stretching"),
-                 Settings::values.enable_audio_stretching.GetValue(), true);
-    WriteSetting(QStringLiteral("output_device"),
-                 QString::fromStdString(Settings::values.audio_device_id.GetValue()), QStringLiteral("auto"));
-    WriteSetting(QStringLiteral("volume"), Settings::values.volume.GetValue(), 1.0f);
-    WriteSetting(QStringLiteral("mic_input_device"),
-                 QString::fromStdString(Settings::values.mic_input_device.GetValue()),
-                 QString::fromUtf8(Frontend::Mic::default_device_name));
-    WriteSetting(QStringLiteral("mic_input_type"),
-                 static_cast<int>(Settings::values.mic_input_type.GetValue()), 0);
 
     if (global) {
         WriteBasicSetting(Settings::values.sink_id);
@@ -1334,7 +1323,6 @@ void Config::Reload() {
     ReadValues();
     // To apply default value changes
     SaveValues();
-    Settings::Apply();
 }
 
 void Config::Save() {

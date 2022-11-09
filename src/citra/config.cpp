@@ -188,9 +188,8 @@ void Config::ReadValues() {
         sdl2_config->GetBoolean("Utility", "preload_textures", false);
 
     // Audio
-    Settings::values.enable_dsp_lle = sdl2_config->GetBoolean("Audio", "enable_dsp_lle", false);
-    Settings::values.enable_dsp_lle_multithread =
-        sdl2_config->GetBoolean("Audio", "enable_dsp_lle_multithread", false);
+    Settings::values.audio_emulation =
+        static_cast<Settings::AudioEmulation>(sdl2_config->GetInteger("Audio", "audio_emulation", 0));
     Settings::values.sink_id = sdl2_config->GetString("Audio", "output_engine", "auto");
     Settings::values.enable_audio_stretching =
         sdl2_config->GetBoolean("Audio", "enable_audio_stretching", true);

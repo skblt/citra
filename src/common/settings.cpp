@@ -19,6 +19,17 @@
 
 namespace Settings {
 
+[[nodiscard]] std::string_view ToString(AudioEmulation emulation) {
+    switch (emulation) {
+    case AudioEmulation::HLE:
+        return "HLE";
+    case AudioEmulation::LLE:
+        return "LLE";
+    case AudioEmulation::LLEMultithreaded:
+        return "LLE Multithreaded";
+    }
+}
+
 Values values = {};
 static bool configuring_global = true;
 
@@ -103,8 +114,7 @@ void LogSettings() {
     log_setting("Utility_DumpTextures", values.dump_textures.GetValue());
     log_setting("Utility_CustomTextures", values.custom_textures.GetValue());
     log_setting("Utility_UseDiskShaderCache", values.use_disk_shader_cache.GetValue());
-    log_setting("Audio_EnableDspLle", values.enable_dsp_lle.GetValue());
-    log_setting("Audio_EnableDspLleMultithread", values.enable_dsp_lle_multithread.GetValue());
+    log_setting("Audio_Emulation", ToString(values.audio_emulation.GetValue()));
     log_setting("Audio_OutputEngine", values.sink_id.GetValue());
     log_setting("Audio_EnableAudioStretching", values.enable_audio_stretching.GetValue());
     log_setting("Audio_OutputDevice", values.audio_device_id.GetValue());
@@ -154,8 +164,7 @@ void RestoreGlobalState(bool is_powered_on) {
     }
 
     // Audio
-    values.enable_dsp_lle.SetGlobal(true);
-    values.enable_dsp_lle_multithread.SetGlobal(true);
+    values.audio_emulation.SetGlobal(true);
     values.enable_audio_stretching.SetGlobal(true);
     values.volume.SetGlobal(true);
 

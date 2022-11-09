@@ -6,6 +6,7 @@
 #include <fstream>
 #include <memory>
 #include <thread>
+#include <filesystem>
 #include <QDesktopWidget>
 #include <QFileDialog>
 #include <QFutureWatcher>
@@ -66,6 +67,7 @@
 #include "common/logging/backend.h"
 #include "common/logging/filter.h"
 #include "common/logging/log.h"
+#include "common/string_util.h"
 #include "common/logging/text_formatter.h"
 #include "common/memory_detect.h"
 #include "common/microprofile.h"
@@ -1079,6 +1081,21 @@ void GMainWindow::BootGame(const QString& filename) {
     }
     if (movie_playback_on_start) {
         Core::Movie::GetInstance().PrepareForPlayback(movie_playback_path.toStdString());
+    }
+
+    u64 title_id{0};
+    const std::string path = filename.toStdString();
+    const auto loader = Loader::GetLoader(path);
+
+    if (loader != nullptr && loader->ReadProgramId(title_id) == Loader::ResultStatus::Success) {
+        // Load per game settings
+        const auto file_path =
+            std::filesystem::path{filename.toStdString()};
+        const std::string config_file_name = title_id == 0
+                                          ? file_path.filename().string()
+                                          : fmt::format("{:016X}", title_id);
+        Config per_game_config(config_file_name, Config::ConfigType::PerGameConfig);
+        Settings::Apply();
     }
 
     // Save configurations
@@ -2479,8 +2496,6 @@ void GMainWindow::OpenPerGameConfiguration(u64 title_id, const QString& file_nam
     // Do not cause the global config to write local settings into the config file
     const bool is_powered_on = system.IsPoweredOn();
     Settings::RestoreGlobalState(is_powered_on);
-
-    //UISettings::values.configuration_applied = false;
 
     if (!is_powered_on) {
         config->Save();

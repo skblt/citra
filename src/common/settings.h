@@ -52,6 +52,12 @@ enum class StereoRenderOption : u32 {
     CardboardVR = 5
 };
 
+enum class AudioEmulation : u32 {
+    HLE = 0,
+    LLE = 1,
+    LLEMultithreaded = 2
+};
+
 namespace NativeButton {
 enum Values {
     A,
@@ -478,12 +484,11 @@ struct Values {
 
     // Audio
     bool audio_muted;
-    SwitchableSetting<bool> enable_dsp_lle{false, "enable_dsp_lle"};
-    SwitchableSetting<bool> enable_dsp_lle_multithread{false, "enable_dsp_lle_multithread"};
+    SwitchableSetting<AudioEmulation> audio_emulation{AudioEmulation::HLE, "audio_emulation"};
     Setting<std::string> sink_id{"auto", "output_engine"};
     SwitchableSetting<bool> enable_audio_stretching{true, "enable_audio_stretching"};
     Setting<std::string> audio_device_id{"auto", "output_device"};
-    SwitchableSetting<float> volume{1.f, "volume"};
+    SwitchableSetting<float, true> volume{1.f, 0.f, 1.f, "volume"};
     Setting<MicInputType> mic_input_type{MicInputType::None, "mic_input_type"};
     Setting<std::string> mic_input_device{"Default", "mic_input_device"};
 

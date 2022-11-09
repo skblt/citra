@@ -73,7 +73,6 @@ void ConfigurePerGame::ApplyConfiguration() {
     graphics_tab->ApplyConfiguration();
     audio_tab->ApplyConfiguration();
 
-    Settings::Apply();
     Settings::LogSettings();
 
     game_config->Save();
@@ -92,7 +91,6 @@ void ConfigurePerGame::RetranslateUI() {
 }
 
 void ConfigurePerGame::HandleApplyButtonClicked() {
-    //UISettings::values.configuration_applied = true;
     ApplyConfiguration();
 }
 

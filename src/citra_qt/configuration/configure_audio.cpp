@@ -14,6 +14,7 @@
 #include "core/frontend/mic.h"
 #include "common/settings.h"
 #include "ui_configure_audio.h"
+#include "citra_qt/configuration/configuration_shared.h"
 
 #if defined(__APPLE__)
 #include "citra_qt/macos_authorization.h"
@@ -25,31 +26,37 @@ ConfigureAudio::ConfigureAudio(QWidget* parent)
     : QWidget(parent), ui(std::make_unique<Ui::ConfigureAudio>()) {
     ui->setupUi(this);
 
+
     ui->output_sink_combo_box->clear();
     ui->output_sink_combo_box->addItem(QString::fromUtf8(AudioCore::auto_device_name));
     for (const char* id : AudioCore::GetSinkIDs()) {
         ui->output_sink_combo_box->addItem(QString::fromUtf8(id));
     }
 
-    ui->emulation_combo_box->addItem(tr("HLE (fast)"));
-    ui->emulation_combo_box->addItem(tr("LLE (accurate)"));
-    ui->emulation_combo_box->addItem(tr("LLE multi-core"));
-    ui->emulation_combo_box->setEnabled(!Core::System::GetInstance().IsPoweredOn());
+    const bool is_running = Core::System::GetInstance().IsPoweredOn();
+    ui->emulation_combo_box->setEnabled(!is_running);
 
     connect(ui->volume_slider, &QSlider::valueChanged, this,
             &ConfigureAudio::SetVolumeIndicatorText);
 
     ui->input_device_combo_box->clear();
     ui->input_device_combo_box->addItem(tr("Default"));
+
 #ifdef HAVE_CUBEB
     for (const auto& device : AudioCore::ListCubebInputDevices()) {
         ui->input_device_combo_box->addItem(QString::fromStdString(device));
     }
 #endif
+
     connect(ui->input_type_combo_box, qOverload<int>(&QComboBox::currentIndexChanged), this,
             &ConfigureAudio::UpdateAudioInputDevices);
 
+    ui->volume_label->setVisible(Settings::IsConfiguringGlobal());
+    ui->volume_combo_box->setVisible(!Settings::IsConfiguringGlobal());
+
+    SetupPerGameUI();
     SetConfiguration();
+
     connect(ui->output_sink_combo_box, qOverload<int>(&QComboBox::currentIndexChanged), this,
             &ConfigureAudio::UpdateAudioOutputDevices);
 }
@@ -61,25 +68,31 @@ void ConfigureAudio::SetConfiguration() {
 
     // The device list cannot be pre-populated (nor listed) until the output sink is known.
     UpdateAudioOutputDevices(ui->output_sink_combo_box->currentIndex());
-
     SetAudioDeviceFromDeviceID();
 
     ui->toggle_audio_stretching->setChecked(Settings::values.enable_audio_stretching.GetValue());
-    ui->volume_slider->setValue(
-        static_cast<int>(Settings::values.volume.GetValue() * ui->volume_slider->maximum()));
+
+    const s32 volume = static_cast<s32>(Settings::values.volume.GetValue() * ui->volume_slider->maximum());
+    ui->volume_slider->setValue(volume);
     SetVolumeIndicatorText(ui->volume_slider->sliderPosition());
 
-    int selection;
-    if (Settings::values.enable_dsp_lle) {
-        if (Settings::values.enable_dsp_lle_multithread) {
-            selection = 2;
+    if (!Settings::IsConfiguringGlobal()) {
+        if (Settings::values.volume.UsingGlobal()) {
+            ui->volume_combo_box->setCurrentIndex(0);
+            ui->volume_slider->setEnabled(false);
         } else {
-            selection = 1;
+            ui->volume_combo_box->setCurrentIndex(1);
+            ui->volume_slider->setEnabled(true);
         }
+        ConfigurationShared::SetHighlight(ui->volume_layout,
+                                          !Settings::values.volume.UsingGlobal());
+        ConfigurationShared::SetHighlight(ui->widget_emulation,
+                                          !Settings::values.audio_emulation.UsingGlobal());
+        ConfigurationShared::SetPerGameSetting(ui->emulation_combo_box, &Settings::values.audio_emulation);
     } else {
-        selection = 0;
+        s32 selection = static_cast<s32>(Settings::values.audio_emulation.GetValue());
+        ui->emulation_combo_box->setCurrentIndex(selection);
     }
-    ui->emulation_combo_box->setCurrentIndex(selection);
 
     s32 index = static_cast<s32>(Settings::values.mic_input_type.GetValue());
     ui->input_type_combo_box->setCurrentIndex(index);
@@ -120,24 +133,43 @@ void ConfigureAudio::SetVolumeIndicatorText(int percentage) {
 }
 
 void ConfigureAudio::ApplyConfiguration() {
-    Settings::values.sink_id =
-        ui->output_sink_combo_box->itemText(ui->output_sink_combo_box->currentIndex())
-            .toStdString();
-    Settings::values.enable_audio_stretching = ui->toggle_audio_stretching->isChecked();
-    Settings::values.audio_device_id =
-        ui->audio_device_combo_box->itemText(ui->audio_device_combo_box->currentIndex())
-            .toStdString();
-    Settings::values.volume =
-        static_cast<float>(ui->volume_slider->sliderPosition()) / ui->volume_slider->maximum();
-    Settings::values.enable_dsp_lle = ui->emulation_combo_box->currentIndex() != 0;
-    Settings::values.enable_dsp_lle_multithread = ui->emulation_combo_box->currentIndex() == 2;
-    Settings::values.mic_input_type =
-        static_cast<Settings::MicInputType>(ui->input_type_combo_box->currentIndex());
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.enable_audio_stretching,
+                                             ui->toggle_audio_stretching,
+                                             audio_stretching);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.audio_emulation,
+                                             ui->emulation_combo_box);
 
-    if (ui->input_device_combo_box->currentIndex() == DEFAULT_INPUT_DEVICE_INDEX) {
-        Settings::values.mic_input_device = Frontend::Mic::default_device_name;
+    if (Settings::IsConfiguringGlobal()) {
+        Settings::values.sink_id =
+            ui->output_sink_combo_box->itemText(ui->output_sink_combo_box->currentIndex())
+                .toStdString();
+        Settings::values.audio_device_id =
+            ui->audio_device_combo_box->itemText(ui->audio_device_combo_box->currentIndex())
+                .toStdString();
+        Settings::values.mic_input_type =
+            static_cast<Settings::MicInputType>(ui->input_type_combo_box->currentIndex());
+
+        if (ui->input_device_combo_box->currentIndex() == DEFAULT_INPUT_DEVICE_INDEX) {
+            Settings::values.mic_input_device = Frontend::Mic::default_device_name;
+        } else {
+            Settings::values.mic_input_device = ui->input_device_combo_box->currentText().toStdString();
+        }
+
+        // If a game is currently running with a per game value set don't override it
+        if (Settings::values.volume.UsingGlobal()) {
+            const float volume =
+                    static_cast<float>(ui->volume_slider->value()) / ui->volume_slider->maximum();
+            Settings::values.volume.SetValue(volume);
+        }
     } else {
-        Settings::values.mic_input_device = ui->input_device_combo_box->currentText().toStdString();
+        if (ui->volume_combo_box->currentIndex() == 0) {
+            Settings::values.volume.SetGlobal(true);
+        } else {
+            Settings::values.volume.SetGlobal(false);
+            const float volume =
+                    static_cast<float>(ui->volume_slider->value()) / ui->volume_slider->maximum();
+            Settings::values.volume.SetValue(volume);
+        }
     }
 }
 
@@ -165,4 +197,34 @@ void ConfigureAudio::UpdateAudioInputDevices(int index) {
 
 void ConfigureAudio::RetranslateUI() {
     ui->retranslateUi(this);
+}
+
+void ConfigureAudio::SetupPerGameUI() {
+    if (Settings::IsConfiguringGlobal()) {
+        ui->volume_slider->setEnabled(Settings::values.volume.UsingGlobal());
+        return;
+    }
+
+    connect(ui->volume_combo_box, qOverload<int>(&QComboBox::activated), this, [this](int index) {
+        ui->volume_slider->setEnabled(index == 1);
+        ConfigurationShared::SetHighlight(ui->volume_layout, index == 1);
+    });
+
+    ConfigurationShared::SetColoredComboBox(
+        ui->emulation_combo_box, ui->widget_emulation,
+        static_cast<u32>(Settings::values.audio_emulation.GetValue(true)));
+
+    ConfigurationShared::SetColoredTristate(ui->toggle_audio_stretching,
+                                            Settings::values.enable_audio_stretching,
+                                            audio_stretching);
+
+    ui->output_sink_combo_box->setVisible(false);
+    ui->output_sink_label->setVisible(false);
+    ui->audio_device_combo_box->setVisible(false);
+    ui->audio_device_label->setVisible(false);
+    ui->input_type_label->setVisible(false);
+    ui->input_type_combo_box->setVisible(false);
+    ui->input_device_label->setVisible(false);
+    ui->input_device_combo_box->setVisible(false);
+    ui->microphone_layout->setVisible(false);
 }
