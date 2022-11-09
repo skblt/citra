@@ -11,6 +11,7 @@
 #include "core/hle/service/ptm/ptm.h"
 #include "common/settings.h"
 #include "ui_configure_system.h"
+#include "citra_qt/configuration/configuration_shared.h"
 
 static const std::array<int, 12> days_in_month = {{
     31,
@@ -249,10 +250,15 @@ ConfigureSystem::ConfigureSystem(QWidget* parent)
     // This scales across DPIs. (This value should be enough for "xxx%")
     ui->clock_display_label->setMinimumWidth(40);
 
-    connect(ui->slider_clock_speed, &QSlider::valueChanged, [&](int value) {
+    connect(ui->slider_clock_speed, &QSlider::valueChanged, this, [&](int value) {
         ui->clock_display_label->setText(QStringLiteral("%1%").arg(SliderToSettings(value)));
     });
 
+
+    ui->clock_speed_label->setVisible(Settings::IsConfiguringGlobal());
+    ui->clock_speed_combo->setVisible(!Settings::IsConfiguringGlobal());
+
+    SetupPerGameUI();
     ConfigureTime();
 }
 
@@ -287,11 +293,27 @@ void ConfigureSystem::SetConfiguration() {
         ui->label_disable_info->hide();
     }
 
+    if (!Settings::IsConfiguringGlobal()) {
+        if (Settings::values.cpu_clock_percentage.UsingGlobal()) {
+            ui->clock_speed_combo->setCurrentIndex(0);
+            ui->slider_clock_speed->setEnabled(false);
+        } else {
+            ui->clock_speed_combo->setCurrentIndex(1);
+            ui->slider_clock_speed->setEnabled(true);
+        }
+        ConfigurationShared::SetHighlight(ui->clock_speed_widget,
+                                          !Settings::values.cpu_clock_percentage.UsingGlobal());
+
+        ConfigurationShared::SetPerGameSetting(ui->toggle_new_3ds, &Settings::values.is_new_3ds);
+        ConfigurationShared::SetHighlight(ui->toggle_new_3ds,
+                                          !Settings::values.is_new_3ds.UsingGlobal());
+    } else {
+        ui->toggle_new_3ds->setChecked(Settings::values.is_new_3ds.GetValue());
+    }
+
     ui->slider_clock_speed->setValue(SettingsToSlider(Settings::values.cpu_clock_percentage.GetValue()));
     ui->clock_display_label->setText(
         QStringLiteral("%1%").arg(Settings::values.cpu_clock_percentage.GetValue()));
-
-    ui->toggle_new_3ds->setChecked(Settings::values.is_new_3ds.GetValue());
 }
 
 void ConfigureSystem::ReadSystemSettings() {
@@ -337,10 +359,7 @@ void ConfigureSystem::ApplyConfiguration() {
         bool modified = false;
 
         // apply username
-        // TODO(wwylele): Use this when we move to Qt 5.5
-        // std::u16string new_username = ui->edit_username->text().toStdU16String();
-        std::u16string new_username(
-            reinterpret_cast<const char16_t*>(ui->edit_username->text().utf16()));
+        std::u16string new_username = ui->edit_username->text().toStdU16String();
         if (new_username != username) {
             cfg->SetUsername(new_username);
             modified = true;
@@ -386,8 +405,8 @@ void ConfigureSystem::ApplyConfiguration() {
             cfg->UpdateConfigNANDSavegame();
         }
 
-        Settings::values.init_clock =
-            static_cast<Settings::InitClock>(ui->combo_init_clock->currentIndex());
+        ConfigurationShared::ApplyPerGameSetting(&Settings::values.init_clock, ui->combo_init_clock);
+        ConfigurationShared::ApplyPerGameSetting(&Settings::values.is_new_3ds, ui->toggle_new_3ds, is_new_3ds);
         Settings::values.init_time = ui->edit_init_time->dateTime().toTime_t();
 
         s64 time_offset_time = ui->edit_init_time_offset_time->time().msecsSinceStartOfDay() / 1000;
@@ -398,11 +417,10 @@ void ConfigureSystem::ApplyConfiguration() {
         }
 
         Settings::values.init_time_offset = time_offset_days + time_offset_time;
-        Settings::values.is_new_3ds = ui->toggle_new_3ds->isChecked();
     }
 
-    Settings::values.cpu_clock_percentage = SliderToSettings(ui->slider_clock_speed->value());
-    Settings::Apply();
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.cpu_clock_percentage, ui->clock_speed_combo,
+                                             SliderToSettings(ui->slider_clock_speed->value()));
 }
 
 void ConfigureSystem::UpdateBirthdayComboBox(int birthmonth_index) {
@@ -474,4 +492,25 @@ void ConfigureSystem::RefreshConsoleID() {
 
 void ConfigureSystem::RetranslateUI() {
     ui->retranslateUi(this);
+}
+
+void ConfigureSystem::SetupPerGameUI() {
+    // Block the global settings if a game is currently running that overrides them
+    if (Settings::IsConfiguringGlobal()) {
+        ui->toggle_new_3ds->setEnabled(Settings::values.is_new_3ds.UsingGlobal());
+        ui->slider_clock_speed->setEnabled(Settings::values.cpu_clock_percentage.UsingGlobal());
+        ui->combo_init_clock->setEnabled(Settings::values.init_clock.UsingGlobal());
+        ui->edit_init_time->setEnabled(Settings::values.init_time.UsingGlobal());
+        return;
+    }
+
+    ui->label_console_id->setVisible(false);
+    ui->button_regenerate_console_id->setVisible(false);
+
+    connect(ui->clock_speed_combo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
+        ui->slider_clock_speed->setEnabled(index == 1);
+        ConfigurationShared::SetHighlight(ui->clock_speed_widget, index == 1);
+    });
+
+    ConfigurationShared::SetColoredTristate(ui->toggle_new_3ds, Settings::values.is_new_3ds, is_new_3ds);
 }

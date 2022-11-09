@@ -42,6 +42,21 @@ void ApplyPerGameSetting(Settings::SwitchableSetting<Type, ranged>* setting,
     }
 }
 
+template <typename Type, bool ranged>
+void ApplyPerGameSetting(Settings::SwitchableSetting<Type, ranged>* setting,
+                         const QComboBox* combobox, Type slider_value) {
+    if (Settings::IsConfiguringGlobal() && setting->UsingGlobal()) {
+        setting->SetValue(slider_value);
+    } else if (!Settings::IsConfiguringGlobal()) {
+        if (combobox->currentIndex() == ConfigurationShared::USE_GLOBAL_INDEX) {
+            setting->SetGlobal(true);
+        } else {
+            setting->SetGlobal(false);
+            setting->SetValue(slider_value);
+        }
+    }
+}
+
 // Sets a Qt UI element given a Settings::Setting
 void SetPerGameSetting(QCheckBox* checkbox, const Settings::SwitchableSetting<bool>* setting);
 

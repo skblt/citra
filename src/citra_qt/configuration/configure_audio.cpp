@@ -139,6 +139,9 @@ void ConfigureAudio::ApplyConfiguration() {
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.audio_emulation,
                                              ui->emulation_combo_box);
 
+    const float volume = static_cast<float>(ui->volume_slider->value()) / ui->volume_slider->maximum();
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.volume, ui->volume_combo_box, volume);
+
     if (Settings::IsConfiguringGlobal()) {
         Settings::values.sink_id =
             ui->output_sink_combo_box->itemText(ui->output_sink_combo_box->currentIndex())
@@ -153,22 +156,6 @@ void ConfigureAudio::ApplyConfiguration() {
             Settings::values.mic_input_device = Frontend::Mic::default_device_name;
         } else {
             Settings::values.mic_input_device = ui->input_device_combo_box->currentText().toStdString();
-        }
-
-        // If a game is currently running with a per game value set don't override it
-        if (Settings::values.volume.UsingGlobal()) {
-            const float volume =
-                    static_cast<float>(ui->volume_slider->value()) / ui->volume_slider->maximum();
-            Settings::values.volume.SetValue(volume);
-        }
-    } else {
-        if (ui->volume_combo_box->currentIndex() == 0) {
-            Settings::values.volume.SetGlobal(true);
-        } else {
-            Settings::values.volume.SetGlobal(false);
-            const float volume =
-                    static_cast<float>(ui->volume_slider->value()) / ui->volume_slider->maximum();
-            Settings::values.volume.SetValue(volume);
         }
     }
 }
@@ -205,6 +192,16 @@ void ConfigureAudio::SetupPerGameUI() {
         return;
     }
 
+    ui->output_sink_combo_box->setVisible(false);
+    ui->output_sink_label->setVisible(false);
+    ui->audio_device_combo_box->setVisible(false);
+    ui->audio_device_label->setVisible(false);
+    ui->input_type_label->setVisible(false);
+    ui->input_type_combo_box->setVisible(false);
+    ui->input_device_label->setVisible(false);
+    ui->input_device_combo_box->setVisible(false);
+    ui->microphone_layout->setVisible(false);
+
     connect(ui->volume_combo_box, qOverload<int>(&QComboBox::activated), this, [this](int index) {
         ui->volume_slider->setEnabled(index == 1);
         ConfigurationShared::SetHighlight(ui->volume_layout, index == 1);
@@ -217,14 +214,4 @@ void ConfigureAudio::SetupPerGameUI() {
     ConfigurationShared::SetColoredTristate(ui->toggle_audio_stretching,
                                             Settings::values.enable_audio_stretching,
                                             audio_stretching);
-
-    ui->output_sink_combo_box->setVisible(false);
-    ui->output_sink_label->setVisible(false);
-    ui->audio_device_combo_box->setVisible(false);
-    ui->audio_device_label->setVisible(false);
-    ui->input_type_label->setVisible(false);
-    ui->input_type_combo_box->setVisible(false);
-    ui->input_device_label->setVisible(false);
-    ui->input_device_combo_box->setVisible(false);
-    ui->microphone_layout->setVisible(false);
 }
