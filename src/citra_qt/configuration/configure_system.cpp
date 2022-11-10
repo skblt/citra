@@ -303,26 +303,18 @@ void ConfigureSystem::SetConfiguration() {
         }
         ConfigurationShared::SetHighlight(ui->clock_speed_widget,
                                           !Settings::values.cpu_clock_percentage.UsingGlobal());
-
-        ConfigurationShared::SetPerGameSetting(ui->toggle_new_3ds, &Settings::values.is_new_3ds);
-        ConfigurationShared::SetHighlight(ui->toggle_new_3ds,
-                                          !Settings::values.is_new_3ds.UsingGlobal());
-    } else {
-        ui->toggle_new_3ds->setChecked(Settings::values.is_new_3ds.GetValue());
     }
 
     ui->slider_clock_speed->setValue(SettingsToSlider(Settings::values.cpu_clock_percentage.GetValue()));
     ui->clock_display_label->setText(
         QStringLiteral("%1%").arg(Settings::values.cpu_clock_percentage.GetValue()));
+    ui->toggle_new_3ds->setChecked(Settings::values.is_new_3ds.GetValue());
 }
 
 void ConfigureSystem::ReadSystemSettings() {
     // set username
     username = cfg->GetUsername();
-    // TODO(wwylele): Use this when we move to Qt 5.5
-    // ui->edit_username->setText(QString::fromStdU16String(username));
-    ui->edit_username->setText(
-        QString::fromUtf16(reinterpret_cast<const ushort*>(username.data())));
+    ui->edit_username->setText(QString::fromStdU16String(username));
 
     // set birthday
     std::tie(birthmonth, birthday) = cfg->GetBirthday();
@@ -366,22 +358,22 @@ void ConfigureSystem::ApplyConfiguration() {
         }
 
         // apply birthday
-        int new_birthmonth = ui->combo_birthmonth->currentIndex() + 1;
-        int new_birthday = ui->combo_birthday->currentIndex() + 1;
+        s32 new_birthmonth = ui->combo_birthmonth->currentIndex() + 1;
+        s32 new_birthday = ui->combo_birthday->currentIndex() + 1;
         if (birthmonth != new_birthmonth || birthday != new_birthday) {
             cfg->SetBirthday(new_birthmonth, new_birthday);
             modified = true;
         }
 
         // apply language
-        int new_language = ui->combo_language->currentIndex();
+        s32 new_language = ui->combo_language->currentIndex();
         if (language_index != new_language) {
             cfg->SetSystemLanguage(static_cast<Service::CFG::SystemLanguage>(new_language));
             modified = true;
         }
 
         // apply sound
-        int new_sound = ui->combo_sound->currentIndex();
+        s32 new_sound = ui->combo_sound->currentIndex();
         if (sound_index != new_sound) {
             cfg->SetSoundOutputMode(static_cast<Service::CFG::SoundOutputMode>(new_sound));
             modified = true;
@@ -405,8 +397,10 @@ void ConfigureSystem::ApplyConfiguration() {
             cfg->UpdateConfigNANDSavegame();
         }
 
-        ConfigurationShared::ApplyPerGameSetting(&Settings::values.init_clock, ui->combo_init_clock);
         ConfigurationShared::ApplyPerGameSetting(&Settings::values.is_new_3ds, ui->toggle_new_3ds, is_new_3ds);
+
+        Settings::values.init_clock =
+            static_cast<Settings::InitClock>(ui->combo_init_clock->currentIndex());
         Settings::values.init_time = ui->edit_init_time->dateTime().toTime_t();
 
         s64 time_offset_time = ui->edit_init_time_offset_time->time().msecsSinceStartOfDay() / 1000;
@@ -428,10 +422,10 @@ void ConfigureSystem::UpdateBirthdayComboBox(int birthmonth_index) {
         return;
 
     // store current day selection
-    int birthday_index = ui->combo_birthday->currentIndex();
+    s32 birthday_index = ui->combo_birthday->currentIndex();
 
     // get number of days in the new selected month
-    int days = days_in_month[birthmonth_index];
+    s32 days = days_in_month[birthmonth_index];
 
     // if the selected day is out of range,
     // reset it to 1st
@@ -440,7 +434,7 @@ void ConfigureSystem::UpdateBirthdayComboBox(int birthmonth_index) {
 
     // update the day combo box
     ui->combo_birthday->clear();
-    for (int i = 1; i <= days; ++i) {
+    for (s32 i = 1; i <= days; ++i) {
         ui->combo_birthday->addItem(QString::number(i));
     }
 
@@ -504,7 +498,24 @@ void ConfigureSystem::SetupPerGameUI() {
         return;
     }
 
+    // Hide most settings for now, we can implement them later
+    ui->label_username->setVisible(false);
+    ui->label_birthday->setVisible(false);
+    ui->label_init_clock->setVisible(false);
+    ui->label_init_time->setVisible(false);
     ui->label_console_id->setVisible(false);
+    ui->label_sound->setVisible(false);
+    ui->label_language->setVisible(false);
+    ui->label_country->setVisible(false);
+    ui->label_play_coins->setVisible(false);
+    ui->edit_username->setVisible(false);
+    ui->spinBox_play_coins->setVisible(false);
+    ui->combo_birthday->setVisible(false);
+    ui->combo_birthmonth->setVisible(false);
+    ui->combo_init_clock->setVisible(false);
+    ui->combo_sound->setVisible(false);
+    ui->combo_language->setVisible(false);
+    ui->combo_country->setVisible(false);
     ui->button_regenerate_console_id->setVisible(false);
 
     connect(ui->clock_speed_combo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
