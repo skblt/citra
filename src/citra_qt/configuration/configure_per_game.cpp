@@ -121,8 +121,6 @@ void ConfigurePerGame::LoadConfiguration() {
     if (loader->ReadTitle(title) == Loader::ResultStatus::Success)
         ui->display_name->setText(QString::fromStdString(title));
 
-    ui->display_version->setText(QStringLiteral("1.0.0"));
-
     std::vector<u8> bytes;
     if (loader->ReadIcon(bytes) == Loader::ResultStatus::Success) {
         scene->clear();
