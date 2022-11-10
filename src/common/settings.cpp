@@ -5,6 +5,7 @@
 #include <string_view>
 #include <utility>
 #include "audio_core/dsp_interface.h"
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/gdbstub/gdbstub.h"
 #include "core/hle/kernel/shared_page.h"
@@ -13,7 +14,6 @@
 #include "core/hle/service/ir/ir_rst.h"
 #include "core/hle/service/ir/ir_user.h"
 #include "core/hle/service/mic_u.h"
-#include "common/settings.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 

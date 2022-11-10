@@ -4,8 +4,8 @@
 
 #include <QColorDialog>
 #include "citra_qt/configuration/configure_enhancements.h"
-#include "core/core.h"
 #include "common/settings.h"
+#include "core/core.h"
 #include "ui_configure_enhancements.h"
 #include "video_core/renderer_opengl/post_processing_opengl.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
@@ -51,7 +51,8 @@ ConfigureEnhancements::ConfigureEnhancements(QWidget* parent)
 
 void ConfigureEnhancements::SetConfiguration() {
     ui->resolution_factor_combobox->setCurrentIndex(Settings::values.resolution_factor.GetValue());
-    ui->render_3d_combobox->setCurrentIndex(static_cast<int>(Settings::values.render_3d.GetValue()));
+    ui->render_3d_combobox->setCurrentIndex(
+        static_cast<int>(Settings::values.render_3d.GetValue()));
     ui->factor_3d->setValue(Settings::values.factor_3d.GetValue());
     ui->mono_render_left_eye->setChecked(Settings::values.mono_render_left_eye.GetValue());
     updateShaders(Settings::values.render_3d.GetValue());
@@ -63,14 +64,16 @@ void ConfigureEnhancements::SetConfiguration() {
     } else {
         ui->texture_filter_combobox->setCurrentIndex(tex_filter_idx);
     }
-    ui->layout_combobox->setCurrentIndex(static_cast<int>(Settings::values.layout_option.GetValue()));
+    ui->layout_combobox->setCurrentIndex(
+        static_cast<int>(Settings::values.layout_option.GetValue()));
     ui->swap_screen->setChecked(Settings::values.swap_screen.GetValue());
     ui->upright_screen->setChecked(Settings::values.upright_screen.GetValue());
     ui->toggle_dump_textures->setChecked(Settings::values.dump_textures.GetValue());
     ui->toggle_custom_textures->setChecked(Settings::values.custom_textures.GetValue());
     ui->toggle_preload_textures->setChecked(Settings::values.preload_textures.GetValue());
-    bg_color = QColor::fromRgbF(Settings::values.bg_red.GetValue(), Settings::values.bg_green.GetValue(),
-                                Settings::values.bg_blue.GetValue());
+    bg_color =
+        QColor::fromRgbF(Settings::values.bg_red.GetValue(), Settings::values.bg_green.GetValue(),
+                         Settings::values.bg_blue.GetValue());
     QPixmap pixmap(ui->bg_button->size());
     pixmap.fill(bg_color);
     const QIcon color_icon(pixmap);

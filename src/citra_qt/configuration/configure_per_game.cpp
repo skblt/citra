@@ -6,16 +6,12 @@
 #include <memory>
 #include <string>
 #include <utility>
-#include <fmt/format.h>
 #include <QAbstractButton>
 #include <QCheckBox>
 #include <QPushButton>
 #include <QString>
 #include <QTimer>
-#include "core/core.h"
-#include "core/loader/loader.h"
-#include "core/loader/smdh.h"
-#include "ui_configure_per_game.h"
+#include <fmt/format.h>
 #include "citra_qt/configuration/config.h"
 #include "citra_qt/configuration/configure_audio.h"
 #include "citra_qt/configuration/configure_general.h"
@@ -24,12 +20,15 @@
 #include "citra_qt/configuration/configure_system.h"
 #include "citra_qt/uisettings.h"
 #include "citra_qt/util/util.h"
+#include "core/core.h"
+#include "core/loader/loader.h"
+#include "core/loader/smdh.h"
+#include "ui_configure_per_game.h"
 
 ConfigurePerGame::ConfigurePerGame(QWidget* parent, u64 title_id_, const QString& file_name,
                                    Core::System& system_)
-    : QDialog(parent),
-      ui(std::make_unique<Ui::ConfigurePerGame>()), filename{file_name.toStdString()},
-      title_id{title_id_}, system{system_} {
+    : QDialog(parent), ui(std::make_unique<Ui::ConfigurePerGame>()),
+      filename{file_name.toStdString()}, title_id{title_id_}, system{system_} {
     const auto config_file_name = title_id == 0 ? filename : fmt::format("{:016X}", title_id);
     game_config = std::make_unique<Config>(config_file_name, Config::ConfigType::PerGameConfig);
 
@@ -50,7 +49,7 @@ ConfigurePerGame::ConfigurePerGame(QWidget* parent, u64 title_id_, const QString
     // remove Help question mark button from the title bar
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
-    //addons_tab->SetTitleId(title_id);
+    // addons_tab->SetTitleId(title_id);
 
     scene = new QGraphicsScene;
     ui->icon_view->setScene(scene);
@@ -67,7 +66,7 @@ ConfigurePerGame::ConfigurePerGame(QWidget* parent, u64 title_id_, const QString
 ConfigurePerGame::~ConfigurePerGame() = default;
 
 void ConfigurePerGame::ApplyConfiguration() {
-    //addons_tab->ApplyConfiguration();
+    // addons_tab->ApplyConfiguration();
     general_tab->ApplyConfiguration();
     system_tab->ApplyConfiguration();
     graphics_tab->ApplyConfiguration();
@@ -111,7 +110,7 @@ void ConfigurePerGame::LoadConfiguration() {
         return;
     }
 
-    //addons_tab->LoadFromFile(file);
+    // addons_tab->LoadFromFile(file);
 
     ui->display_title_id->setText(
         QStringLiteral("%1").arg(title_id, 16, 16, QLatin1Char{'0'}).toUpper());

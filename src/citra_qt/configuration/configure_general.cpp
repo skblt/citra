@@ -6,12 +6,12 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QUrl>
+#include "citra_qt/configuration/configuration_shared.h"
 #include "citra_qt/configuration/configure_general.h"
 #include "citra_qt/uisettings.h"
-#include "core/core.h"
 #include "common/settings.h"
+#include "core/core.h"
 #include "ui_configure_general.h"
-#include "citra_qt/configuration/configuration_shared.h"
 
 // The QSlider doesn't have an easy way to set a custom step amount,
 // so we can just convert from the sliders range (0 - 198) to the expected
@@ -112,9 +112,10 @@ void ConfigureGeneral::SetConfiguration() {
         ConfigurationShared::SetHighlight(ui->widget_region,
                                           !Settings::values.region_value.UsingGlobal());
         const bool is_region_global = Settings::values.region_value.UsingGlobal();
-        ui->region_combobox->setCurrentIndex(is_region_global ? ConfigurationShared::USE_GLOBAL_INDEX
-                                                         : static_cast<int>(Settings::values.region_value.GetValue()) +
-                                                               ConfigurationShared::USE_GLOBAL_OFFSET + 1);
+        ui->region_combobox->setCurrentIndex(
+            is_region_global ? ConfigurationShared::USE_GLOBAL_INDEX
+                             : static_cast<int>(Settings::values.region_value.GetValue()) +
+                                   ConfigurationShared::USE_GLOBAL_OFFSET + 1);
     } else {
         // The first item is "auto-select" with actual value -1, so plus one here will do the trick
         ui->region_combobox->setCurrentIndex(Settings::values.region_value.GetValue() + 1);
@@ -135,16 +136,14 @@ void ConfigureGeneral::ResetDefaults() {
 }
 
 void ConfigureGeneral::ApplyConfiguration() {
-    ConfigurationShared::ApplyPerGameSetting(&Settings::values.region_value,
-                                             ui->region_combobox,
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.region_value, ui->region_combobox,
                                              [](s32 index) { return index - 1; });
 
-    ConfigurationShared::ApplyPerGameSetting(&Settings::values.frame_limit,
-                                             ui->emulation_speed_combo,
-                                             [this](s32) {
-        const bool is_maximum = ui->frame_limit->value() == ui->frame_limit->maximum();
-        return is_maximum ? 0 : SliderToSettings(ui->frame_limit->value());
-    });
+    ConfigurationShared::ApplyPerGameSetting(
+        &Settings::values.frame_limit, ui->emulation_speed_combo, [this](s32) {
+            const bool is_maximum = ui->frame_limit->value() == ui->frame_limit->maximum();
+            return is_maximum ? 0 : SliderToSettings(ui->frame_limit->value());
+        });
 
     if (Settings::IsConfiguringGlobal()) {
         UISettings::values.confirm_before_closing = ui->toggle_check_exit->isChecked();
@@ -169,10 +168,11 @@ void ConfigureGeneral::SetupPerGameUI() {
         return;
     }
 
-    connect(ui->emulation_speed_combo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
-        ui->frame_limit->setEnabled(index == 1);
-        ConfigurationShared::SetHighlight(ui->emulation_speed_layout, index == 1);
-    });
+    connect(ui->emulation_speed_combo, qOverload<int>(&QComboBox::activated), this,
+            [this](int index) {
+                ui->frame_limit->setEnabled(index == 1);
+                ConfigurationShared::SetHighlight(ui->emulation_speed_layout, index == 1);
+            });
 
     ui->general_group->setVisible(false);
     ui->updateBox->setVisible(false);

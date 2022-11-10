@@ -97,8 +97,8 @@ void Config::Initialize(const std::string& config_name) {
     }
 
     FileUtil::CreateFullPath(qt_config_loc);
-    qt_config = std::make_unique<QSettings>(QString::fromStdString(qt_config_loc),
-                                            QSettings::IniFormat);
+    qt_config =
+        std::make_unique<QSettings>(QString::fromStdString(qt_config_loc), QSettings::IniFormat);
     Reload();
 }
 
@@ -164,7 +164,8 @@ void Config::ReadGlobalSetting(Settings::SwitchableSetting<std::string>& setting
     setting.SetGlobal(use_global);
     if (global || !use_global) {
         const QString default_value = QString::fromStdString(setting.GetDefault());
-        setting.SetValue(ReadSetting(name, QVariant::fromValue(default_value)).toString().toStdString());
+        setting.SetValue(
+            ReadSetting(name, QVariant::fromValue(default_value)).toString().toStdString());
     }
 }
 
@@ -200,7 +201,7 @@ void Config::WriteGlobalSetting(const Settings::SwitchableSetting<Type, ranged>&
         qt_config->setValue(name + QStringLiteral("/default"), value == setting.GetDefault());
         if constexpr (std::is_enum_v<Type>) {
             qt_config->setValue(name, static_cast<std::underlying_type_t<Type>>(value));
-        } else if constexpr(std::is_same_v<Type, u64>) {
+        } else if constexpr (std::is_same_v<Type, u64>) {
             // Converting long int to QVariant is considered ambigious in GCC
             qt_config->setValue(name, static_cast<unsigned long long>(value));
         } else {
@@ -473,10 +474,10 @@ void Config::ReadLayoutValues() {
     ReadGlobalSetting(Settings::values.render_3d);
     ReadGlobalSetting(Settings::values.factor_3d);
     Settings::values.pp_shader_name =
-        ReadSetting(QStringLiteral("pp_shader_name"),
-                    (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::Anaglyph)
-                        ? QStringLiteral("dubois (builtin)")
-                        : QStringLiteral("none (builtin)"))
+        ReadSetting(QStringLiteral("pp_shader_name"), (Settings::values.render_3d.GetValue() ==
+                                                       Settings::StereoRenderOption::Anaglyph)
+                                                          ? QStringLiteral("dubois (builtin)")
+                                                          : QStringLiteral("none (builtin)"))
             .toString()
             .toStdString();
     ReadGlobalSetting(Settings::values.filter_mode);
@@ -1123,7 +1124,8 @@ void Config::SaveRendererValues() {
     WriteGlobalSetting(Settings::values.texture_filter_name);
 
     if (global) {
-        WriteSetting(QStringLiteral("use_shader_jit"), Settings::values.use_shader_jit.GetValue(), true);
+        WriteSetting(QStringLiteral("use_shader_jit"), Settings::values.use_shader_jit.GetValue(),
+                     true);
     }
 
     qt_config->endGroup();

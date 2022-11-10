@@ -7,9 +7,9 @@
 #include "audio_core/sink.h"
 #include "audio_core/sink_details.h"
 #include "common/assert.h"
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/dumping/backend.h"
-#include "common/settings.h"
 
 namespace AudioCore {
 
@@ -17,7 +17,8 @@ DspInterface::DspInterface() = default;
 DspInterface::~DspInterface() = default;
 
 void DspInterface::SetSink(std::string_view sink_id, std::string_view audio_device) {
-    sink = CreateSinkFromID(Settings::values.sink_id.GetValue(), Settings::values.audio_device_id.GetValue());
+    sink = CreateSinkFromID(Settings::values.sink_id.GetValue(),
+                            Settings::values.audio_device_id.GetValue());
     sink->SetCallback(
         [this](s16* buffer, std::size_t num_frames) { OutputCallback(buffer, num_frames); });
     time_stretcher.SetOutputSampleRate(sink->GetNativeSampleRate());

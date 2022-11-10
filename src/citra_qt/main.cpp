@@ -3,10 +3,10 @@
 // Refer to the license.txt file included.
 
 #include <clocale>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <thread>
-#include <filesystem>
 #include <QDesktopWidget>
 #include <QFileDialog>
 #include <QFutureWatcher>
@@ -67,15 +67,16 @@
 #include "common/logging/backend.h"
 #include "common/logging/filter.h"
 #include "common/logging/log.h"
-#include "common/string_util.h"
 #include "common/logging/text_formatter.h"
 #include "common/memory_detect.h"
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
+#include "common/string_util.h"
 #ifdef ARCHITECTURE_x86_64
 #include "common/x64/cpu_detect.h"
 #endif
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/dumping/backend.h"
 #include "core/file_sys/archive_extsavedata.h"
@@ -88,7 +89,6 @@
 #include "core/loader/loader.h"
 #include "core/movie.h"
 #include "core/savestate.h"
-#include "common/settings.h"
 #include "game_list_p.h"
 #include "input_common/main.h"
 #include "network/network_settings.h"
@@ -551,13 +551,12 @@ void GMainWindow::InitializeHotkeys() {
     static constexpr u16 SPEED_LIMIT_STEP = 5;
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Increase Speed Limit"), this),
             &QShortcut::activated, this, [&] {
-
                 if (Settings::values.frame_limit.GetValue() == 0) {
                     return;
                 }
                 if (Settings::values.frame_limit.GetValue() < 995 - SPEED_LIMIT_STEP) {
-                    Settings::values.frame_limit.SetValue(
-                                Settings::values.frame_limit.GetValue() + SPEED_LIMIT_STEP);
+                    Settings::values.frame_limit.SetValue(Settings::values.frame_limit.GetValue() +
+                                                          SPEED_LIMIT_STEP);
                 } else {
                     Settings::values.frame_limit = 0;
                 }
@@ -568,8 +567,8 @@ void GMainWindow::InitializeHotkeys() {
                 if (Settings::values.frame_limit.GetValue() == 0) {
                     Settings::values.frame_limit = 995;
                 } else if (Settings::values.frame_limit.GetValue() > SPEED_LIMIT_STEP) {
-                    Settings::values.frame_limit.SetValue(
-                                Settings::values.frame_limit.GetValue() - SPEED_LIMIT_STEP);
+                    Settings::values.frame_limit.SetValue(Settings::values.frame_limit.GetValue() -
+                                                          SPEED_LIMIT_STEP);
                     UpdateStatusBar();
                 }
                 UpdateStatusBar();
@@ -1062,11 +1061,9 @@ void GMainWindow::BootGame(const QString& filename) {
 
     if (loader != nullptr && loader->ReadProgramId(title_id) == Loader::ResultStatus::Success) {
         // Load per game settings
-        const auto file_path =
-            std::filesystem::path{filename.toStdString()};
-        const std::string config_file_name = title_id == 0
-                                          ? file_path.filename().string()
-                                          : fmt::format("{:016X}", title_id);
+        const auto file_path = std::filesystem::path{filename.toStdString()};
+        const std::string config_file_name =
+            title_id == 0 ? file_path.filename().string() : fmt::format("{:016X}", title_id);
         Config per_game_config(config_file_name, Config::ConfigType::PerGameConfig);
         Settings::Apply();
     }
@@ -2511,7 +2508,8 @@ void GMainWindow::SyncMenuUISettings() {
     ui->action_Screen_Layout_Separate_Windows->setChecked(Settings::values.layout_option.GetValue() ==
                                                           Settings::LayoutOption::SeparateWindows);
     ui->action_Screen_Layout_Swap_Screens->setChecked(Settings::values.swap_screen.GetValue());
-    ui->action_Screen_Layout_Upright_Screens->setChecked(Settings::values.upright_screen.GetValue());
+    ui->action_Screen_Layout_Upright_Screens->setChecked(
+        Settings::values.upright_screen.GetValue());
 }
 
 void GMainWindow::RetranslateStatusBar() {

@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <string>
 #include <unordered_map>
@@ -52,11 +52,7 @@ enum class StereoRenderOption : u32 {
     CardboardVR = 5
 };
 
-enum class AudioEmulation : u32 {
-    HLE = 0,
-    LLE = 1,
-    LLEMultithreaded = 2
-};
+enum class AudioEmulation : u32 { HLE = 0, LLE = 1, LLEMultithreaded = 2 };
 
 namespace NativeButton {
 enum Values {

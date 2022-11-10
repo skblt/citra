@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include <QDialog>
-#include <QList>
 #include <memory>
 #include <string>
+#include <QDialog>
+#include <QList>
 #include "citra_qt/configuration/config.h"
 
 namespace Core {

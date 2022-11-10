@@ -7,6 +7,7 @@
 #include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/file_sys/archive_extsavedata.h"
 #include "core/file_sys/errors.h"
@@ -17,7 +18,6 @@
 #include "core/hle/service/ptm/ptm_sets.h"
 #include "core/hle/service/ptm/ptm_sysm.h"
 #include "core/hle/service/ptm/ptm_u.h"
-#include "common/settings.h"
 
 SERIALIZE_EXPORT_IMPL(Service::PTM::Module)
 

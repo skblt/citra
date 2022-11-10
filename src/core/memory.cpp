@@ -12,6 +12,7 @@
 #include "common/atomic_ops.h"
 #include "common/common_types.h"
 #include "common/logging/log.h"
+#include "common/settings.h"
 #include "common/swap.h"
 #include "core/arm/arm_interface.h"
 #include "core/core.h"
@@ -20,7 +21,6 @@
 #include "core/hle/kernel/process.h"
 #include "core/hle/lock.h"
 #include "core/memory.h"
-#include "common/settings.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 

@@ -5,9 +5,9 @@
 #include <cmath>
 
 #include "common/assert.h"
+#include "common/settings.h"
 #include "core/3ds.h"
 #include "core/frontend/framebuffer_layout.h"
-#include "common/settings.h"
 
 namespace Layout {
 
@@ -355,12 +355,14 @@ FramebufferLayout CustomFrameLayout(u32 width, u32 height) {
 
     FramebufferLayout res{width, height, true, true, {}, {}, !Settings::values.upright_screen};
 
-    Common::Rectangle<u32> top_screen{
-        Settings::values.custom_top_left.GetValue(), Settings::values.custom_top_top.GetValue(),
-        Settings::values.custom_top_right.GetValue(), Settings::values.custom_top_bottom.GetValue()};
-    Common::Rectangle<u32> bot_screen{
-        Settings::values.custom_bottom_left.GetValue(), Settings::values.custom_bottom_top.GetValue(),
-        Settings::values.custom_bottom_right.GetValue(), Settings::values.custom_bottom_bottom.GetValue()};
+    Common::Rectangle<u32> top_screen{Settings::values.custom_top_left.GetValue(),
+                                      Settings::values.custom_top_top.GetValue(),
+                                      Settings::values.custom_top_right.GetValue(),
+                                      Settings::values.custom_top_bottom.GetValue()};
+    Common::Rectangle<u32> bot_screen{Settings::values.custom_bottom_left.GetValue(),
+                                      Settings::values.custom_bottom_top.GetValue(),
+                                      Settings::values.custom_bottom_right.GetValue(),
+                                      Settings::values.custom_bottom_bottom.GetValue()};
 
     res.top_screen = top_screen;
     res.bottom_screen = bot_screen;
@@ -370,9 +372,10 @@ FramebufferLayout CustomFrameLayout(u32 width, u32 height) {
 FramebufferLayout FrameLayoutFromResolutionScale(u32 res_scale, bool is_secondary) {
     FramebufferLayout layout;
     if (Settings::values.custom_layout.GetValue() == true) {
-        layout = CustomFrameLayout(
-            std::max(Settings::values.custom_top_right.GetValue(), Settings::values.custom_bottom_right.GetValue()),
-            std::max(Settings::values.custom_top_bottom.GetValue(), Settings::values.custom_bottom_bottom.GetValue()));
+        layout = CustomFrameLayout(std::max(Settings::values.custom_top_right.GetValue(),
+                                            Settings::values.custom_bottom_right.GetValue()),
+                                   std::max(Settings::values.custom_top_bottom.GetValue(),
+                                            Settings::values.custom_bottom_bottom.GetValue()));
     } else {
         int width, height;
         switch (Settings::values.layout_option.GetValue()) {
@@ -438,7 +441,8 @@ FramebufferLayout FrameLayoutFromResolutionScale(u32 res_scale, bool is_secondar
         case Settings::LayoutOption::MobilePortrait:
             width = Core::kScreenTopWidth * res_scale;
             height = (Core::kScreenTopHeight + Core::kScreenBottomHeight) * res_scale;
-            layout = MobilePortraitFrameLayout(width, height, Settings::values.swap_screen.GetValue());
+            layout =
+                MobilePortraitFrameLayout(width, height, Settings::values.swap_screen.GetValue());
             break;
         case Settings::LayoutOption::MobileLandscape:
             if (Settings::values.swap_screen.GetValue()) {
@@ -448,8 +452,8 @@ FramebufferLayout FrameLayoutFromResolutionScale(u32 res_scale, bool is_secondar
                 width = (Core::kScreenTopWidth + Core::kScreenBottomWidth / 2.25f) * res_scale;
                 height = Core::kScreenTopHeight * res_scale;
             }
-            layout = MobileLandscapeFrameLayout(width, height, Settings::values.swap_screen.GetValue(), 2.25f,
-                                                false);
+            layout = MobileLandscapeFrameLayout(
+                width, height, Settings::values.swap_screen.GetValue(), 2.25f, false);
             break;
         case Settings::LayoutOption::Default:
         default:
@@ -524,9 +528,11 @@ FramebufferLayout GetCardboardSettings(FramebufferLayout layout) {
         break;
     }
     float cardboardMaxXShift = (layout.width / 2.0f - cardboardScreenWidth) / 2.0f;
-    float cardboardUserXShift = (Settings::values.cardboard_x_shift.GetValue() / 100.0f) * cardboardMaxXShift;
+    float cardboardUserXShift =
+        (Settings::values.cardboard_x_shift.GetValue() / 100.0f) * cardboardMaxXShift;
     float cardboardMaxYShift = ((float)layout.height - cardboardScreenHeight) / 2.0f;
-    float cardboardUserYShift = (Settings::values.cardboard_y_shift.GetValue() / 100.0f) * cardboardMaxYShift;
+    float cardboardUserYShift =
+        (Settings::values.cardboard_y_shift.GetValue() / 100.0f) * cardboardMaxYShift;
 
     // Center the screens and apply user Y shift
     newLayout.top_screen.left = top_screen_left + cardboardMaxXShift;

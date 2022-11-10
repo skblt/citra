@@ -9,6 +9,7 @@
 #include "common/file_util.h"
 #include "common/logging/log.h"
 #include "common/scope_exit.h"
+#include "common/settings.h"
 #include "common/string_util.h"
 #include "core/core.h"
 #include "core/file_sys/errors.h"
@@ -25,7 +26,6 @@
 #include "core/hle/service/am/am.h"
 #include "core/hle/service/fs/archive.h"
 #include "core/hle/service/fs/fs_user.h"
-#include "common/settings.h"
 
 SERVICE_CONSTRUCT_IMPL(Service::FS::FS_USER)
 SERIALIZE_EXPORT_IMPL(Service::FS::FS_USER)

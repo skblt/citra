@@ -9,8 +9,8 @@
 #include "citra_qt/uisettings.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
-#include "core/core.h"
 #include "common/settings.h"
+#include "core/core.h"
 #include "ui_configure_debug.h"
 
 ConfigureDebug::ConfigureDebug(QWidget* parent)

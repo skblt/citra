@@ -25,6 +25,7 @@
 #ifdef ENABLE_FFMPEG_VIDEO_DUMPER
 #include "core/dumping/ffmpeg_backend.h"
 #endif
+#include "common/settings.h"
 #include "core/custom_tex_cache.h"
 #include "core/gdbstub/gdbstub.h"
 #include "core/global.h"
@@ -45,7 +46,6 @@
 #include "core/loader/loader.h"
 #include "core/movie.h"
 #include "core/rpc/rpc_server.h"
-#include "common/settings.h"
 #include "network/network.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
@@ -405,7 +405,8 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window,
 
     memory->SetDSP(*dsp_core);
 
-    dsp_core->SetSink(Settings::values.sink_id.GetValue(), Settings::values.audio_device_id.GetValue());
+    dsp_core->SetSink(Settings::values.sink_id.GetValue(),
+                      Settings::values.audio_device_id.GetValue());
     dsp_core->EnableStretching(Settings::values.enable_audio_stretching.GetValue());
 
     telemetry_session = std::make_unique<Core::TelemetrySession>();

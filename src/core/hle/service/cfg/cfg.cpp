@@ -12,6 +12,7 @@
 #include "common/archives.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
+#include "common/settings.h"
 #include "common/string_util.h"
 #include "common/swap.h"
 #include "core/core.h"
@@ -25,7 +26,6 @@
 #include "core/hle/service/cfg/cfg_nor.h"
 #include "core/hle/service/cfg/cfg_s.h"
 #include "core/hle/service/cfg/cfg_u.h"
-#include "common/settings.h"
 
 SERIALIZE_EXPORT_IMPL(Service::CFG::Module)
 

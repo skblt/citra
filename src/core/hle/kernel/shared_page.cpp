@@ -6,12 +6,12 @@
 #include <cstring>
 #include "common/archives.h"
 #include "common/assert.h"
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/core_timing.h"
 #include "core/hle/kernel/shared_page.h"
 #include "core/hle/service/ptm/ptm.h"
 #include "core/movie.h"
-#include "common/settings.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

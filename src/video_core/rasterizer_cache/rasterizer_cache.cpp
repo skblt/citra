@@ -241,8 +241,8 @@ static Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams&
 
 RasterizerCacheOpenGL::RasterizerCacheOpenGL() {
     resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
-    texture_filterer = std::make_unique<TextureFilterer>(Settings::values.texture_filter_name.GetValue(),
-                                                         resolution_scale_factor);
+    texture_filterer = std::make_unique<TextureFilterer>(
+        Settings::values.texture_filter_name.GetValue(), resolution_scale_factor);
     format_reinterpreter = std::make_unique<FormatReinterpreterOpenGL>();
     texture_downloader_es = std::make_unique<TextureDownloaderES>(false);
 }

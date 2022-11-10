@@ -5,6 +5,7 @@
 #include <boost/serialization/weak_ptr.hpp>
 #include "common/archives.h"
 #include "common/logging/log.h"
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/frontend/mic.h"
 #include "core/hle/ipc.h"
@@ -14,7 +15,6 @@
 #include "core/hle/kernel/kernel.h"
 #include "core/hle/kernel/shared_memory.h"
 #include "core/hle/service/mic_u.h"
-#include "common/settings.h"
 
 SERVICE_CONSTRUCT_IMPL(Service::MIC::MIC_U)
 SERIALIZE_EXPORT_IMPL(Service::MIC::MIC_U)

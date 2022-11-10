@@ -5,6 +5,7 @@
 #include <queue>
 #include "common/logging/log.h"
 #include "common/microprofile.h"
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/dumping/backend.h"
 #include "core/frontend/emu_window.h"
@@ -12,7 +13,6 @@
 #include "core/hw/hw.h"
 #include "core/hw/lcd.h"
 #include "core/memory.h"
-#include "common/settings.h"
 #include "core/tracer/recorder.h"
 #include "video_core/debug_utils/debug_utils.h"
 #include "video_core/rasterizer_interface.h"
@@ -690,8 +690,8 @@ void RendererOpenGL::ReloadShader() {
         if (Settings::values.pp_shader_name.GetValue() == "dubois (builtin)") {
             shader_data += fragment_shader_anaglyph;
         } else {
-            std::string shader_text =
-                OpenGL::GetPostProcessingShaderCode(true, Settings::values.pp_shader_name.GetValue());
+            std::string shader_text = OpenGL::GetPostProcessingShaderCode(
+                true, Settings::values.pp_shader_name.GetValue());
             if (shader_text.empty()) {
                 // Should probably provide some information that the shader couldn't load
                 shader_data += fragment_shader_anaglyph;
@@ -700,12 +700,13 @@ void RendererOpenGL::ReloadShader() {
             }
         }
     } else if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::Interlaced ||
-               Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::ReverseInterlaced) {
+               Settings::values.render_3d.GetValue() ==
+                   Settings::StereoRenderOption::ReverseInterlaced) {
         if (Settings::values.pp_shader_name.GetValue() == "horizontal (builtin)") {
             shader_data += fragment_shader_interlaced;
         } else {
-            std::string shader_text =
-                OpenGL::GetPostProcessingShaderCode(false, Settings::values.pp_shader_name.GetValue());
+            std::string shader_text = OpenGL::GetPostProcessingShaderCode(
+                false, Settings::values.pp_shader_name.GetValue());
             if (shader_text.empty()) {
                 // Should probably provide some information that the shader couldn't load
                 shader_data += fragment_shader_interlaced;
@@ -717,8 +718,8 @@ void RendererOpenGL::ReloadShader() {
         if (Settings::values.pp_shader_name.GetValue() == "none (builtin)") {
             shader_data += fragment_shader;
         } else {
-            std::string shader_text =
-                OpenGL::GetPostProcessingShaderCode(false, Settings::values.pp_shader_name.GetValue());
+            std::string shader_text = OpenGL::GetPostProcessingShaderCode(
+                false, Settings::values.pp_shader_name.GetValue());
             if (shader_text.empty()) {
                 // Should probably provide some information that the shader couldn't load
                 shader_data += fragment_shader;
@@ -741,7 +742,8 @@ void RendererOpenGL::ReloadShader() {
         Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::ReverseInterlaced) {
         GLuint uniform_reverse_interlaced =
             glGetUniformLocation(shader.handle, "reverse_interlaced");
-        if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::ReverseInterlaced)
+        if (Settings::values.render_3d.GetValue() ==
+            Settings::StereoRenderOption::ReverseInterlaced)
             glUniform1i(uniform_reverse_interlaced, 1);
         else
             glUniform1i(uniform_reverse_interlaced, 0);
@@ -1007,7 +1009,8 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout, bool f
                 DrawSingleScreenRotated(screen_infos[eye], (float)top_screen.left,
                                         (float)top_screen.top, (float)top_screen.GetWidth(),
                                         (float)top_screen.GetHeight());
-            } else if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::SideBySide) {
+            } else if (Settings::values.render_3d.GetValue() ==
+                       Settings::StereoRenderOption::SideBySide) {
                 DrawSingleScreenRotated(screen_infos[0], (float)top_screen.left / 2,
                                         (float)top_screen.top, (float)top_screen.GetWidth() / 2,
                                         (float)top_screen.GetHeight());
@@ -1016,7 +1019,8 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout, bool f
                                         ((float)top_screen.left / 2) + ((float)layout.width / 2),
                                         (float)top_screen.top, (float)top_screen.GetWidth() / 2,
                                         (float)top_screen.GetHeight());
-            } else if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::CardboardVR) {
+            } else if (Settings::values.render_3d.GetValue() ==
+                       Settings::StereoRenderOption::CardboardVR) {
                 DrawSingleScreenRotated(screen_infos[0], layout.top_screen.left,
                                         layout.top_screen.top, layout.top_screen.GetWidth(),
                                         layout.top_screen.GetHeight());
@@ -1036,7 +1040,8 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout, bool f
                 int eye = Settings::values.mono_render_left_eye.GetValue() ? 0 : 1;
                 DrawSingleScreen(screen_infos[eye], (float)top_screen.left, (float)top_screen.top,
                                  (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
-            } else if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::SideBySide) {
+            } else if (Settings::values.render_3d.GetValue() ==
+                       Settings::StereoRenderOption::SideBySide) {
                 DrawSingleScreen(screen_infos[0], (float)top_screen.left / 2, (float)top_screen.top,
                                  (float)top_screen.GetWidth() / 2, (float)top_screen.GetHeight());
                 glUniform1i(uniform_layer, 1);
@@ -1044,7 +1049,8 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout, bool f
                                  ((float)top_screen.left / 2) + ((float)layout.width / 2),
                                  (float)top_screen.top, (float)top_screen.GetWidth() / 2,
                                  (float)top_screen.GetHeight());
-            } else if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::CardboardVR) {
+            } else if (Settings::values.render_3d.GetValue() ==
+                       Settings::StereoRenderOption::CardboardVR) {
                 DrawSingleScreen(screen_infos[0], layout.top_screen.left, layout.top_screen.top,
                                  layout.top_screen.GetWidth(), layout.top_screen.GetHeight());
                 glUniform1i(uniform_layer, 1);
@@ -1066,7 +1072,8 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout, bool f
                 DrawSingleScreenRotated(screen_infos[2], (float)bottom_screen.left,
                                         (float)bottom_screen.top, (float)bottom_screen.GetWidth(),
                                         (float)bottom_screen.GetHeight());
-            } else if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::SideBySide) {
+            } else if (Settings::values.render_3d.GetValue() ==
+                       Settings::StereoRenderOption::SideBySide) {
                 DrawSingleScreenRotated(
                     screen_infos[2], (float)bottom_screen.left / 2, (float)bottom_screen.top,
                     (float)bottom_screen.GetWidth() / 2, (float)bottom_screen.GetHeight());
@@ -1075,7 +1082,8 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout, bool f
                     screen_infos[2], ((float)bottom_screen.left / 2) + ((float)layout.width / 2),
                     (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
                     (float)bottom_screen.GetHeight());
-            } else if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::CardboardVR) {
+            } else if (Settings::values.render_3d.GetValue() ==
+                       Settings::StereoRenderOption::CardboardVR) {
                 DrawSingleScreenRotated(screen_infos[2], layout.bottom_screen.left,
                                         layout.bottom_screen.top, layout.bottom_screen.GetWidth(),
                                         layout.bottom_screen.GetHeight());
@@ -1096,7 +1104,8 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout, bool f
                 DrawSingleScreen(screen_infos[2], (float)bottom_screen.left,
                                  (float)bottom_screen.top, (float)bottom_screen.GetWidth(),
                                  (float)bottom_screen.GetHeight());
-            } else if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::SideBySide) {
+            } else if (Settings::values.render_3d.GetValue() ==
+                       Settings::StereoRenderOption::SideBySide) {
                 DrawSingleScreen(screen_infos[2], (float)bottom_screen.left / 2,
                                  (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
                                  (float)bottom_screen.GetHeight());
@@ -1105,7 +1114,8 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout, bool f
                                  ((float)bottom_screen.left / 2) + ((float)layout.width / 2),
                                  (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
                                  (float)bottom_screen.GetHeight());
-            } else if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::CardboardVR) {
+            } else if (Settings::values.render_3d.GetValue() ==
+                       Settings::StereoRenderOption::CardboardVR) {
                 DrawSingleScreen(screen_infos[2], layout.bottom_screen.left,
                                  layout.bottom_screen.top, layout.bottom_screen.GetWidth(),
                                  layout.bottom_screen.GetHeight());

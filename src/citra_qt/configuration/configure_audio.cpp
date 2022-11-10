@@ -9,12 +9,12 @@
 #endif
 #include "audio_core/sink.h"
 #include "audio_core/sink_details.h"
+#include "citra_qt/configuration/configuration_shared.h"
 #include "citra_qt/configuration/configure_audio.h"
+#include "common/settings.h"
 #include "core/core.h"
 #include "core/frontend/mic.h"
-#include "common/settings.h"
 #include "ui_configure_audio.h"
-#include "citra_qt/configuration/configuration_shared.h"
 
 #if defined(__APPLE__)
 #include "citra_qt/macos_authorization.h"
@@ -25,7 +25,6 @@ constexpr int DEFAULT_INPUT_DEVICE_INDEX = 0;
 ConfigureAudio::ConfigureAudio(QWidget* parent)
     : QWidget(parent), ui(std::make_unique<Ui::ConfigureAudio>()) {
     ui->setupUi(this);
-
 
     ui->output_sink_combo_box->clear();
     ui->output_sink_combo_box->addItem(QString::fromUtf8(AudioCore::auto_device_name));
@@ -72,7 +71,8 @@ void ConfigureAudio::SetConfiguration() {
 
     ui->toggle_audio_stretching->setChecked(Settings::values.enable_audio_stretching.GetValue());
 
-    const s32 volume = static_cast<s32>(Settings::values.volume.GetValue() * ui->volume_slider->maximum());
+    const s32 volume =
+        static_cast<s32>(Settings::values.volume.GetValue() * ui->volume_slider->maximum());
     ui->volume_slider->setValue(volume);
     SetVolumeIndicatorText(ui->volume_slider->sliderPosition());
 
@@ -88,7 +88,8 @@ void ConfigureAudio::SetConfiguration() {
                                           !Settings::values.volume.UsingGlobal());
         ConfigurationShared::SetHighlight(ui->widget_emulation,
                                           !Settings::values.audio_emulation.UsingGlobal());
-        ConfigurationShared::SetPerGameSetting(ui->emulation_combo_box, &Settings::values.audio_emulation);
+        ConfigurationShared::SetPerGameSetting(ui->emulation_combo_box,
+                                               &Settings::values.audio_emulation);
     } else {
         s32 selection = static_cast<s32>(Settings::values.audio_emulation.GetValue());
         ui->emulation_combo_box->setCurrentIndex(selection);
@@ -134,13 +135,13 @@ void ConfigureAudio::SetVolumeIndicatorText(int percentage) {
 
 void ConfigureAudio::ApplyConfiguration() {
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.enable_audio_stretching,
-                                             ui->toggle_audio_stretching,
-                                             audio_stretching);
+                                             ui->toggle_audio_stretching, audio_stretching);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.audio_emulation,
                                              ui->emulation_combo_box);
-    ConfigurationShared::ApplyPerGameSetting(&Settings::values.volume, ui->volume_combo_box, [this](s32) {
-        return static_cast<float>(ui->volume_slider->value()) / ui->volume_slider->maximum();
-    });
+    ConfigurationShared::ApplyPerGameSetting(
+        &Settings::values.volume, ui->volume_combo_box, [this](s32) {
+            return static_cast<float>(ui->volume_slider->value()) / ui->volume_slider->maximum();
+        });
 
     if (Settings::IsConfiguringGlobal()) {
         Settings::values.sink_id =
@@ -155,7 +156,8 @@ void ConfigureAudio::ApplyConfiguration() {
         if (ui->input_device_combo_box->currentIndex() == DEFAULT_INPUT_DEVICE_INDEX) {
             Settings::values.mic_input_device = Frontend::Mic::default_device_name;
         } else {
-            Settings::values.mic_input_device = ui->input_device_combo_box->currentText().toStdString();
+            Settings::values.mic_input_device =
+                ui->input_device_combo_box->currentText().toStdString();
         }
     }
 }
@@ -211,7 +213,6 @@ void ConfigureAudio::SetupPerGameUI() {
         ui->emulation_combo_box, ui->widget_emulation,
         static_cast<u32>(Settings::values.audio_emulation.GetValue(true)));
 
-    ConfigurationShared::SetColoredTristate(ui->toggle_audio_stretching,
-                                            Settings::values.enable_audio_stretching,
-                                            audio_stretching);
+    ConfigurationShared::SetColoredTristate(
+        ui->toggle_audio_stretching, Settings::values.enable_audio_stretching, audio_stretching);
 }

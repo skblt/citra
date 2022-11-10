@@ -4,9 +4,10 @@
 
 #include <cmath>
 #include <mutex>
+#include "common/settings.h"
+#include "core/3ds.h"
 #include "core/frontend/emu_window.h"
 #include "core/frontend/input.h"
-#include "common/settings.h"
 
 namespace Frontend {
 /// We need a global touch state that is shared across the different window instances
@@ -173,8 +174,8 @@ void EmuWindow::UpdateCurrentFramebufferLayout(unsigned width, unsigned height,
                                                bool is_portrait_mode) {
     Layout::FramebufferLayout layout;
     const auto layout_option = Settings::values.layout_option;
-    const auto min_size =
-        Layout::GetMinimumSizeFromLayout(layout_option.GetValue(), Settings::values.upright_screen.GetValue());
+    const auto min_size = Layout::GetMinimumSizeFromLayout(
+        layout_option.GetValue(), Settings::values.upright_screen.GetValue());
 
     if (Settings::values.custom_layout.GetValue() == true) {
         layout = Layout::CustomFrameLayout(width, height);
@@ -183,18 +184,20 @@ void EmuWindow::UpdateCurrentFramebufferLayout(unsigned width, unsigned height,
         height = std::max(height, min_size.second);
 
         // If in portrait mode, only the MobilePortrait option really makes sense
-        const Settings::LayoutOption layout_option = is_portrait_mode
-                                                         ? Settings::LayoutOption::MobilePortrait
-                                                         : Settings::values.layout_option.GetValue();
+        const Settings::LayoutOption layout_option =
+            is_portrait_mode ? Settings::LayoutOption::MobilePortrait
+                             : Settings::values.layout_option.GetValue();
 
         switch (layout_option) {
         case Settings::LayoutOption::SingleScreen:
-            layout = Layout::SingleFrameLayout(width, height, Settings::values.swap_screen.GetValue(),
-                                               Settings::values.upright_screen.GetValue());
+            layout =
+                Layout::SingleFrameLayout(width, height, Settings::values.swap_screen.GetValue(),
+                                          Settings::values.upright_screen.GetValue());
             break;
         case Settings::LayoutOption::LargeScreen:
-            layout = Layout::LargeFrameLayout(width, height, Settings::values.swap_screen.GetValue(),
-                                              Settings::values.upright_screen.GetValue());
+            layout =
+                Layout::LargeFrameLayout(width, height, Settings::values.swap_screen.GetValue(),
+                                         Settings::values.upright_screen.GetValue());
             break;
         case Settings::LayoutOption::SideScreen:
             layout = Layout::SideFrameLayout(width, height, Settings::values.swap_screen.GetValue(),
@@ -207,16 +210,18 @@ void EmuWindow::UpdateCurrentFramebufferLayout(unsigned width, unsigned height,
             break;
 #endif
         case Settings::LayoutOption::MobilePortrait:
-            layout = Layout::MobilePortraitFrameLayout(width, height, Settings::values.swap_screen.GetValue());
+            layout = Layout::MobilePortraitFrameLayout(width, height,
+                                                       Settings::values.swap_screen.GetValue());
             break;
         case Settings::LayoutOption::MobileLandscape:
-            layout = Layout::MobileLandscapeFrameLayout(width, height, Settings::values.swap_screen.GetValue(),
-                                                        2.25f, false);
+            layout = Layout::MobileLandscapeFrameLayout(
+                width, height, Settings::values.swap_screen.GetValue(), 2.25f, false);
             break;
         case Settings::LayoutOption::Default:
         default:
-            layout = Layout::DefaultFrameLayout(width, height, Settings::values.swap_screen.GetValue(),
-                                                Settings::values.upright_screen.GetValue());
+            layout =
+                Layout::DefaultFrameLayout(width, height, Settings::values.swap_screen.GetValue(),
+                                           Settings::values.upright_screen.GetValue());
             break;
         }
         UpdateMinimumWindowSize(min_size);
