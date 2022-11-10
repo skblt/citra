@@ -127,11 +127,13 @@ enum class CalloutFlag : uint32_t {
 };
 
 void GMainWindow::ShowTelemetryCallout() {
-    if (UISettings::values.callout_flags & static_cast<uint32_t>(CalloutFlag::Telemetry)) {
+    if (UISettings::values.callout_flags.GetValue() &
+        static_cast<uint32_t>(CalloutFlag::Telemetry)) {
         return;
     }
 
-    UISettings::values.callout_flags |= static_cast<uint32_t>(CalloutFlag::Telemetry);
+    UISettings::values.callout_flags =
+        UISettings::values.callout_flags.GetValue() | static_cast<uint32_t>(CalloutFlag::Telemetry);
     const QString telemetry_message =
         tr("<a href='https://citra-emu.org/entry/telemetry-and-why-thats-a-good-thing/'>Anonymous "
            "data is collected</a> to help improve Citra. "
@@ -178,7 +180,7 @@ GMainWindow::GMainWindow()
     default_theme_paths = QIcon::themeSearchPaths();
     UpdateUITheme();
 
-    SetDiscordEnabled(UISettings::values.enable_discord_presence);
+    SetDiscordEnabled(UISettings::values.enable_discord_presence.GetValue());
     discord_rpc->Update();
 
     Network::Init();
@@ -629,25 +631,26 @@ void GMainWindow::RestoreUIState() {
     render_window->restoreGeometry(UISettings::values.renderwindow_geometry);
 #if MICROPROFILE_ENABLED
     microProfileDialog->restoreGeometry(UISettings::values.microprofile_geometry);
-    microProfileDialog->setVisible(UISettings::values.microprofile_visible);
+    microProfileDialog->setVisible(UISettings::values.microprofile_visible.GetValue());
 #endif
     ui->action_Cheats->setEnabled(false);
 
     game_list->LoadInterfaceLayout();
 
-    ui->action_Single_Window_Mode->setChecked(UISettings::values.single_window_mode);
+    ui->action_Single_Window_Mode->setChecked(UISettings::values.single_window_mode.GetValue());
     ToggleWindowMode();
 
-    ui->action_Fullscreen->setChecked(UISettings::values.fullscreen);
+    ui->action_Fullscreen->setChecked(UISettings::values.fullscreen.GetValue());
     SyncMenuUISettings();
 
-    ui->action_Display_Dock_Widget_Headers->setChecked(UISettings::values.display_titlebar);
+    ui->action_Display_Dock_Widget_Headers->setChecked(
+        UISettings::values.display_titlebar.GetValue());
     OnDisplayTitleBars(ui->action_Display_Dock_Widget_Headers->isChecked());
 
-    ui->action_Show_Filter_Bar->setChecked(UISettings::values.show_filter_bar);
+    ui->action_Show_Filter_Bar->setChecked(UISettings::values.show_filter_bar.GetValue());
     game_list->SetFilterVisible(ui->action_Show_Filter_Bar->isChecked());
 
-    ui->action_Show_Status_Bar->setChecked(UISettings::values.show_status_bar);
+    ui->action_Show_Status_Bar->setChecked(UISettings::values.show_status_bar.GetValue());
     statusBar()->setVisible(ui->action_Show_Status_Bar->isChecked());
 }
 
@@ -1861,15 +1864,15 @@ void GMainWindow::OnConfigure() {
     const int old_input_profile_index = Settings::values.current_input_profile_index;
     const auto old_input_profiles = Settings::values.input_profiles;
     const auto old_touch_from_button_maps = Settings::values.touch_from_button_maps;
-    const bool old_discord_presence = UISettings::values.enable_discord_presence;
+    const bool old_discord_presence = UISettings::values.enable_discord_presence.GetValue();
     auto result = configureDialog.exec();
     if (result == QDialog::Accepted) {
         configureDialog.ApplyConfiguration();
         InitializeHotkeys();
         if (UISettings::values.theme != old_theme)
             UpdateUITheme();
-        if (UISettings::values.enable_discord_presence != old_discord_presence)
-            SetDiscordEnabled(UISettings::values.enable_discord_presence);
+        if (UISettings::values.enable_discord_presence.GetValue() != old_discord_presence)
+            SetDiscordEnabled(UISettings::values.enable_discord_presence.GetValue());
         if (!multiplayer_state->IsHostingPublicRoom())
             multiplayer_state->UpdateCredentials();
         emit UpdateThemedIcons();
@@ -2063,7 +2066,7 @@ void GMainWindow::OnCaptureScreenshot() {
     path.append(QStringLiteral("/%1_%2.png").arg(filename, timestamp));
 
     auto* const screenshot_window = secondary_window->HasFocus() ? secondary_window : render_window;
-    screenshot_window->CaptureScreenshot(UISettings::values.screenshot_resolution_factor, path);
+    screenshot_window->CaptureScreenshot(UISettings::values.screenshot_resolution_factor.GetValue(), path);
     OnStartGame();
 }
 
@@ -2171,7 +2174,7 @@ void GMainWindow::UpdateStatusBar() {
 }
 
 void GMainWindow::HideMouseCursor() {
-    if (emu_thread == nullptr || UISettings::values.hide_mouse == false) {
+    if (emu_thread == nullptr || !UISettings::values.hide_mouse.GetValue()) {
         mouse_hide_timer.stop();
         ShowMouseCursor();
         return;

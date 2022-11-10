@@ -708,10 +708,8 @@ void Config::ReadUIValues() {
     UISettings::values.theme =
         ReadSetting(QStringLiteral("theme"), QString::fromUtf8(UISettings::themes[0].second))
             .toString();
-    UISettings::values.enable_discord_presence =
-        ReadSetting(QStringLiteral("enable_discord_presence"), true).toBool();
-    UISettings::values.screenshot_resolution_factor =
-        static_cast<u16>(ReadSetting(QStringLiteral("screenshot_resolution_factor"), 0).toUInt());
+    ReadBasicSetting(UISettings::values.enable_discord_presence);
+    ReadBasicSetting(UISettings::values.screenshot_resolution_factor);
 
     ReadUpdaterValues();
     ReadUILayoutValues();
@@ -720,24 +718,17 @@ void Config::ReadUIValues() {
     ReadShortcutValues();
     ReadMultiplayerValues();
 
-    UISettings::values.single_window_mode =
-        ReadSetting(QStringLiteral("singleWindowMode"), true).toBool();
-    UISettings::values.fullscreen = ReadSetting(QStringLiteral("fullscreen"), false).toBool();
-    UISettings::values.display_titlebar =
-        ReadSetting(QStringLiteral("displayTitleBars"), true).toBool();
-    UISettings::values.show_filter_bar =
-        ReadSetting(QStringLiteral("showFilterBar"), true).toBool();
-    UISettings::values.show_status_bar =
-        ReadSetting(QStringLiteral("showStatusBar"), true).toBool();
-    UISettings::values.confirm_before_closing =
-        ReadSetting(QStringLiteral("confirmClose"), true).toBool();
-    UISettings::values.first_start = ReadSetting(QStringLiteral("firstStart"), true).toBool();
-    UISettings::values.callout_flags = ReadSetting(QStringLiteral("calloutFlags"), 0).toUInt();
-    UISettings::values.show_console = ReadSetting(QStringLiteral("showConsole"), false).toBool();
-    UISettings::values.pause_when_in_background =
-        ReadSetting(QStringLiteral("pauseWhenInBackground"), false).toBool();
-    UISettings::values.hide_mouse =
-        ReadSetting(QStringLiteral("hideInactiveMouse"), false).toBool();
+    ReadBasicSetting(UISettings::values.single_window_mode);
+    ReadBasicSetting(UISettings::values.fullscreen);
+    ReadBasicSetting(UISettings::values.display_titlebar);
+    ReadBasicSetting(UISettings::values.show_filter_bar);
+    ReadBasicSetting(UISettings::values.show_status_bar);
+    ReadBasicSetting(UISettings::values.confirm_before_closing);
+    ReadBasicSetting(UISettings::values.first_start);
+    ReadBasicSetting(UISettings::values.callout_flags);
+    ReadBasicSetting(UISettings::values.show_console);
+    ReadBasicSetting(UISettings::values.pause_when_in_background);
+    ReadBasicSetting(UISettings::values.hide_mouse);
 
     qt_config->endGroup();
 }
@@ -745,36 +736,11 @@ void Config::ReadUIValues() {
 void Config::ReadUIGameListValues() {
     qt_config->beginGroup(QStringLiteral("GameList"));
 
-    auto icon_size = UISettings::GameListIconSize{
-        ReadSetting(QStringLiteral("iconSize"),
-                    static_cast<int>(UISettings::GameListIconSize::LargeIcon))
-            .toInt()};
-    if (icon_size < UISettings::GameListIconSize::NoIcon ||
-        icon_size > UISettings::GameListIconSize::LargeIcon) {
-        icon_size = UISettings::GameListIconSize::LargeIcon;
-    }
-    UISettings::values.game_list_icon_size = icon_size;
-
-    UISettings::GameListText row_1 = UISettings::GameListText{
-        ReadSetting(QStringLiteral("row1"), static_cast<int>(UISettings::GameListText::TitleName))
-            .toInt()};
-    if (row_1 <= UISettings::GameListText::NoText || row_1 >= UISettings::GameListText::ListEnd) {
-        row_1 = UISettings::GameListText::TitleName;
-    }
-    UISettings::values.game_list_row_1 = row_1;
-
-    UISettings::GameListText row_2 = UISettings::GameListText{
-        ReadSetting(QStringLiteral("row2"), static_cast<int>(UISettings::GameListText::FileName))
-            .toInt()};
-    if (row_2 < UISettings::GameListText::NoText || row_2 >= UISettings::GameListText::ListEnd) {
-        row_2 = UISettings::GameListText::FileName;
-    }
-    UISettings::values.game_list_row_2 = row_2;
-
-    UISettings::values.game_list_hide_no_icon =
-        ReadSetting(QStringLiteral("hideNoIcon"), false).toBool();
-    UISettings::values.game_list_single_line_mode =
-        ReadSetting(QStringLiteral("singleLineMode"), false).toBool();
+    ReadBasicSetting(UISettings::values.game_list_icon_size);
+    ReadBasicSetting(UISettings::values.game_list_row_1);
+    ReadBasicSetting(UISettings::values.game_list_row_2);
+    ReadBasicSetting(UISettings::values.game_list_hide_no_icon);
+    ReadBasicSetting(UISettings::values.game_list_single_line_mode);
 
     qt_config->endGroup();
 }
@@ -790,8 +756,7 @@ void Config::ReadUILayoutValues() {
         ReadSetting(QStringLiteral("gameListHeaderState")).toByteArray();
     UISettings::values.microprofile_geometry =
         ReadSetting(QStringLiteral("microProfileDialogGeometry")).toByteArray();
-    UISettings::values.microprofile_visible =
-        ReadSetting(QStringLiteral("microProfileDialogVisible"), false).toBool();
+    ReadBasicSetting(UISettings::values.microprofile_visible);
 
     qt_config->endGroup();
 }
@@ -799,10 +764,8 @@ void Config::ReadUILayoutValues() {
 void Config::ReadUpdaterValues() {
     qt_config->beginGroup(QStringLiteral("Updater"));
 
-    UISettings::values.check_for_update_on_start =
-        ReadSetting(QStringLiteral("check_for_update_on_start"), true).toBool();
-    UISettings::values.update_on_close =
-        ReadSetting(QStringLiteral("update_on_close"), false).toBool();
+    ReadBasicSetting(UISettings::values.check_for_update_on_start);
+    ReadBasicSetting(UISettings::values.update_on_close);
 
     qt_config->endGroup();
 }
@@ -1194,10 +1157,8 @@ void Config::SaveUIValues() {
 
     WriteSetting(QStringLiteral("theme"), UISettings::values.theme,
                  QString::fromUtf8(UISettings::themes[0].second));
-    WriteSetting(QStringLiteral("enable_discord_presence"),
-                 UISettings::values.enable_discord_presence, true);
-    WriteSetting(QStringLiteral("screenshot_resolution_factor"),
-                 UISettings::values.screenshot_resolution_factor, 0);
+    WriteBasicSetting(UISettings::values.enable_discord_presence);
+    WriteBasicSetting(UISettings::values.screenshot_resolution_factor);
 
     SaveUpdaterValues();
     SaveUILayoutValues();
@@ -1206,18 +1167,17 @@ void Config::SaveUIValues() {
     SaveShortcutValues();
     SaveMultiplayerValues();
 
-    WriteSetting(QStringLiteral("singleWindowMode"), UISettings::values.single_window_mode, true);
-    WriteSetting(QStringLiteral("fullscreen"), UISettings::values.fullscreen, false);
-    WriteSetting(QStringLiteral("displayTitleBars"), UISettings::values.display_titlebar, true);
-    WriteSetting(QStringLiteral("showFilterBar"), UISettings::values.show_filter_bar, true);
-    WriteSetting(QStringLiteral("showStatusBar"), UISettings::values.show_status_bar, true);
-    WriteSetting(QStringLiteral("confirmClose"), UISettings::values.confirm_before_closing, true);
-    WriteSetting(QStringLiteral("firstStart"), UISettings::values.first_start, true);
-    WriteSetting(QStringLiteral("calloutFlags"), UISettings::values.callout_flags, 0);
-    WriteSetting(QStringLiteral("showConsole"), UISettings::values.show_console, false);
-    WriteSetting(QStringLiteral("pauseWhenInBackground"),
-                 UISettings::values.pause_when_in_background, false);
-    WriteSetting(QStringLiteral("hideInactiveMouse"), UISettings::values.hide_mouse, false);
+    WriteBasicSetting(UISettings::values.single_window_mode);
+    WriteBasicSetting(UISettings::values.fullscreen);
+    WriteBasicSetting(UISettings::values.display_titlebar);
+    WriteBasicSetting(UISettings::values.show_filter_bar);
+    WriteBasicSetting(UISettings::values.show_status_bar);
+    WriteBasicSetting(UISettings::values.confirm_before_closing);
+    WriteBasicSetting(UISettings::values.first_start);
+    WriteBasicSetting(UISettings::values.callout_flags);
+    WriteBasicSetting(UISettings::values.show_console);
+    WriteBasicSetting(UISettings::values.pause_when_in_background);
+    WriteBasicSetting(UISettings::values.hide_mouse);
 
     qt_config->endGroup();
 }
@@ -1225,13 +1185,11 @@ void Config::SaveUIValues() {
 void Config::SaveUIGameListValues() {
     qt_config->beginGroup(QStringLiteral("GameList"));
 
-    WriteSetting(QStringLiteral("iconSize"),
-                 static_cast<int>(UISettings::values.game_list_icon_size), 2);
-    WriteSetting(QStringLiteral("row1"), static_cast<int>(UISettings::values.game_list_row_1), 2);
-    WriteSetting(QStringLiteral("row2"), static_cast<int>(UISettings::values.game_list_row_2), 0);
-    WriteSetting(QStringLiteral("hideNoIcon"), UISettings::values.game_list_hide_no_icon, false);
-    WriteSetting(QStringLiteral("singleLineMode"), UISettings::values.game_list_single_line_mode,
-                 false);
+    WriteBasicSetting(UISettings::values.game_list_icon_size);
+    WriteBasicSetting(UISettings::values.game_list_row_1);
+    WriteBasicSetting(UISettings::values.game_list_row_2);
+    WriteBasicSetting(UISettings::values.game_list_hide_no_icon);
+    WriteBasicSetting(UISettings::values.game_list_single_line_mode);
 
     qt_config->endGroup();
 }
@@ -1245,8 +1203,7 @@ void Config::SaveUILayoutValues() {
     WriteSetting(QStringLiteral("gameListHeaderState"), UISettings::values.gamelist_header_state);
     WriteSetting(QStringLiteral("microProfileDialogGeometry"),
                  UISettings::values.microprofile_geometry);
-    WriteSetting(QStringLiteral("microProfileDialogVisible"),
-                 UISettings::values.microprofile_visible, false);
+    WriteBasicSetting(UISettings::values.microprofile_visible);
 
     qt_config->endGroup();
 }
@@ -1254,9 +1211,8 @@ void Config::SaveUILayoutValues() {
 void Config::SaveUpdaterValues() {
     qt_config->beginGroup(QStringLiteral("Updater"));
 
-    WriteSetting(QStringLiteral("check_for_update_on_start"),
-                 UISettings::values.check_for_update_on_start, true);
-    WriteSetting(QStringLiteral("update_on_close"), UISettings::values.update_on_close, false);
+    WriteBasicSetting(UISettings::values.check_for_update_on_start);
+    WriteBasicSetting(UISettings::values.update_on_close);
 
     qt_config->endGroup();
 }

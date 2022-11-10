@@ -34,7 +34,7 @@ void ConfigureDebug::SetConfiguration() {
     ui->gdbport_spinbox->setEnabled(Settings::values.use_gdbstub.GetValue());
     ui->gdbport_spinbox->setValue(Settings::values.gdbstub_port.GetValue());
     ui->toggle_console->setEnabled(!Core::System::GetInstance().IsPoweredOn());
-    ui->toggle_console->setChecked(UISettings::values.show_console);
+    ui->toggle_console->setChecked(UISettings::values.show_console.GetValue());
     ui->log_filter_edit->setText(QString::fromStdString(Settings::values.log_filter.GetValue()));
     ui->toggle_cpu_jit->setChecked(Settings::values.use_cpu_jit.GetValue());
 }
