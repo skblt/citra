@@ -414,7 +414,7 @@ void ConfigureSystem::ApplyConfiguration() {
     }
 
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.cpu_clock_percentage, ui->clock_speed_combo,
-                                             SliderToSettings(ui->slider_clock_speed->value()));
+                                             [this](s32) { return SliderToSettings(ui->slider_clock_speed->value()); });
 }
 
 void ConfigureSystem::UpdateBirthdayComboBox(int birthmonth_index) {

@@ -26,35 +26,27 @@ enum class CheckState {
 // ApplyPerGameSetting, given a Settings::Setting and a Qt UI element, properly applies a Setting
 void ApplyPerGameSetting(Settings::SwitchableSetting<bool>* setting, const QCheckBox* checkbox,
                          const CheckState& tracker);
+
 template <typename Type, bool ranged>
 void ApplyPerGameSetting(Settings::SwitchableSetting<Type, ranged>* setting,
-                         const QComboBox* combobox) {
+                         const QComboBox* combobox, auto transform) {
     if (Settings::IsConfiguringGlobal() && setting->UsingGlobal()) {
-        setting->SetValue(static_cast<Type>(combobox->currentIndex()));
+        setting->SetValue(static_cast<Type>(transform(combobox->currentIndex())));
     } else if (!Settings::IsConfiguringGlobal()) {
         if (combobox->currentIndex() == ConfigurationShared::USE_GLOBAL_INDEX) {
             setting->SetGlobal(true);
         } else {
             setting->SetGlobal(false);
-            setting->SetValue(static_cast<Type>(combobox->currentIndex() -
-                                                ConfigurationShared::USE_GLOBAL_OFFSET));
+            setting->SetValue(static_cast<Type>(transform(combobox->currentIndex() - ConfigurationShared::USE_GLOBAL_OFFSET)));
         }
     }
 }
 
 template <typename Type, bool ranged>
 void ApplyPerGameSetting(Settings::SwitchableSetting<Type, ranged>* setting,
-                         const QComboBox* combobox, Type slider_value) {
-    if (Settings::IsConfiguringGlobal() && setting->UsingGlobal()) {
-        setting->SetValue(slider_value);
-    } else if (!Settings::IsConfiguringGlobal()) {
-        if (combobox->currentIndex() == ConfigurationShared::USE_GLOBAL_INDEX) {
-            setting->SetGlobal(true);
-        } else {
-            setting->SetGlobal(false);
-            setting->SetValue(slider_value);
-        }
-    }
+                         const QComboBox* combobox) {
+    const auto transform = [](s32 index) { return index; };
+    return ApplyPerGameSetting(setting, combobox, transform);
 }
 
 // Sets a Qt UI element given a Settings::Setting

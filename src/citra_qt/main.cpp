@@ -543,12 +543,6 @@ void GMainWindow::InitializeHotkeys() {
                     ToggleFullscreen();
                 }
             });
-    connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Toggle Alternate Speed"), this),
-            &QShortcut::activated, this, [&] {
-                Settings::values.use_frame_limit_alternate =
-                    !Settings::values.use_frame_limit_alternate;
-                UpdateStatusBar();
-            });
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Toggle Texture Dumping"), this),
             &QShortcut::activated, this,
             [&] { Settings::values.dump_textures = !Settings::values.dump_textures; });
@@ -557,47 +551,26 @@ void GMainWindow::InitializeHotkeys() {
     static constexpr u16 SPEED_LIMIT_STEP = 5;
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Increase Speed Limit"), this),
             &QShortcut::activated, this, [&] {
-                if (Settings::values.use_frame_limit_alternate.GetValue()) {
-                    if (Settings::values.frame_limit_alternate.GetValue() == 0) {
-                        return;
-                    }
 
-                    if (Settings::values.frame_limit_alternate.GetValue() < 995 - SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit_alternate.SetValue(
-                                    Settings::values.frame_limit_alternate.GetValue() + SPEED_LIMIT_STEP);
-                    } else {
-                        Settings::values.frame_limit_alternate = 0;
-                    }
+                if (Settings::values.frame_limit.GetValue() == 0) {
+                    return;
+                }
+                if (Settings::values.frame_limit.GetValue() < 995 - SPEED_LIMIT_STEP) {
+                    Settings::values.frame_limit.SetValue(
+                                Settings::values.frame_limit.GetValue() + SPEED_LIMIT_STEP);
                 } else {
-                    if (Settings::values.frame_limit.GetValue() == 0) {
-                        return;
-                    }
-                    if (Settings::values.frame_limit.GetValue() < 995 - SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit.SetValue(
-                                    Settings::values.frame_limit.GetValue() + SPEED_LIMIT_STEP);
-                    } else {
-                        Settings::values.frame_limit = 0;
-                    }
+                    Settings::values.frame_limit = 0;
                 }
                 UpdateStatusBar();
             });
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Decrease Speed Limit"), this),
             &QShortcut::activated, this, [&] {
-                if (Settings::values.use_frame_limit_alternate) {
-                    if (Settings::values.frame_limit_alternate.GetValue() == 0) {
-                        Settings::values.frame_limit_alternate = 995;
-                    } else if (Settings::values.frame_limit_alternate.GetValue() > SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit_alternate.SetValue(
-                                    Settings::values.frame_limit_alternate.GetValue() - SPEED_LIMIT_STEP);
-                    }
-                } else {
-                    if (Settings::values.frame_limit.GetValue() == 0) {
-                        Settings::values.frame_limit = 995;
-                    } else if (Settings::values.frame_limit.GetValue() > SPEED_LIMIT_STEP) {
-                        Settings::values.frame_limit.SetValue(
-                                    Settings::values.frame_limit.GetValue() - SPEED_LIMIT_STEP);
-                        UpdateStatusBar();
-                    }
+                if (Settings::values.frame_limit.GetValue() == 0) {
+                    Settings::values.frame_limit = 995;
+                } else if (Settings::values.frame_limit.GetValue() > SPEED_LIMIT_STEP) {
+                    Settings::values.frame_limit.SetValue(
+                                Settings::values.frame_limit.GetValue() - SPEED_LIMIT_STEP);
+                    UpdateStatusBar();
                 }
                 UpdateStatusBar();
             });
@@ -1701,6 +1674,7 @@ void GMainWindow::OnPauseGame() {
 
 void GMainWindow::OnStopGame() {
     ShutdownGame();
+    Settings::RestoreGlobalState(false);
 }
 
 void GMainWindow::OnLoadComplete() {
@@ -2184,17 +2158,7 @@ void GMainWindow::UpdateStatusBar() {
 
     auto results = Core::System::GetInstance().GetAndResetPerfStats();
 
-    if (Settings::values.use_frame_limit_alternate) {
-        if (Settings::values.frame_limit_alternate.GetValue() == 0) {
-            emu_speed_label->setText(
-                tr("Speed: %1%").arg(results.emulation_speed * 100.0, 0, 'f', 0));
-
-        } else {
-            emu_speed_label->setText(tr("Speed: %1% / %2%")
-                                         .arg(results.emulation_speed * 100.0, 0, 'f', 0)
-                                         .arg(Settings::values.frame_limit_alternate.GetValue()));
-        }
-    } else if (Settings::values.frame_limit.GetValue() == 0) {
+    if (Settings::values.frame_limit.GetValue() == 0) {
         emu_speed_label->setText(tr("Speed: %1%").arg(results.emulation_speed * 100.0, 0, 'f', 0));
     } else {
         emu_speed_label->setText(tr("Speed: %1% / %2%")
@@ -2495,7 +2459,7 @@ void GMainWindow::OpenPerGameConfiguration(u64 title_id, const QString& file_nam
 
     // Do not cause the global config to write local settings into the config file
     const bool is_powered_on = system.IsPoweredOn();
-    Settings::RestoreGlobalState(is_powered_on);
+    Settings::RestoreGlobalState(system.IsPoweredOn());
 
     if (!is_powered_on) {
         config->Save();

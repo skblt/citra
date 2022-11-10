@@ -131,10 +131,6 @@ void TelemetrySession::AddInitialInfo(Loader::AppLoader& app_loader) {
     AddField(Telemetry::FieldType::UserConfig, "Renderer_ResolutionFactor",
              Settings::values.resolution_factor.GetValue());
     AddField(Telemetry::FieldType::UserConfig, "Renderer_FrameLimit", Settings::values.frame_limit.GetValue());
-    AddField(Telemetry::FieldType::UserConfig, "Renderer_UseFrameLimitAlternate",
-             Settings::values.use_frame_limit_alternate.GetValue());
-    AddField(Telemetry::FieldType::UserConfig, "Renderer_FrameLimitAlternate",
-             Settings::values.frame_limit_alternate.GetValue());
     AddField(Telemetry::FieldType::UserConfig, "Renderer_UseHwRenderer",
              Settings::values.use_hw_renderer.GetValue());
     AddField(Telemetry::FieldType::UserConfig, "Renderer_UseHwShader",

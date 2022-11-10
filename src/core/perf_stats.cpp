@@ -138,12 +138,7 @@ void FrameLimiter::DoFrameLimiting(microseconds current_system_time_us) {
     auto now = Clock::now();
     double sleep_scale = Settings::values.frame_limit.GetValue() / 100.0;
 
-    if (Settings::values.use_frame_limit_alternate.GetValue()) {
-        if (Settings::values.frame_limit_alternate.GetValue() == 0) {
-            return;
-        }
-        sleep_scale = Settings::values.frame_limit_alternate.GetValue() / 100.0;
-    } else if (Settings::values.frame_limit.GetValue() == 0) {
+    if (Settings::values.frame_limit.GetValue() == 0) {
         return;
     }
 

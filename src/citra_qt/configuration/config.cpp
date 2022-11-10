@@ -200,6 +200,9 @@ void Config::WriteGlobalSetting(const Settings::SwitchableSetting<Type, ranged>&
         qt_config->setValue(name + QStringLiteral("/default"), value == setting.GetDefault());
         if constexpr (std::is_enum_v<Type>) {
             qt_config->setValue(name, static_cast<std::underlying_type_t<Type>>(value));
+        } else if constexpr(std::is_same_v<Type, u64>) {
+            // Converting long int to QVariant is considered ambigious in GCC
+            qt_config->setValue(name, static_cast<unsigned long long>(value));
         } else {
             qt_config->setValue(name, value);
         }
@@ -610,8 +613,6 @@ void Config::ReadRendererValues() {
     ReadGlobalSetting(Settings::values.use_vsync_new);
     ReadGlobalSetting(Settings::values.resolution_factor);
     ReadGlobalSetting(Settings::values.frame_limit);
-    ReadGlobalSetting(Settings::values.use_frame_limit_alternate);
-    ReadGlobalSetting(Settings::values.frame_limit_alternate);
 
     ReadGlobalSetting(Settings::values.bg_red);
     ReadGlobalSetting(Settings::values.bg_green);
@@ -1114,8 +1115,6 @@ void Config::SaveRendererValues() {
     WriteGlobalSetting(Settings::values.use_vsync_new);
     WriteGlobalSetting(Settings::values.resolution_factor);
     WriteGlobalSetting(Settings::values.frame_limit);
-    WriteGlobalSetting(Settings::values.use_frame_limit_alternate);
-    WriteGlobalSetting(Settings::values.frame_limit_alternate);
 
     WriteGlobalSetting(Settings::values.bg_red);
     WriteGlobalSetting(Settings::values.bg_green);

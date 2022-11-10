@@ -138,9 +138,9 @@ void ConfigureAudio::ApplyConfiguration() {
                                              audio_stretching);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.audio_emulation,
                                              ui->emulation_combo_box);
-
-    const float volume = static_cast<float>(ui->volume_slider->value()) / ui->volume_slider->maximum();
-    ConfigurationShared::ApplyPerGameSetting(&Settings::values.volume, ui->volume_combo_box, volume);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.volume, ui->volume_combo_box, [this](s32) {
+        return static_cast<float>(ui->volume_slider->value()) / ui->volume_slider->maximum();
+    });
 
     if (Settings::IsConfiguringGlobal()) {
         Settings::values.sink_id =
