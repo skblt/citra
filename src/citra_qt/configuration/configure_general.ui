@@ -78,6 +78,18 @@
         <item>
          <widget class="QWidget" name="widget_region" native="true">
           <layout class="QHBoxLayout" name="region_layout">
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
            <item>
             <widget class="QLabel" name="region_label">
              <property name="text">
@@ -135,6 +147,18 @@
         <item>
          <widget class="QWidget" name="emulation_speed_layout" native="true">
           <layout class="QHBoxLayout" name="emulation_speed_layout_inner">
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
            <item>
             <widget class="QComboBox" name="emulation_speed_combo">
              <item>
