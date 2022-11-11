@@ -441,7 +441,7 @@ struct Values {
     SwitchableSetting<bool> use_vsync_new{true, "use_vsync_new"};
     Setting<bool> use_shader_jit{true, "use_shader_jit"};
     SwitchableSetting<u16, true> resolution_factor{1, 1, 10, "resolution_factor"};
-    SwitchableSetting<u16, true> frame_limit{100, 5, 1000, "frame_limit"};
+    SwitchableSetting<u16, true> frame_limit{100, 0, 1000, "frame_limit"};
     SwitchableSetting<std::string> texture_filter_name{"none", "texture_filter_name"};
 
     SwitchableSetting<LayoutOption> layout_option{LayoutOption::Default, "layout_option"};
