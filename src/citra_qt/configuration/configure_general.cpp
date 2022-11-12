@@ -9,8 +9,8 @@
 #include "citra_qt/configuration/configuration_shared.h"
 #include "citra_qt/configuration/configure_general.h"
 #include "citra_qt/uisettings.h"
+#include "common/file_util.h"
 #include "common/settings.h"
-#include "core/core.h"
 #include "ui_configure_general.h"
 
 // The QSlider doesn't have an easy way to set a custom step amount,
@@ -33,6 +33,7 @@ ConfigureGeneral::ConfigureGeneral(QWidget* parent)
     // This scales across DPIs, and is acceptable for uncapitalized strings.
     ui->emulation_speed_display_label->setMinimumWidth(tr("unthrottled").size() * 6);
     ui->emulation_speed_combo->setVisible(!Settings::IsConfiguringGlobal());
+    ui->screenshot_combo->setVisible(!Settings::IsConfiguringGlobal());
 
     SetupPerGameUI();
     SetConfiguration();
@@ -74,16 +75,6 @@ void ConfigureGeneral::SetConfiguration() {
         ui->toggle_update_check->setChecked(
             UISettings::values.check_for_update_on_start.GetValue());
         ui->toggle_auto_update->setChecked(UISettings::values.update_on_close.GetValue());
-
-        QString screenshot_path = UISettings::values.screenshot_path;
-        if (screenshot_path.isEmpty()) {
-            screenshot_path =
-                QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::UserDir));
-            screenshot_path.append(QStringLiteral("screenshots/"));
-            FileUtil::CreateFullPath(screenshot_path.toStdString());
-            UISettings::values.screenshot_path = screenshot_path;
-        }
-        ui->screenshot_dir_path->setText(screenshot_path);
     }
 
     if (Settings::values.frame_limit.GetValue() == 0) {
@@ -108,7 +99,17 @@ void ConfigureGeneral::SetConfiguration() {
             ui->emulation_speed_combo->setCurrentIndex(1);
             ui->frame_limit->setEnabled(true);
         }
-
+        if (UISettings::values.screenshot_path.UsingGlobal()) {
+            ui->screenshot_combo->setCurrentIndex(0);
+            ui->screenshot_dir_path->setEnabled(false);
+            ui->change_screenshot_dir->setEnabled(false);
+        } else {
+            ui->screenshot_combo->setCurrentIndex(1);
+            ui->screenshot_dir_path->setEnabled(true);
+            ui->change_screenshot_dir->setEnabled(true);
+        }
+        ConfigurationShared::SetHighlight(ui->widget_screenshot,
+                                          !UISettings::values.screenshot_path.UsingGlobal());
         ConfigurationShared::SetHighlight(ui->emulation_speed_layout,
                                           !Settings::values.frame_limit.UsingGlobal());
         ConfigurationShared::SetHighlight(ui->widget_region,
@@ -122,6 +123,16 @@ void ConfigureGeneral::SetConfiguration() {
         // The first item is "auto-select" with actual value -1, so plus one here will do the trick
         ui->region_combobox->setCurrentIndex(Settings::values.region_value.GetValue() + 1);
     }
+
+    UISettings::values.screenshot_path.SetGlobal(
+                ui->screenshot_combo->currentIndex() == ConfigurationShared::USE_GLOBAL_INDEX);
+    std::string screenshot_path = UISettings::values.screenshot_path.GetValue();
+    if (screenshot_path.empty()) {
+        screenshot_path = FileUtil::GetUserPath(FileUtil::UserPath::UserDir) + "screenshots/";
+        FileUtil::CreateFullPath(screenshot_path);
+        UISettings::values.screenshot_path = screenshot_path;
+    }
+    ui->screenshot_dir_path->setText(QString::fromStdString(screenshot_path));
 }
 
 void ConfigureGeneral::ResetDefaults() {
@@ -147,6 +158,11 @@ void ConfigureGeneral::ApplyConfiguration() {
             return is_maximum ? 0 : SliderToSettings(ui->frame_limit->value());
         });
 
+    ConfigurationShared::ApplyPerGameSetting(
+        &UISettings::values.screenshot_path, ui->screenshot_combo, [this](s32) {
+            return ui->screenshot_dir_path->text().toStdString();
+        });
+
     if (Settings::IsConfiguringGlobal()) {
         UISettings::values.confirm_before_closing = ui->toggle_check_exit->isChecked();
         UISettings::values.pause_when_in_background = ui->toggle_background_pause->isChecked();
@@ -154,8 +170,6 @@ void ConfigureGeneral::ApplyConfiguration() {
 
         UISettings::values.check_for_update_on_start = ui->toggle_update_check->isChecked();
         UISettings::values.update_on_close = ui->toggle_auto_update->isChecked();
-
-        UISettings::values.screenshot_path = ui->screenshot_dir_path->text();
     }
 }
 
@@ -176,9 +190,14 @@ void ConfigureGeneral::SetupPerGameUI() {
                 ConfigurationShared::SetHighlight(ui->emulation_speed_layout, index == 1);
             });
 
+    connect(ui->screenshot_combo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
+        ui->screenshot_dir_path->setEnabled(index == 1);
+        ui->change_screenshot_dir->setEnabled(index == 1);
+        ConfigurationShared::SetHighlight(ui->widget_screenshot, index == 1);
+    });
+
     ui->general_group->setVisible(false);
     ui->updateBox->setVisible(false);
-    ui->screenshot_group->setVisible(false);
     ui->button_reset_defaults->setVisible(false);
 
     ConfigurationShared::SetColoredComboBox(

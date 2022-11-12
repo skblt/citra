@@ -545,6 +545,12 @@ void GMainWindow::InitializeHotkeys() {
                     ToggleFullscreen();
                 }
             });
+    connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Toggle Alternate Speed"), this),
+            &QShortcut::activated, this, [&] {
+                Settings::values.frame_limit.SetGlobal(
+                    !Settings::values.frame_limit.UsingGlobal());
+                UpdateStatusBar();
+            });
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Toggle Texture Dumping"), this),
             &QShortcut::activated, this,
             [&] { Settings::values.dump_textures = !Settings::values.dump_textures; });
@@ -724,6 +730,7 @@ void GMainWindow::ConnectMenuEvents() {
     connect(ui->action_Report_Compatibility, &QAction::triggered, this,
             &GMainWindow::OnMenuReportCompatibility);
     connect(ui->action_Configure, &QAction::triggered, this, &GMainWindow::OnConfigure);
+    connect(ui->action_Configure_Current_Game, &QAction::triggered, this, &GMainWindow::OnConfigurePerGame);
     connect(ui->action_Cheats, &QAction::triggered, this, &GMainWindow::OnCheats);
 
     // View
@@ -1224,6 +1231,7 @@ void GMainWindow::ShutdownGame() {
     ui->action_Stop->setEnabled(false);
     ui->action_Restart->setEnabled(false);
     ui->action_Cheats->setEnabled(false);
+    ui->action_Configure_Current_Game->setEnabled(false);
     ui->action_Load_Amiibo->setEnabled(false);
     ui->action_Remove_Amiibo->setEnabled(false);
     ui->action_Report_Compatibility->setEnabled(false);
@@ -1652,6 +1660,7 @@ void GMainWindow::OnStartGame() {
     ui->action_Stop->setEnabled(true);
     ui->action_Restart->setEnabled(true);
     ui->action_Cheats->setEnabled(true);
+    ui->action_Configure_Current_Game->setEnabled(true);
     ui->action_Load_Amiibo->setEnabled(true);
     ui->action_Report_Compatibility->setEnabled(true);
     ui->action_Capture_Screenshot->setEnabled(true);
@@ -2049,24 +2058,25 @@ void GMainWindow::OnSaveMovie() {
 
 void GMainWindow::OnCaptureScreenshot() {
     OnPauseGame();
-    QString path = UISettings::values.screenshot_path;
-    if (!FileUtil::IsDirectory(path.toStdString())) {
-        if (!FileUtil::CreateFullPath(path.toStdString())) {
+    std::string path = UISettings::values.screenshot_path.GetValue();
+    if (!FileUtil::IsDirectory(path)) {
+        if (!FileUtil::CreateFullPath(path)) {
             QMessageBox::information(this, tr("Invalid Screenshot Directory"),
                                      tr("Cannot create specified screenshot directory. Screenshot "
                                         "path is set back to its default value."));
-            path = QString::fromStdString(FileUtil::GetUserPath(FileUtil::UserPath::UserDir));
-            path.append(QStringLiteral("screenshots/"));
+            path = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
+            path.append("screenshots/");
             UISettings::values.screenshot_path = path;
         };
     }
-    const QString filename = game_title.remove(QRegularExpression(QStringLiteral("[\\/:?\"<>|]")));
-    const QString timestamp =
-        QDateTime::currentDateTime().toString(QStringLiteral("dd.MM.yy_hh.mm.ss.z"));
-    path.append(QStringLiteral("/%1_%2.png").arg(filename, timestamp));
+    const std::string filename = game_title.remove(QRegularExpression(QStringLiteral("[\\/:?\"<>|]"))).toStdString();
+    const std::string timestamp =
+        QDateTime::currentDateTime().toString(QStringLiteral("dd.MM.yy_hh.mm.ss.z")).toStdString();
+    path.append(fmt::format("/{}_{}.png", filename, timestamp));
 
     auto* const screenshot_window = secondary_window->HasFocus() ? secondary_window : render_window;
-    screenshot_window->CaptureScreenshot(UISettings::values.screenshot_resolution_factor.GetValue(), path);
+    screenshot_window->CaptureScreenshot(UISettings::values.screenshot_resolution_factor.GetValue(),
+                                         QString::fromStdString(path));
     OnStartGame();
 }
 

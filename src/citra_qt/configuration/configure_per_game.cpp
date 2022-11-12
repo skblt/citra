@@ -1,16 +1,10 @@
 // SPDX-FileCopyrightText: Copyright 2020 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include <algorithm>
-#include <filesystem>
-#include <memory>
-#include <string>
+#include <vector>
 #include <utility>
-#include <QAbstractButton>
-#include <QCheckBox>
 #include <QPushButton>
 #include <QString>
-#include <QTimer>
 #include <fmt/format.h>
 #include "citra_qt/configuration/config.h"
 #include "citra_qt/configuration/configure_audio.h"
@@ -18,7 +12,6 @@
 #include "citra_qt/configuration/configure_graphics.h"
 #include "citra_qt/configuration/configure_per_game.h"
 #include "citra_qt/configuration/configure_system.h"
-#include "citra_qt/uisettings.h"
 #include "citra_qt/util/util.h"
 #include "core/core.h"
 #include "core/loader/loader.h"
@@ -130,7 +123,7 @@ void ConfigurePerGame::LoadConfiguration() {
                                     Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
     }
 
-    ui->display_filename->setText(QString::fromStdString(filename));
+    ui->display_filepath->setText(QString::fromStdString(filename));
 
     ui->display_format->setText(
         QString::fromStdString(Loader::GetFileTypeString(loader->GetFileType())));

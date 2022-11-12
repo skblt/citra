@@ -226,22 +226,57 @@
        <property name="title">
         <string>Screenshots</string>
        </property>
-       <layout class="QHBoxLayout" name="horizontalLayout_2">
-        <item>
-         <widget class="QLabel" name="screenshot_dir_label">
-          <property name="text">
-           <string>Save Screenshots To</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLineEdit" name="screenshot_dir_path"/>
-        </item>
-        <item>
-         <widget class="QToolButton" name="change_screenshot_dir">
-          <property name="text">
-           <string>...</string>
-          </property>
+       <layout class="QGridLayout" name="gridLayout">
+        <property name="verticalSpacing">
+         <number>0</number>
+        </property>
+        <item row="0" column="1">
+         <widget class="QWidget" name="widget_screenshot" native="true">
+          <layout class="QHBoxLayout" name="screenshot_layout">
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QComboBox" name="screenshot_combo">
+             <item>
+              <property name="text">
+               <string>Use global screenshot path</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Set screenshot path:</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="screenshot_dir_label">
+             <property name="text">
+              <string>Save Screenshots To</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLineEdit" name="screenshot_dir_path"/>
+           </item>
+           <item>
+            <widget class="QToolButton" name="change_screenshot_dir">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </widget>
         </item>
        </layout>
@@ -277,8 +312,6 @@
   <tabstop>toggle_hide_mouse</tabstop>
   <tabstop>toggle_update_check</tabstop>
   <tabstop>toggle_auto_update</tabstop>
-  <tabstop>screenshot_dir_path</tabstop>
-  <tabstop>change_screenshot_dir</tabstop>
   <tabstop>button_reset_defaults</tabstop>
  </tabstops>
  <resources/>

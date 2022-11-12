@@ -232,10 +232,10 @@ void Config::ReadValues() {
         ReadDebuggingValues();
         ReadWebServiceValues();
         ReadVideoDumpingValues();
-        ReadUIValues();
         ReadUtilityValues();
     }
 
+    ReadUIValues();
     ReadCoreValues();
     ReadRendererValues();
     ReadLayoutValues();
@@ -554,46 +554,49 @@ void Config::ReadMultiplayerValues() {
 void Config::ReadPathValues() {
     qt_config->beginGroup(QStringLiteral("Paths"));
 
-    UISettings::values.roms_path = ReadSetting(QStringLiteral("romsPath")).toString();
-    UISettings::values.symbols_path = ReadSetting(QStringLiteral("symbolsPath")).toString();
-    UISettings::values.movie_record_path =
-        ReadSetting(QStringLiteral("movieRecordPath")).toString();
-    UISettings::values.movie_playback_path =
-        ReadSetting(QStringLiteral("moviePlaybackPath")).toString();
-    UISettings::values.screenshot_path = ReadSetting(QStringLiteral("screenshotPath")).toString();
-    UISettings::values.video_dumping_path =
-        ReadSetting(QStringLiteral("videoDumpingPath")).toString();
-    UISettings::values.game_dir_deprecated =
-        ReadSetting(QStringLiteral("gameListRootDir"), QStringLiteral(".")).toString();
-    UISettings::values.game_dir_deprecated_deepscan =
-        ReadSetting(QStringLiteral("gameListDeepScan"), false).toBool();
-    int size = qt_config->beginReadArray(QStringLiteral("gamedirs"));
-    for (int i = 0; i < size; ++i) {
-        qt_config->setArrayIndex(i);
-        UISettings::GameDir game_dir;
-        game_dir.path = ReadSetting(QStringLiteral("path")).toString();
-        game_dir.deep_scan = ReadSetting(QStringLiteral("deep_scan"), false).toBool();
-        game_dir.expanded = ReadSetting(QStringLiteral("expanded"), true).toBool();
-        UISettings::values.game_dirs.append(game_dir);
-    }
-    qt_config->endArray();
-    // create NAND and SD card directories if empty, these are not removable through the UI,
-    // also carries over old game list settings if present
-    if (UISettings::values.game_dirs.isEmpty()) {
-        UISettings::GameDir game_dir;
-        game_dir.path = QStringLiteral("INSTALLED");
-        game_dir.expanded = true;
-        UISettings::values.game_dirs.append(game_dir);
-        game_dir.path = QStringLiteral("SYSTEM");
-        UISettings::values.game_dirs.append(game_dir);
-        if (UISettings::values.game_dir_deprecated != QStringLiteral(".")) {
-            game_dir.path = UISettings::values.game_dir_deprecated;
-            game_dir.deep_scan = UISettings::values.game_dir_deprecated_deepscan;
+    ReadGlobalSetting(UISettings::values.screenshot_path);
+
+    if (global) {
+        UISettings::values.roms_path = ReadSetting(QStringLiteral("romsPath")).toString();
+        UISettings::values.symbols_path = ReadSetting(QStringLiteral("symbolsPath")).toString();
+        UISettings::values.movie_record_path =
+            ReadSetting(QStringLiteral("movieRecordPath")).toString();
+        UISettings::values.movie_playback_path =
+            ReadSetting(QStringLiteral("moviePlaybackPath")).toString();
+        UISettings::values.video_dumping_path =
+            ReadSetting(QStringLiteral("videoDumpingPath")).toString();
+        UISettings::values.game_dir_deprecated =
+            ReadSetting(QStringLiteral("gameListRootDir"), QStringLiteral(".")).toString();
+        UISettings::values.game_dir_deprecated_deepscan =
+            ReadSetting(QStringLiteral("gameListDeepScan"), false).toBool();
+        int size = qt_config->beginReadArray(QStringLiteral("gamedirs"));
+        for (int i = 0; i < size; ++i) {
+            qt_config->setArrayIndex(i);
+            UISettings::GameDir game_dir;
+            game_dir.path = ReadSetting(QStringLiteral("path")).toString();
+            game_dir.deep_scan = ReadSetting(QStringLiteral("deep_scan"), false).toBool();
+            game_dir.expanded = ReadSetting(QStringLiteral("expanded"), true).toBool();
             UISettings::values.game_dirs.append(game_dir);
         }
+        qt_config->endArray();
+        // create NAND and SD card directories if empty, these are not removable through the UI,
+        // also carries over old game list settings if present
+        if (UISettings::values.game_dirs.isEmpty()) {
+            UISettings::GameDir game_dir;
+            game_dir.path = QStringLiteral("INSTALLED");
+            game_dir.expanded = true;
+            UISettings::values.game_dirs.append(game_dir);
+            game_dir.path = QStringLiteral("SYSTEM");
+            UISettings::values.game_dirs.append(game_dir);
+            if (UISettings::values.game_dir_deprecated != QStringLiteral(".")) {
+                game_dir.path = UISettings::values.game_dir_deprecated;
+                game_dir.deep_scan = UISettings::values.game_dir_deprecated_deepscan;
+                UISettings::values.game_dirs.append(game_dir);
+            }
+        }
+        UISettings::values.recent_files = ReadSetting(QStringLiteral("recentFiles")).toStringList();
+        UISettings::values.language = ReadSetting(QStringLiteral("language"), QString{}).toString();
     }
-    UISettings::values.recent_files = ReadSetting(QStringLiteral("recentFiles")).toStringList();
-    UISettings::values.language = ReadSetting(QStringLiteral("language"), QString{}).toString();
 
     qt_config->endGroup();
 }
@@ -705,30 +708,33 @@ void Config::ReadVideoDumpingValues() {
 void Config::ReadUIValues() {
     qt_config->beginGroup(QStringLiteral("UI"));
 
-    UISettings::values.theme =
-        ReadSetting(QStringLiteral("theme"), QString::fromUtf8(UISettings::themes[0].second))
-            .toString();
-    ReadBasicSetting(UISettings::values.enable_discord_presence);
-    ReadBasicSetting(UISettings::values.screenshot_resolution_factor);
-
-    ReadUpdaterValues();
-    ReadUILayoutValues();
-    ReadUIGameListValues();
     ReadPathValues();
-    ReadShortcutValues();
-    ReadMultiplayerValues();
 
-    ReadBasicSetting(UISettings::values.single_window_mode);
-    ReadBasicSetting(UISettings::values.fullscreen);
-    ReadBasicSetting(UISettings::values.display_titlebar);
-    ReadBasicSetting(UISettings::values.show_filter_bar);
-    ReadBasicSetting(UISettings::values.show_status_bar);
-    ReadBasicSetting(UISettings::values.confirm_before_closing);
-    ReadBasicSetting(UISettings::values.first_start);
-    ReadBasicSetting(UISettings::values.callout_flags);
-    ReadBasicSetting(UISettings::values.show_console);
-    ReadBasicSetting(UISettings::values.pause_when_in_background);
-    ReadBasicSetting(UISettings::values.hide_mouse);
+    if (global) {
+        UISettings::values.theme =
+            ReadSetting(QStringLiteral("theme"), QString::fromUtf8(UISettings::themes[0].second))
+                .toString();
+        ReadBasicSetting(UISettings::values.enable_discord_presence);
+        ReadBasicSetting(UISettings::values.screenshot_resolution_factor);
+
+        ReadUpdaterValues();
+        ReadUILayoutValues();
+        ReadUIGameListValues();
+        ReadShortcutValues();
+        ReadMultiplayerValues();
+
+        ReadBasicSetting(UISettings::values.single_window_mode);
+        ReadBasicSetting(UISettings::values.fullscreen);
+        ReadBasicSetting(UISettings::values.display_titlebar);
+        ReadBasicSetting(UISettings::values.show_filter_bar);
+        ReadBasicSetting(UISettings::values.show_status_bar);
+        ReadBasicSetting(UISettings::values.confirm_before_closing);
+        ReadBasicSetting(UISettings::values.first_start);
+        ReadBasicSetting(UISettings::values.callout_flags);
+        ReadBasicSetting(UISettings::values.show_console);
+        ReadBasicSetting(UISettings::values.pause_when_in_background);
+        ReadBasicSetting(UISettings::values.hide_mouse);
+    }
 
     qt_config->endGroup();
 }
@@ -796,10 +802,10 @@ void Config::SaveValues() {
         SaveDebuggingValues();
         SaveWebServiceValues();
         SaveVideoDumpingValues();
-        SaveUIValues();
         SaveUtilityValues();
     }
 
+    SaveUIValues();
     SaveCoreValues();
     SaveRendererValues();
     SaveLayoutValues();
@@ -1043,23 +1049,25 @@ void Config::SaveMultiplayerValues() {
 void Config::SavePathValues() {
     qt_config->beginGroup(QStringLiteral("Paths"));
 
-    WriteSetting(QStringLiteral("romsPath"), UISettings::values.roms_path);
-    WriteSetting(QStringLiteral("symbolsPath"), UISettings::values.symbols_path);
-    WriteSetting(QStringLiteral("movieRecordPath"), UISettings::values.movie_record_path);
-    WriteSetting(QStringLiteral("moviePlaybackPath"), UISettings::values.movie_playback_path);
-    WriteSetting(QStringLiteral("screenshotPath"), UISettings::values.screenshot_path);
-    WriteSetting(QStringLiteral("videoDumpingPath"), UISettings::values.video_dumping_path);
-    qt_config->beginWriteArray(QStringLiteral("gamedirs"));
-    for (int i = 0; i < UISettings::values.game_dirs.size(); ++i) {
-        qt_config->setArrayIndex(i);
-        const auto& game_dir = UISettings::values.game_dirs[i];
-        WriteSetting(QStringLiteral("path"), game_dir.path);
-        WriteSetting(QStringLiteral("deep_scan"), game_dir.deep_scan, false);
-        WriteSetting(QStringLiteral("expanded"), game_dir.expanded, true);
+    WriteGlobalSetting(UISettings::values.screenshot_path);
+    if (global) {
+        WriteSetting(QStringLiteral("romsPath"), UISettings::values.roms_path);
+        WriteSetting(QStringLiteral("symbolsPath"), UISettings::values.symbols_path);
+        WriteSetting(QStringLiteral("movieRecordPath"), UISettings::values.movie_record_path);
+        WriteSetting(QStringLiteral("moviePlaybackPath"), UISettings::values.movie_playback_path);
+        WriteSetting(QStringLiteral("videoDumpingPath"), UISettings::values.video_dumping_path);
+        qt_config->beginWriteArray(QStringLiteral("gamedirs"));
+        for (int i = 0; i < UISettings::values.game_dirs.size(); ++i) {
+            qt_config->setArrayIndex(i);
+            const auto& game_dir = UISettings::values.game_dirs[i];
+            WriteSetting(QStringLiteral("path"), game_dir.path);
+            WriteSetting(QStringLiteral("deep_scan"), game_dir.deep_scan, false);
+            WriteSetting(QStringLiteral("expanded"), game_dir.expanded, true);
+        }
+        qt_config->endArray();
+        WriteSetting(QStringLiteral("recentFiles"), UISettings::values.recent_files);
+        WriteSetting(QStringLiteral("language"), UISettings::values.language, QString{});
     }
-    qt_config->endArray();
-    WriteSetting(QStringLiteral("recentFiles"), UISettings::values.recent_files);
-    WriteSetting(QStringLiteral("language"), UISettings::values.language, QString{});
 
     qt_config->endGroup();
 }
@@ -1155,29 +1163,32 @@ void Config::SaveVideoDumpingValues() {
 void Config::SaveUIValues() {
     qt_config->beginGroup(QStringLiteral("UI"));
 
-    WriteSetting(QStringLiteral("theme"), UISettings::values.theme,
-                 QString::fromUtf8(UISettings::themes[0].second));
-    WriteBasicSetting(UISettings::values.enable_discord_presence);
-    WriteBasicSetting(UISettings::values.screenshot_resolution_factor);
-
-    SaveUpdaterValues();
-    SaveUILayoutValues();
-    SaveUIGameListValues();
     SavePathValues();
-    SaveShortcutValues();
-    SaveMultiplayerValues();
 
-    WriteBasicSetting(UISettings::values.single_window_mode);
-    WriteBasicSetting(UISettings::values.fullscreen);
-    WriteBasicSetting(UISettings::values.display_titlebar);
-    WriteBasicSetting(UISettings::values.show_filter_bar);
-    WriteBasicSetting(UISettings::values.show_status_bar);
-    WriteBasicSetting(UISettings::values.confirm_before_closing);
-    WriteBasicSetting(UISettings::values.first_start);
-    WriteBasicSetting(UISettings::values.callout_flags);
-    WriteBasicSetting(UISettings::values.show_console);
-    WriteBasicSetting(UISettings::values.pause_when_in_background);
-    WriteBasicSetting(UISettings::values.hide_mouse);
+    if (global) {
+        WriteSetting(QStringLiteral("theme"), UISettings::values.theme,
+                     QString::fromUtf8(UISettings::themes[0].second));
+        WriteBasicSetting(UISettings::values.enable_discord_presence);
+        WriteBasicSetting(UISettings::values.screenshot_resolution_factor);
+
+        SaveUpdaterValues();
+        SaveUILayoutValues();
+        SaveUIGameListValues();
+        SaveShortcutValues();
+        SaveMultiplayerValues();
+
+        WriteBasicSetting(UISettings::values.single_window_mode);
+        WriteBasicSetting(UISettings::values.fullscreen);
+        WriteBasicSetting(UISettings::values.display_titlebar);
+        WriteBasicSetting(UISettings::values.show_filter_bar);
+        WriteBasicSetting(UISettings::values.show_status_bar);
+        WriteBasicSetting(UISettings::values.confirm_before_closing);
+        WriteBasicSetting(UISettings::values.first_start);
+        WriteBasicSetting(UISettings::values.callout_flags);
+        WriteBasicSetting(UISettings::values.show_console);
+        WriteBasicSetting(UISettings::values.pause_when_in_background);
+        WriteBasicSetting(UISettings::values.hide_mouse);
+    }
 
     qt_config->endGroup();
 }
