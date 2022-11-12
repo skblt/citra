@@ -144,7 +144,7 @@ private:
     void CreateAllocator();
 
 private:
-    vk::DynamicLoader dl;
+    static vk::DynamicLoader dl;
     vk::Device device;
     vk::PhysicalDevice physical_device;
     vk::Instance instance;

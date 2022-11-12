@@ -13,6 +13,8 @@
 
 namespace Vulkan {
 
+vk::DynamicLoader Instance::dl;
+
 vk::Format ToVkFormat(VideoCore::PixelFormat format) {
     switch (format) {
     case VideoCore::PixelFormat::RGBA8:
