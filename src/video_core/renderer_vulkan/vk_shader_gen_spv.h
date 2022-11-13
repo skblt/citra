@@ -41,6 +41,10 @@ public:
     /// Writes the code to emulate the specified TEV stage
     void WriteTevStage(s32 index);
 
+    /// Writes the if-statement condition used to evaluate alpha testing.
+    /// Returns true if the fragment was discarded
+    [[nodiscard]] bool WriteAlphaTestCondition(Pica::FramebufferRegs::CompareFunc func);
+
     /// Samples the current fragment texel from the provided texture unit
     [[nodiscard]] Id SampleTexture(u32 texture_unit);
 
