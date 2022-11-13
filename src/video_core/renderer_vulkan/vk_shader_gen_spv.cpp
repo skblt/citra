@@ -423,7 +423,7 @@ void FragmentModule::WriteLighting() {
 
     // Apply shadow attenuation to alpha components if enabled
     if (lighting.shadow_alpha) {
-        const Id shadow_a{OpCompositeExtract(vec_ids.Get(4), shadow, 3)};
+        const Id shadow_a{OpCompositeExtract(f32_id, shadow, 3)};
         const Id shadow_a_vec{OpCompositeConstruct(vec_ids.Get(4), ConstF32(1.f, 1.f, 1.f), shadow_a)};
         if (lighting.enable_primary_alpha) {
             diffuse_sum = OpFMul(vec_ids.Get(4), diffuse_sum, shadow_a_vec);
