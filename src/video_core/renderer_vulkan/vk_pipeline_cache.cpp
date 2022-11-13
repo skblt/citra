@@ -63,10 +63,18 @@ vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
 }
 
 [[nodiscard]] bool IsAttribFormatSupported(const VertexAttribute& attrib, const Instance& instance) {
+    static std::unordered_map<vk::Format, bool> format_support_cache;
+
     vk::PhysicalDevice physical_device = instance.GetPhysicalDevice();
     const vk::Format format = ToVkAttributeFormat(attrib.type, attrib.size);
-    const vk::FormatFeatureFlags features = physical_device.getFormatProperties(format).bufferFeatures;
-    return (features & vk::FormatFeatureFlagBits::eVertexBuffer) == vk::FormatFeatureFlagBits::eVertexBuffer;
+    auto [it, new_format] = format_support_cache.try_emplace(format, false);
+    if (new_format) {
+        LOG_INFO(Render_Vulkan, "Quering support for format {}", vk::to_string(format));
+        const vk::FormatFeatureFlags features = physical_device.getFormatProperties(format).bufferFeatures;
+        it->second = (features & vk::FormatFeatureFlagBits::eVertexBuffer) == vk::FormatFeatureFlagBits::eVertexBuffer;
+    }
+
+    return it->second;
 };
 
 PipelineCache::PipelineCache(const Instance& instance, Scheduler& scheduler,

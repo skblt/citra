@@ -1541,7 +1541,6 @@ do {
 
 } while ((old = imageAtomicCompSwap(shadow_buffer, image_coord, old, new)) != old2);
 )";
-        LOG_INFO(Render_Vulkan, "{}", out);
     } else {
         out += "gl_FragDepth = depth;\n";
         // Round the final fragment color to maintain the PICA's 8 bits of precision

@@ -91,8 +91,7 @@ public:
     u32 fill_size = 0;
 
 public:
-    u32 watcher_count = 0;
-    std::array<std::weak_ptr<Watcher>, 8> watchers;
+    std::vector<std::weak_ptr<Watcher>> watchers;
 };
 
 template <class S>
@@ -190,7 +189,7 @@ template <class S>
 auto SurfaceBase<S>::CreateWatcher() -> std::shared_ptr<Watcher> {
     auto weak_ptr = reinterpret_cast<S*>(this)->weak_from_this();
     auto watcher = std::make_shared<Watcher>(std::move(weak_ptr));
-    watchers[watcher_count++] = watcher;
+    watchers.push_back(watcher);
     return watcher;
 }
 
@@ -212,8 +211,7 @@ void SurfaceBase<S>::UnlinkAllWatcher() {
         }
     }
 
-    watchers = {};
-    watcher_count = 0;
+    watchers.clear();
 }
 
 } // namespace VideoCore
