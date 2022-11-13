@@ -25,7 +25,6 @@ FragmentModule::FragmentModule(const PicaFSConfig& config) : Sirit::Module{0x000
 FragmentModule::~FragmentModule() = default;
 
 void FragmentModule::Generate() {
-    const PicaFSConfigState& state = config.state;
     AddLabel(OpLabel());
 
     rounded_primary_color = Byteround(OpLoad(vec_ids.Get(4), primary_color_id), 4);
@@ -33,19 +32,14 @@ void FragmentModule::Generate() {
     secondary_fragment_color = ConstF32(0.f, 0.f, 0.f, 0.f);
 
     // Do not do any sort of processing if it's obvious we're not going to pass the alpha test
-    if (state.alpha_test_func == Pica::FramebufferRegs::CompareFunc::Never) {
+    if (config.state.alpha_test_func == Pica::FramebufferRegs::CompareFunc::Never) {
         OpKill();
         OpFunctionEnd();
         return;
     }
 
-    // After perspective divide, OpenGL transform z_over_w from [-1, 1] to [near, far]. Here we use
-    // default near = 0 and far = 1, and undo the transformation to get the original z_over_w, then
-    // do our own transformation according to PICA specification.
-    WriteDepth();
-
     // Write shader bytecode to emulate all enabled PICA lights
-    if (state.lighting.enable) {
+    if (config.state.lighting.enable) {
         WriteLighting();
     }
 
@@ -54,9 +48,18 @@ void FragmentModule::Generate() {
     last_tex_env_out = ConstF32(0.f, 0.f, 0.f, 0.f);
 
     // Write shader bytecode to emulate PICA TEV stages
-    for (std::size_t index = 0; index < state.tev_stages.size(); ++index) {
+    for (std::size_t index = 0; index < config.state.tev_stages.size(); ++index) {
         WriteTevStage(static_cast<s32>(index));
     }
+
+    if (WriteAlphaTestCondition(config.state.alpha_test_func)) {
+        return;
+    }
+
+    // After perspective divide, OpenGL transform z_over_w from [-1, 1] to [near, far]. Here we use
+    // default near = 0 and far = 1, and undo the transformation to get the original z_over_w, then
+    // do our own transformation according to PICA specification.
+    WriteDepth();
 
     // Write output color
     OpStore(color_id, Byteround(last_tex_env_out, 4));
@@ -68,9 +71,8 @@ void FragmentModule::WriteDepth() {
     const Id input_pointer_id{TypePointer(spv::StorageClass::Input, f32_id)};
     const Id gl_frag_coord_z{OpLoad(f32_id, OpAccessChain(input_pointer_id, gl_frag_coord_id, ConstU32(2u)))};
     const Id z_over_w{OpFma(f32_id, ConstF32(2.f), gl_frag_coord_z, ConstF32(-1.f))};
-    const Id uniform_pointer_id{TypePointer(spv::StorageClass::Uniform, f32_id)};
-    const Id depth_scale{OpLoad(f32_id, OpAccessChain(uniform_pointer_id, shader_data_id, ConstS32(2)))};
-    const Id depth_offset{OpLoad(f32_id, OpAccessChain(uniform_pointer_id, shader_data_id, ConstS32(3)))};
+    const Id depth_scale{GetShaderDataMember(f32_id, ConstS32(2))};
+    const Id depth_offset{GetShaderDataMember(f32_id, ConstS32(3))};
     const Id depth{OpFma(f32_id, z_over_w, depth_scale, depth_offset)};
     if (config.state.depthmap_enable == Pica::RasterizerRegs::DepthBuffering::WBuffering) {
         const Id gl_frag_coord_w{OpLoad(f32_id, OpAccessChain(input_pointer_id, gl_frag_coord_id, ConstU32(3u)))};
@@ -154,7 +156,7 @@ void FragmentModule::WriteLighting() {
     const Id tangent{QuaternionRotate(normalized_normquat, surface_tangent)};
 
     Id shadow{ConstF32(1.f, 1.f, 1.f, 1.f)};
-    if (lighting.enable_shadow && false) {
+    if (lighting.enable_shadow) {
         shadow = SampleTexture(lighting.shadow_selector);
         if (lighting.shadow_invert) {
             shadow = OpFSub(vec_ids.Get(4), ConstF32(1.f, 1.f, 1.f, 1.f), shadow);
@@ -162,10 +164,10 @@ void FragmentModule::WriteLighting() {
     }
 
     const auto LookupLightingLUTUnsigned = [this](Id lut_index, Id pos) -> Id {
-        const Id pos_int{OpConvertFToS(i32_id, OpFMul(f32_id, pos, ConstF32(255.f)))};
+        const Id pos_int{OpConvertFToS(i32_id, OpFMul(f32_id, pos, ConstF32(256.f)))};
         const Id index{OpSClamp(i32_id, pos_int, ConstS32(0), ConstS32(255))};
         const Id neg_index{OpFNegate(f32_id, OpConvertSToF(f32_id, index))};
-        const Id delta{OpFma(f32_id, pos, ConstF32(255.f), neg_index)};
+        const Id delta{OpFma(f32_id, pos, ConstF32(256.f), neg_index)};
         return LookupLightingLUT(lut_index, index, delta);
     };
 
@@ -174,7 +176,7 @@ void FragmentModule::WriteLighting() {
         const Id index{OpSClamp(i32_id, pos_int, ConstS32(-128), ConstS32(127))};
         const Id neg_index{OpFNegate(f32_id, OpConvertSToF(f32_id, index))};
         const Id delta{OpFma(f32_id, pos, ConstF32(128.f), neg_index)};
-        const Id increment{OpSelect(i32_id, OpSLessThan(bool_id, index, ConstS32(0)), ConstS32(255), ConstS32(0))};
+        const Id increment{OpSelect(i32_id, OpSLessThan(bool_id, index, ConstS32(0)), ConstS32(256), ConstS32(0))};
         return LookupLightingLUT(lut_index, OpIAdd(i32_id, index, increment), delta);
     };
 
@@ -243,10 +245,8 @@ void FragmentModule::WriteLighting() {
 
         const auto GetLightMember = [&](s32 member) -> Id {
             const Id member_type = member < 6 ? vec_ids.Get(3) : f32_id;
-            const Id uniform_pointer_id{TypePointer(spv::StorageClass::Uniform, member_type)};
             const Id light_num{ConstS32(static_cast<s32>(lighting.light[light_index].num.Value()))};
-            return OpLoad(member_type, OpAccessChain(uniform_pointer_id, shader_data_id, ConstS32(25),
-                                                     light_num, ConstS32(member)));
+            return GetShaderDataMember(member_type, ConstS32(25), light_num, ConstS32(member));
         };
 
         // Compute light vector (directional or positional)
@@ -495,8 +495,64 @@ void FragmentModule::WriteTevStage(s32 index) {
     }
 }
 
+bool FragmentModule::WriteAlphaTestCondition(FramebufferRegs::CompareFunc func) {
+    using CompareFunc = FramebufferRegs::CompareFunc;
+
+    const auto Compare = [this, func](Id alpha, Id alphatest_ref) {
+        switch (func) {
+        case CompareFunc::Equal:
+            return OpINotEqual(bool_id, alpha, alphatest_ref);
+        case CompareFunc::NotEqual:
+            return OpIEqual(bool_id, alpha, alphatest_ref);
+        case CompareFunc::LessThan:
+            return OpSGreaterThanEqual(bool_id, alpha, alphatest_ref);
+        case CompareFunc::LessThanOrEqual:
+            return OpSGreaterThan(bool_id, alpha, alphatest_ref);
+        case CompareFunc::GreaterThan:
+            return OpSLessThanEqual(bool_id, alpha, alphatest_ref);
+        case CompareFunc::GreaterThanOrEqual:
+            return OpSLessThan(bool_id, alpha, alphatest_ref);
+        default:
+            return Id{};
+        }
+    };
+
+    switch (func) {
+    case CompareFunc::Never: // Kill the fragment
+        OpKill();
+        OpFunctionEnd();
+        return true;
+    case CompareFunc::Always: // Do nothing
+        return false;
+    case CompareFunc::Equal:
+    case CompareFunc::NotEqual:
+    case CompareFunc::LessThan:
+    case CompareFunc::LessThanOrEqual:
+    case CompareFunc::GreaterThan:
+    case CompareFunc::GreaterThanOrEqual: {
+        const Id alpha_scaled{OpFMul(f32_id, OpCompositeExtract(f32_id, last_tex_env_out, 3), ConstF32(255.f))};
+        const Id alpha_int{OpConvertFToS(i32_id, alpha_scaled)};
+        const Id alphatest_ref{GetShaderDataMember(i32_id, ConstS32(1))};
+        const Id alpha_comp_ref{Compare(alpha_int, alphatest_ref)};
+        const Id kill_label{OpLabel()};
+        const Id keep_label{OpLabel()};
+        OpSelectionMerge(keep_label, spv::SelectionControlMask::MaskNone);
+        OpBranchConditional(alpha_comp_ref, kill_label, keep_label);
+        AddLabel(kill_label);
+        OpKill();
+        AddLabel(keep_label);
+        return false;
+    }
+    default:
+        return false;
+        LOG_CRITICAL(Render_Vulkan, "Unknown alpha test condition {}", func);
+        break;
+    }
+}
+
 Id FragmentModule::SampleTexture(u32 texture_unit) {
     const PicaFSConfigState& state = config.state;
+    const Id zero_vec{ConstF32(0.f, 0.f, 0.f, 0.f)};
 
     // PICA's LOD formula for 2D textures.
     // This LOD formula is the same as the LOD lower limit defined in OpenGL.
@@ -549,11 +605,11 @@ Id FragmentModule::SampleTexture(u32 texture_unit) {
         //case Pica::TexturingRegs::TextureConfig::ShadowCube:
             //return "shadowTextureCube(texcoord0, texcoord0_w)";
         case Pica::TexturingRegs::TextureConfig::Disabled:
-            return ConstF32(0.f, 0.f, 0.f, 0.f);
+            return zero_vec;
         default:
             LOG_CRITICAL(Render_Vulkan, "Unhandled texture type {:x}", state.texture0_type);
             UNIMPLEMENTED();
-            return void_id;
+            return zero_vec;
         }
     case 1:
         return SampleLod(tex1_id, tex1_sampler_id, texcoord1_id);
@@ -567,7 +623,7 @@ Id FragmentModule::SampleTexture(u32 texture_unit) {
             //return "ProcTex()";
         } else {
             LOG_DEBUG(Render_Vulkan, "Using Texture3 without enabling it");
-            return ConstF32(0.f, 0.f, 0.f, 0.f);
+            return zero_vec;
         }
     default:
         UNREACHABLE();
