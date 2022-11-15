@@ -124,7 +124,7 @@ void TextureRuntime::FlushBuffers() {
 MICROPROFILE_DEFINE(Vulkan_Finish, "Vulkan", "Scheduler Finish", MP_RGB(52, 192, 235));
 void TextureRuntime::Finish() {
     MICROPROFILE_SCOPE(Vulkan_Finish);
-    scheduler.Finish();
+    //scheduler.Finish();
     download_buffer.Invalidate();
 }
 
