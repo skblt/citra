@@ -31,40 +31,48 @@ public:
     void Present();
 
     /// Returns true when the swapchain should be recreated
-    [[nodiscard]] bool NeedsRecreation() const {
+    bool NeedsRecreation() const {
         return is_suboptimal || is_outdated;
     }
 
+    std::size_t GetImageCount() const {
+        return image_count;
+    }
+
+    std::size_t GetImageIndex() const {
+        return image_index;
+    }
+
     /// Returns current swapchain state
-    [[nodiscard]] vk::Extent2D GetExtent() const {
+    vk::Extent2D GetExtent() const {
         return extent;
     }
 
     /// Returns the swapchain surface
-    [[nodiscard]] vk::SurfaceKHR GetSurface() const {
+    vk::SurfaceKHR GetSurface() const {
         return surface;
     }
 
     /// Returns the current framebuffe
-    [[nodiscard]] vk::Framebuffer GetFramebuffer() const {
+    vk::Framebuffer GetFramebuffer() const {
         return framebuffers[image_index];
     }
 
     /// Returns the swapchain format
-    [[nodiscard]] vk::SurfaceFormatKHR GetSurfaceFormat() const {
-        return surface_format;
+    vk::Format GetImageFormat() const {
+        return surface_format.format;
     }
 
     /// Returns the Vulkan swapchain handle
-    [[nodiscard]] vk::SwapchainKHR GetHandle() const {
+    vk::SwapchainKHR GetHandle() const {
         return swapchain;
     }
 
-    [[nodiscard]] vk::Semaphore GetImageAcquiredSemaphore() const {
+    vk::Semaphore GetImageAcquiredSemaphore() const {
         return image_acquired[frame_index];
     }
 
-    [[nodiscard]] vk::Semaphore GetPresentReadySemaphore() const {
+    vk::Semaphore GetPresentReadySemaphore() const {
         return present_ready[image_index];
     }
 
@@ -100,9 +108,9 @@ private:
     std::vector<u64> resource_ticks;
     std::vector<vk::Semaphore> image_acquired;
     std::vector<vk::Semaphore> present_ready;
-    u32 image_count = 0;
-    u32 image_index = 0;
-    u32 frame_index = 0;
+    std::size_t image_count = 0;
+    std::size_t image_index = 0;
+    std::size_t frame_index = 0;
     bool is_outdated = true;
     bool is_suboptimal = true;
 };

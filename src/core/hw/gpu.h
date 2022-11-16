@@ -21,7 +21,7 @@ class MemorySystem;
 namespace GPU {
 
 // Measured on hardware to be 2240568 timer cycles or 4481136 ARM11 cycles
-constexpr u64 frame_ticks = /*4481136ull*/2240568ull;
+constexpr u64 frame_ticks = 4481136ull;
 
 // Refresh rate defined by ratio of ARM11 frequency to ARM11 ticks per frame
 // (268,111,856) / (4,481,136) = 59.83122493939037Hz

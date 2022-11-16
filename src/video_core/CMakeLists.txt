@@ -86,6 +86,8 @@ add_library(video_core STATIC
     renderer_vulkan/renderer_vulkan.h
     renderer_vulkan/vk_blit_helper.cpp
     renderer_vulkan/vk_blit_helper.h
+    renderer_vulkan/vk_blit_screen.cpp
+    renderer_vulkan/vk_blit_screen.h
     renderer_vulkan/vk_common.cpp
     renderer_vulkan/vk_common.h
     renderer_vulkan/vk_descriptor_manager.cpp

@@ -149,15 +149,12 @@ struct ScreenRectVertex {
     Common::Vec2f tex_coord;
 };
 
-constexpr u32 VERTEX_BUFFER_SIZE = sizeof(ScreenRectVertex) * 8192;
-
 RendererVulkan::RendererVulkan(Frontend::EmuWindow& window)
     : RendererBase{window}, instance{window, Settings::values.physical_device},
       scheduler{instance, renderpass_cache, *this},
       renderpass_cache{instance, scheduler}, desc_manager{instance, scheduler},
       runtime{instance, scheduler, renderpass_cache, desc_manager},
       swapchain{instance, scheduler, renderpass_cache},
-      vertex_buffer{instance, scheduler, VERTEX_BUFFER_SIZE, vk::BufferUsageFlagBits::eVertexBuffer, {}},
       rasterizer{render_window, instance, scheduler, desc_manager, runtime, renderpass_cache} {
 
     auto& telemetry_session = Core::System::GetInstance().TelemetrySession();
