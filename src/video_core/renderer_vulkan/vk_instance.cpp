@@ -370,7 +370,6 @@ bool Instance::CreateDevice() {
                          .fragmentStoresAndAtomics = available.fragmentStoresAndAtomics,
                          .shaderStorageImageMultisample = available.shaderStorageImageMultisample,
                          .shaderClipDistance = available.shaderClipDistance}},
-        vk::PhysicalDeviceDepthClipControlFeaturesEXT{.depthClipControl = true},
         vk::PhysicalDeviceIndexTypeUint8FeaturesEXT{.indexTypeUint8 = true},
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
