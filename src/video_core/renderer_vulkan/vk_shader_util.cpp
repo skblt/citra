@@ -222,7 +222,7 @@ vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage, v
 }
 
 MICROPROFILE_DEFINE(Vulkan_SPVCompilation, "Vulkan", "SPIR-V Shader Compilation", MP_RGB(100, 255, 52));
-vk::ShaderModule CompileSPV(std::vector<u32> code, vk::Device device) {
+vk::ShaderModule CompileSPV(std::span<const u32> code, vk::Device device) {
     MICROPROFILE_SCOPE(Vulkan_SPVCompilation);
     const vk::ShaderModuleCreateInfo shader_info = {.codeSize = code.size() * sizeof(u32),
                                                     .pCode = code.data()};

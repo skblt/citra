@@ -1,3 +1,6 @@
+
+add_subdirectory(host_shaders)
+
 add_library(video_core STATIC
     command_processor.cpp
     command_processor.h
@@ -207,6 +210,9 @@ target_link_libraries(video_core PUBLIC common core)
 target_link_libraries(video_core PRIVATE nihstro-headers Boost::serialization glm::glm)
 target_link_libraries(video_core PRIVATE vulkan-headers vma sirit SPIRV glslang glad)
 set_target_properties(video_core PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})
+
+add_dependencies(video_core host_shaders)
+target_include_directories(video_core PRIVATE ${HOST_SHADERS_INCLUDE})
 
 if (ARCHITECTURE_x86_64)
     target_link_libraries(video_core PUBLIC xbyak)

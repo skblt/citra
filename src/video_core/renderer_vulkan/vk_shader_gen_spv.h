@@ -48,6 +48,9 @@ public:
     /// Samples the current fragment texel from the provided texture unit
     [[nodiscard]] Id SampleTexture(u32 texture_unit);
 
+    /// Samples the current fragment texel from shadow plane
+    [[nodiscard]] Id SampleShadow();
+
     /// Rounds the provided variable to the nearest 1/255th
     [[nodiscard]] Id Byteround(Id variable_id, u32 size = 1);
 
@@ -70,7 +73,9 @@ public:
 
     /// Writes the combiner function for the alpha component for the specified TEV stage operation
     [[nodiscard]] Id AppendAlphaCombiner(Pica::TexturingRegs::TevStageConfig::Operation operation);
+    bool dump_shader{false};
 
+private:
     /// Loads the member specified from the shader_data uniform struct
     template <typename... Ids>
     [[nodiscard]] Id GetShaderDataMember(Id type, Ids... ids) {
@@ -99,10 +104,13 @@ public:
     }
 
     /// Defines a uniform constant variable
-    [[nodiscard]] Id DefineUniformConst(Id type, u32 set, u32 binding) {
+    [[nodiscard]] Id DefineUniformConst(Id type, u32 set, u32 binding, bool readonly = false) {
         const Id uniform_id{DefineVar(type, spv::StorageClass::UniformConstant)};
         Decorate(uniform_id, spv::Decoration::DescriptorSet, set);
         Decorate(uniform_id, spv::Decoration::Binding, binding);
+        if (readonly) {
+            Decorate(uniform_id, spv::Decoration::NonWritable);
+        }
         return uniform_id;
     }
 
@@ -138,7 +146,7 @@ public:
     }
 
     /// Returns the id of a float constant of value
-    [[nodiscard]] Id ConstF32(float value) {
+    [[nodiscard]] Id ConstF32(f32 value) {
         return Constant(f32_id, value);
     }
 
@@ -150,11 +158,11 @@ public:
         return ConstantComposite(vec_ids.Get(size), constituents);
     }
 
-private:
     void DefineArithmeticTypes();
     void DefineEntryPoint();
     void DefineUniformStructs();
     void DefineInterface();
+    Id CompareShadow(Id pixel, Id z);
 
 private:
     PicaFSConfig config;
@@ -167,10 +175,12 @@ private:
     VectorIds vec_ids{};
     VectorIds ivec_ids{};
     VectorIds uvec_ids{};
+    VectorIds bvec_ids{};
 
     Id image2d_id{};
     Id image_cube_id{};
     Id image_buffer_id{};
+    Id image_r32_id{};
     Id sampler_id{};
     Id shader_data_id{};
 
@@ -197,6 +207,12 @@ private:
     Id texture_buffer_lut_lf_id{};
     Id texture_buffer_lut_rg_id{};
     Id texture_buffer_lut_rgba_id{};
+    Id shadow_texture_px_id{};
+    Id shadow_texture_nx_id{};
+    Id shadow_texture_py_id{};
+    Id shadow_texture_ny_id{};
+    Id shadow_texture_pz_id{};
+    Id shadow_texture_nz_id{};
 
     Id texture_buffer_lut_lf{};
 
