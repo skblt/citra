@@ -165,12 +165,12 @@ struct Values {
     u64 init_time;
 
     // Renderer
-    GraphicsAPI graphics_api;
-    u16 physical_device;
-    bool spirv_shader_gen;
-    bool renderer_debug;
-    bool dump_command_buffers;
-    bool async_command_recording;
+    GraphicsAPI graphics_api = GraphicsAPI::Vulkan;
+    u16 physical_device = 0;
+    bool spirv_shader_gen = true;
+    bool renderer_debug = false;
+    bool dump_command_buffers = false;
+    bool async_command_recording = true;
     bool use_hw_renderer;
     bool use_hw_shader;
     bool separable_shader;

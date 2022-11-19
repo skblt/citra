@@ -775,7 +775,7 @@ void RendererVulkan::SwapBuffers() {
     const auto RecreateSwapchain = [&] {
         scheduler.Finish();
         const Layout::FramebufferLayout layout = render_window.GetFramebufferLayout();
-        swapchain.Create(layout.width, layout.height);
+        swapchain.Create(/*layout.width, layout.height*/);
     };
 
     do {

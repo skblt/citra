@@ -92,7 +92,7 @@ public:
 
     /// Returns true when VK_KHR_timeline_semaphore is supported
     bool IsTimelineSemaphoreSupported() const {
-        return timeline_semaphores;
+        return /*timeline_semaphores*/false;
     }
 
     /// Returns true when VK_EXT_extended_dynamic_state is supported

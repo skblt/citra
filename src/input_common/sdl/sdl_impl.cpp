@@ -8,7 +8,6 @@
 #include <functional>
 #include <iterator>
 #include <mutex>
-#include <numbers>
 #include <string>
 #include <thread>
 #include <tuple>

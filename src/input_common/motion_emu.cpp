@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <chrono>
 #include <mutex>
-#include <numbers>
 #include <thread>
 #include <tuple>
 #include "common/math_util.h"

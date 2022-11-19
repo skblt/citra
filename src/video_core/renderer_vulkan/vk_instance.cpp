@@ -90,7 +90,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) {
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
     // Enable the instance extensions the backend uses
-    auto extensions = GetInstanceExtensions(window_info.type, true);
+    auto extensions = GetInstanceExtensions(window_info.type, false);
 
     // We require a Vulkan 1.1 driver
     const u32 available_version = vk::enumerateInstanceVersion();
@@ -105,8 +105,13 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) {
                                                   .engineVersion = VK_MAKE_VERSION(1, 0, 0),
                                                   .apiVersion = available_version};
 
+    std::array<const char*, 3> layers;
+#ifdef ANDROID
+    u32 layer_count = 1;
+    layers[0] = "VK_LAYER_KHRONOS_timeline_semaphore";
+#else
     u32 layer_count = 0;
-    std::array<const char*, 2> layers;
+#endif
 
     if (Settings::values.renderer_debug) {
         layers[layer_count++] = "VK_LAYER_KHRONOS_validation";
@@ -274,7 +279,7 @@ bool Instance::CreateDevice() {
     auto AddExtension = [&](std::string_view name) -> bool {
         auto result =
             std::find_if(extension_list.begin(), extension_list.end(),
-                         [&](const auto& prop) { return name.compare(prop.extensionName.data()); });
+                         [&](const auto& prop) { return name.compare(prop.extensionName.data()) == 0; });
 
         if (result != extension_list.end()) {
             LOG_INFO(Render_Vulkan, "Enabling extension: {}", name);
@@ -358,7 +363,6 @@ bool Instance::CreateDevice() {
                          .fragmentStoresAndAtomics = available.fragmentStoresAndAtomics,
                          .shaderStorageImageMultisample = available.shaderStorageImageMultisample,
                          .shaderClipDistance = available.shaderClipDistance}},
-        vk::PhysicalDeviceDepthClipControlFeaturesEXT{.depthClipControl = true},
         vk::PhysicalDeviceIndexTypeUint8FeaturesEXT{.indexTypeUint8 = true},
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),

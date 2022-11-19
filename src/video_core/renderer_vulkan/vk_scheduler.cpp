@@ -167,7 +167,7 @@ void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wa
             .waitSemaphoreCount = num_wait_semaphores,
             .pWaitSemaphores = wait_semaphores.data(),
             .pWaitDstStageMask = wait_stage_masks.data(),
-            .commandBufferCount = 2,
+            .commandBufferCount = static_cast<u32>(cmdbuffers.size()),
             .pCommandBuffers = cmdbuffers.data(),
             .signalSemaphoreCount = num_signal_semaphores,
             .pSignalSemaphores = signal_semaphores.data(),

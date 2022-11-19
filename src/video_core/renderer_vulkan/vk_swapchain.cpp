@@ -39,10 +39,10 @@ Swapchain::~Swapchain() {
     }
 }
 
-void Swapchain::Create(u32 width, u32 height) {
+void Swapchain::Create() {
     is_outdated = false;
     is_suboptimal = false;
-    SetSurfaceProperties(width, height);
+    SetSurfaceProperties();
 
     const std::array queue_family_indices = {
         instance.GetGraphicsQueueFamilyIndex(),
@@ -133,22 +133,28 @@ void Swapchain::FindPresentFormat() {
     const std::vector<vk::SurfaceFormatKHR> formats =
             instance.GetPhysicalDevice().getSurfaceFormatsKHR(surface);
 
-    surface_format = formats[0];
-    if (formats.size() == 1 && formats[0].format == vk::Format::eUndefined) {
-        surface_format.format = vk::Format::eB8G8R8A8Unorm;
-    } else {
-        auto it = std::find_if(formats.begin(), formats.end(), [](vk::SurfaceFormatKHR format) -> bool {
-            return format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear &&
-                   format.format == vk::Format::eB8G8R8A8Unorm;
-        });
 
-        if (it == formats.end()) {
-            LOG_CRITICAL(Render_Vulkan, "Unable to find required swapchain format!");
-            UNREACHABLE();
-        } else {
-            surface_format = *it;
-        }
+    // If there is a single undefined surface format, the device doesn't care, so we'll just use RGBA
+    if (formats[0].format == vk::Format::eUndefined) {
+        surface_format.format = vk::Format::eR8G8B8A8Unorm;
+        surface_format.colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
+        return;
     }
+
+    // Try to find a suitable format.
+    for (const vk::SurfaceFormatKHR& sformat : formats) {
+        vk::Format format = sformat.format;
+        if (format != vk::Format::eR8G8B8A8Unorm && format != vk::Format::eB8G8R8A8Unorm) {
+            continue;
+        }
+
+        surface_format.format = format;
+        surface_format.colorSpace = sformat.colorSpace;
+        return;
+    }
+
+    LOG_CRITICAL(Render_Vulkan, "Unable to find required swapchain format!");
+    UNREACHABLE();
 }
 
 void Swapchain::SetPresentMode() {
@@ -175,17 +181,20 @@ void Swapchain::SetPresentMode() {
 
 }
 
-void Swapchain::SetSurfaceProperties(u32 width, u32 height) {
+void Swapchain::SetSurfaceProperties() {
     const vk::SurfaceCapabilitiesKHR capabilities =
             instance.GetPhysicalDevice().getSurfaceCapabilitiesKHR(surface);
 
     extent = capabilities.currentExtent;
     if (capabilities.currentExtent.width == std::numeric_limits<u32>::max()) {
-        extent.width =
+        LOG_CRITICAL(Render_Vulkan, "You shouldn't be here");
+        UNREACHABLE();
+        /*extent.width =
             std::clamp(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
         extent.height =
-            std::clamp(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+            std::clamp(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);*/
     }
+    LOG_INFO(Render_Vulkan, "Creating {}x{} surface", extent.width, extent.height);
 
     // Select number of images in swap chain, we prefer one buffer in the background to work on
     image_count = PREFERRED_IMAGE_COUNT;
