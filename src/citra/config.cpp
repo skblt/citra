@@ -258,7 +258,7 @@ void Config::ReadValues() {
 
         try {
             days = std::stoll(day_string);
-        } catch (std::exception& e) {
+        } catch (std::exception&) {
             LOG_ERROR(Config, "Failed to parse days in init_time_offset. Using 0");
             days = 0;
         }

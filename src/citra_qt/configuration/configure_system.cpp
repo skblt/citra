@@ -270,7 +270,7 @@ void ConfigureSystem::SetConfiguration() {
     date_time.setTime_t(Settings::values.init_time.GetValue());
     ui->edit_init_time->setDateTime(date_time);
 
-    long long init_time_offset = Settings::values.init_time_offset;
+    long long init_time_offset = Settings::values.init_time_offset.GetValue();
     long long days_offset = init_time_offset / 86400;
     ui->edit_init_time_offset_days->setValue(days_offset);
 
@@ -455,15 +455,16 @@ void ConfigureSystem::ConfigureTime() {
 }
 
 void ConfigureSystem::UpdateInitTime(int init_clock) {
+    const bool is_global = Settings::IsConfiguringGlobal();
     const bool is_fixed_time =
         static_cast<Settings::InitClock>(init_clock) == Settings::InitClock::FixedTime;
 
-    ui->label_init_time->setVisible(is_fixed_time);
-    ui->edit_init_time->setVisible(is_fixed_time);
+    ui->label_init_time->setVisible(is_fixed_time && is_global);
+    ui->edit_init_time->setVisible(is_fixed_time && is_global);
 
-    ui->label_init_time_offset->setVisible(!is_fixed_time);
-    ui->edit_init_time_offset_days->setVisible(!is_fixed_time);
-    ui->edit_init_time_offset_time->setVisible(!is_fixed_time);
+    ui->label_init_time_offset->setVisible(!is_fixed_time && is_global);
+    ui->edit_init_time_offset_days->setVisible(!is_fixed_time && is_global);
+    ui->edit_init_time_offset_time->setVisible(!is_fixed_time && is_global);
 }
 
 void ConfigureSystem::RefreshConsoleID() {
@@ -494,8 +495,6 @@ void ConfigureSystem::SetupPerGameUI() {
     if (Settings::IsConfiguringGlobal()) {
         ui->toggle_new_3ds->setEnabled(Settings::values.is_new_3ds.UsingGlobal());
         ui->slider_clock_speed->setEnabled(Settings::values.cpu_clock_percentage.UsingGlobal());
-        ui->combo_init_clock->setEnabled(Settings::values.init_clock.UsingGlobal());
-        ui->edit_init_time->setEnabled(Settings::values.init_time.UsingGlobal());
         return;
     }
 
@@ -517,6 +516,9 @@ void ConfigureSystem::SetupPerGameUI() {
     ui->combo_sound->setVisible(false);
     ui->combo_language->setVisible(false);
     ui->combo_country->setVisible(false);
+    ui->label_init_time_offset->setVisible(false);
+    ui->edit_init_time_offset_days->setVisible(false);
+    ui->edit_init_time_offset_time->setVisible(false);
     ui->button_regenerate_console_id->setVisible(false);
 
     connect(ui->clock_speed_combo, qOverload<int>(&QComboBox::activated), this, [this](int index) {

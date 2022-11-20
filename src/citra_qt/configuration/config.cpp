@@ -133,7 +133,7 @@ void Config::ReadBasicSetting(Settings::Setting<Type, ranged>& setting) {
             value = qt_config->value(name, static_cast<TypeU>(default_value));
             setting.SetValue(static_cast<Type>(value.value<TypeU>()));
         } else {
-            value = qt_config->value(name, default_value);
+            value = qt_config->value(name, QVariant::fromValue(default_value));
             setting.SetValue(value.value<Type>());
         }
     }
@@ -186,7 +186,7 @@ void Config::WriteBasicSetting(const Settings::Setting<Type, ranged>& setting) {
     if constexpr (std::is_enum_v<Type>) {
         qt_config->setValue(name, static_cast<std::underlying_type_t<Type>>(value));
     } else {
-        qt_config->setValue(name, value);
+        qt_config->setValue(name, QVariant::fromValue(value));
     }
 }
 
@@ -201,11 +201,8 @@ void Config::WriteGlobalSetting(const Settings::SwitchableSetting<Type, ranged>&
         qt_config->setValue(name + QStringLiteral("/default"), value == setting.GetDefault());
         if constexpr (std::is_enum_v<Type>) {
             qt_config->setValue(name, static_cast<std::underlying_type_t<Type>>(value));
-        } else if constexpr (std::is_same_v<Type, u64>) {
-            // Converting long int to QVariant is considered ambigious in GCC
-            qt_config->setValue(name, static_cast<unsigned long long>(value));
         } else {
-            qt_config->setValue(name, value);
+            qt_config->setValue(name, QVariant::fromValue(value));
         }
     }
 }
@@ -655,9 +652,12 @@ void Config::ReadSystemValues() {
 
     ReadGlobalSetting(Settings::values.is_new_3ds);
     ReadGlobalSetting(Settings::values.region_value);
-    ReadGlobalSetting(Settings::values.init_clock);
-    ReadGlobalSetting(Settings::values.init_time);
-    ReadGlobalSetting(Settings::values.init_time_offset);
+
+    if (global) {
+        ReadBasicSetting(Settings::values.init_clock);
+        ReadBasicSetting(Settings::values.init_time);
+        ReadBasicSetting(Settings::values.init_time_offset);
+    }
 
     qt_config->endGroup();
 }
@@ -1126,9 +1126,12 @@ void Config::SaveSystemValues() {
 
     WriteGlobalSetting(Settings::values.is_new_3ds);
     WriteGlobalSetting(Settings::values.region_value);
-    WriteGlobalSetting(Settings::values.init_clock);
-    WriteGlobalSetting(Settings::values.init_time);
-    WriteGlobalSetting(Settings::values.init_time_offset);
+
+    if (global) {
+        WriteBasicSetting(Settings::values.init_clock);
+        WriteBasicSetting(Settings::values.init_time);
+        WriteBasicSetting(Settings::values.init_time_offset);
+    }
 
     qt_config->endGroup();
 }

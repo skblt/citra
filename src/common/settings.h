@@ -429,9 +429,9 @@ struct Values {
 
     // System
     SwitchableSetting<s32> region_value{REGION_VALUE_AUTO_SELECT, "region_value"};
-    SwitchableSetting<InitClock> init_clock{InitClock::SystemTime, "init_clock"};
-    SwitchableSetting<u64> init_time{946681277ULL, "init_time"};
-    SwitchableSetting<s64> init_time_offset{0, "init_time_offset"};
+    Setting<InitClock> init_clock{InitClock::SystemTime, "init_clock"};
+    Setting<u64> init_time{946681277ULL, "init_time"};
+    Setting<s64> init_time_offset{0, "init_time_offset"};
 
     // Renderer
     Setting<bool> use_gles{false, "use_gles"};

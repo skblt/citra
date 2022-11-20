@@ -47,7 +47,7 @@ static std::chrono::seconds GetInitTime() {
             now = now + std::chrono::hours(1);
 
         // add the offset
-        s64 init_time_offset = Settings::values.init_time_offset;
+        s64 init_time_offset = Settings::values.init_time_offset.GetValue();
         long long days_offset = init_time_offset / 86400;
         long long days_offset_in_seconds = days_offset * 86400; // h/m/s truncated
         unsigned long long seconds_offset =
