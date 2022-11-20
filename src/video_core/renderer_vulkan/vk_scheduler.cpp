@@ -37,6 +37,10 @@ Scheduler::Scheduler(const Instance& instance, RenderpassCache& renderpass_cache
 }
 
 Scheduler::~Scheduler() {
+    if (!use_worker_thread) {
+        return;
+    }
+
     stop_requested = true;
 
     // Push a dummy chunk to unblock the thread

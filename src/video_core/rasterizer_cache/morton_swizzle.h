@@ -39,19 +39,19 @@ constexpr void DecodePixel(const std::byte* source, std::byte* dest) {
         const u32 abgr = Common::swap32(rgb << 8) | 0xFF000000;
         std::memcpy(dest, &abgr, 4);
     } else if constexpr (format == PixelFormat::RGB565 && converted) {
-        const auto abgr = Color::DecodeRGB565(reinterpret_cast<const u8*>(source));
+        const auto abgr = Common::Color::DecodeRGB565(reinterpret_cast<const u8*>(source));
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::RGB5A1 && converted) {
-        const auto abgr = Color::DecodeRGB5A1(reinterpret_cast<const u8*>(source));
+        const auto abgr = Common::Color::DecodeRGB5A1(reinterpret_cast<const u8*>(source));
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::RGBA4 && converted) {
-        const auto abgr = Color::DecodeRGBA4(reinterpret_cast<const u8*>(source));
+        const auto abgr = Common::Color::DecodeRGBA4(reinterpret_cast<const u8*>(source));
         std::memcpy(dest, abgr.AsArray(), 4);
     } else if constexpr (format == PixelFormat::IA8) {
         std::memset(dest, static_cast<int>(source[1]), 3);
         dest[3] = source[0];
     } else if constexpr (format == PixelFormat::RG8) {
-        const auto rgba = Color::DecodeRG8(reinterpret_cast<const u8*>(source));
+        const auto rgba = Common::Color::DecodeRG8(reinterpret_cast<const u8*>(source));
         std::memcpy(dest, rgba.AsArray(), 4);
     } else if constexpr (format == PixelFormat::I8) {
         std::memset(dest, static_cast<int>(source[0]), 3);
@@ -61,8 +61,8 @@ constexpr void DecodePixel(const std::byte* source, std::byte* dest) {
         dest[3] = source[0];
     } else if constexpr (format == PixelFormat::IA4) {
         const u8 ia4 = static_cast<const u8>(source[0]);
-        std::memset(dest, Color::Convert4To8(ia4 >> 4), 3);
-        dest[3] = std::byte{Color::Convert4To8(ia4 & 0xF)};
+        std::memset(dest, Common::Color::Convert4To8(ia4 >> 4), 3);
+        dest[3] = std::byte{Common::Color::Convert4To8(ia4 & 0xF)};
     } else {
         std::memcpy(dest, source, bytes_per_pixel);
     }
@@ -72,7 +72,7 @@ template <PixelFormat format>
 constexpr void DecodePixel4(u32 x, u32 y, const std::byte* source_tile, std::byte* dest_pixel) {
     const u32 morton_offset = VideoCore::MortonInterleave(x, y);
     const u8 value = static_cast<const u8>(source_tile[morton_offset >> 1]);
-    const u8 pixel = Color::Convert4To8((morton_offset % 2) ? (value >> 4) : (value & 0xF));
+    const u8 pixel = Common::Color::Convert4To8((morton_offset % 2) ? (value >> 4) : (value & 0xF));
 
     if constexpr (format == PixelFormat::I4) {
         std::memset(dest_pixel, static_cast<int>(pixel), 3);
@@ -102,7 +102,7 @@ constexpr void DecodePixelETC1(u32 x, u32 y, const std::byte* source_tile, std::
         std::memcpy(&packed_alpha, subtile_ptr, sizeof(u64));
         subtile_ptr += sizeof(u64);
 
-        alpha = Color::Convert4To8((packed_alpha >> (4 * (x * subtile_width + y))) & 0xF);
+        alpha = Common::Color::Convert4To8((packed_alpha >> (4 * (x * subtile_width + y))) & 0xF);
     }
 
     const u64_le subtile_data = MakeInt<u64_le>(subtile_ptr);
@@ -131,15 +131,15 @@ constexpr void EncodePixel(const std::byte* source, std::byte* dest) {
     } else if constexpr (format == PixelFormat::RGB565 && converted) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Color::EncodeRGB565(rgba, reinterpret_cast<u8*>(dest));
+        Common::Color::EncodeRGB565(rgba, reinterpret_cast<u8*>(dest));
     } else if constexpr (format == PixelFormat::RGB5A1 && converted) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Color::EncodeRGB5A1(rgba, reinterpret_cast<u8*>(dest));
+        Common::Color::EncodeRGB5A1(rgba, reinterpret_cast<u8*>(dest));
     } else if constexpr (format == PixelFormat::RGBA4 && converted) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source, 4);
-        Color::EncodeRGBA4(rgba, reinterpret_cast<u8*>(dest));
+        Common::Color::EncodeRGBA4(rgba, reinterpret_cast<u8*>(dest));
     } else {
         std::memcpy(dest, source, bytes_per_pixel);
     }

@@ -118,7 +118,7 @@ void Swapchain::Present() {
         vk::Queue present_queue = instance.GetPresentQueue();
         try {
             [[maybe_unused]] vk::Result result = present_queue.presentKHR(present_info);
-        } catch (vk::OutOfDateKHRError& err) {
+        } catch (vk::OutOfDateKHRError&) {
             is_outdated = true;
         } catch (...) {
             LOG_CRITICAL(Render_Vulkan, "Swapchain presentation failed");

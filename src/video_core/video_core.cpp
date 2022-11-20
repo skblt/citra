@@ -53,7 +53,7 @@ ResultStatus Init(Frontend::EmuWindow& emu_window, Frontend::EmuWindow* secondar
         g_renderer = std::make_unique<OpenGL::RendererOpenGL>(emu_window, secondary_window);
         break;
     case Settings::GraphicsAPI::Vulkan:
-        g_renderer = std::make_unique<Vulkan::RendererVulkan>(emu_window);
+        g_renderer = std::make_unique<Vulkan::RendererVulkan>(emu_window, secondary_window);
         break;
     default:
         LOG_CRITICAL(Render, "Invalid graphics API enum value {}", graphics_api);

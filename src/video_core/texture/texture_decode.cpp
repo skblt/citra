@@ -265,7 +265,7 @@ void ConvertABGRToRGBA(std::span<const std::byte> source, std::span<std::byte> d
 void ConvertRGBA4ToRGBA8(std::span<const std::byte> source, std::span<std::byte> dest) {
     u32 j = 0;
     for (std::size_t i = 0; i < dest.size(); i += 4) {
-        auto rgba = Color::DecodeRGBA4(reinterpret_cast<const u8*>(source.data() + j));
+        auto rgba = Common::Color::DecodeRGBA4(reinterpret_cast<const u8*>(source.data() + j));
         std::memcpy(dest.data() + i, rgba.AsArray(), sizeof(rgba));
         j += 2;
     }
@@ -276,7 +276,7 @@ void ConvertRGBA8ToRGBA4(std::span<const std::byte> source, std::span<std::byte>
     for (std::size_t i = 0; i < dest.size(); i += 2) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source.data() + j, sizeof(rgba));
-        Color::EncodeRGBA4(rgba, reinterpret_cast<u8*>(dest.data() + i));
+        Common::Color::EncodeRGBA4(rgba, reinterpret_cast<u8*>(dest.data() + i));
         j += 4;
     }
 }
@@ -284,7 +284,7 @@ void ConvertRGBA8ToRGBA4(std::span<const std::byte> source, std::span<std::byte>
 void ConvertRGB5A1ToRGBA8(std::span<const std::byte> source, std::span<std::byte> dest) {
     u32 j = 0;
     for (std::size_t i = 0; i < dest.size(); i += 4) {
-        auto rgba = Color::DecodeRGB5A1(reinterpret_cast<const u8*>(source.data() + j));
+        auto rgba = Common::Color::DecodeRGB5A1(reinterpret_cast<const u8*>(source.data() + j));
         std::memcpy(dest.data() + i, rgba.AsArray(), sizeof(rgba));
         j += 2;
     }
@@ -295,7 +295,7 @@ void ConvertRGBA8ToRGB5A1(std::span<const std::byte> source, std::span<std::byte
     for (std::size_t i = 0; i < dest.size(); i += 2) {
         Common::Vec4<u8> rgba;
         std::memcpy(rgba.AsArray(), source.data() + j, sizeof(rgba));
-        Color::EncodeRGB5A1(rgba, reinterpret_cast<u8*>(dest.data() + i));
+        Common::Color::EncodeRGB5A1(rgba, reinterpret_cast<u8*>(dest.data() + i));
         j += 4;
     }
 }

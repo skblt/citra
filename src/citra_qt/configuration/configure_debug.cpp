@@ -30,7 +30,7 @@ ConfigureDebug::ConfigureDebug(QWidget* parent)
         if (checked && Settings::values.graphics_api == Settings::GraphicsAPI::Vulkan) {
             try {
                 Vulkan::Instance debug_inst{true};
-            } catch (vk::LayerNotPresentError& err) {
+            } catch (vk::LayerNotPresentError&) {
                 ui->toggle_renderer_debug->toggle();
                 QMessageBox::warning(
                     this, tr("Validation layer not available"),
@@ -45,7 +45,7 @@ ConfigureDebug::ConfigureDebug(QWidget* parent)
         if (checked && Settings::values.graphics_api == Settings::GraphicsAPI::Vulkan) {
             try {
                 Vulkan::Instance debug_inst{false, true};
-            } catch (vk::LayerNotPresentError& err) {
+            } catch (vk::LayerNotPresentError&) {
                 ui->toggle_dump_command_buffers->toggle();
                 QMessageBox::warning(
                     this, tr("Command buffer dumping not available"),

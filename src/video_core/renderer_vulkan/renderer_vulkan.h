@@ -63,14 +63,14 @@ class RasterizerVulkan;
 
 class RendererVulkan : public RendererBase {
 public:
-    RendererVulkan(Frontend::EmuWindow& window);
+    explicit RendererVulkan(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window);
     ~RendererVulkan() override;
 
     VideoCore::ResultStatus Init() override;
     VideoCore::RasterizerInterface* Rasterizer() override;
     void ShutDown() override;
     void SwapBuffers() override;
-    void TryPresent(int timeout_ms) override {}
+    void TryPresent(int timeout_ms, bool is_secondary) override {}
     void PrepareVideoDumping() override {}
     void CleanupVideoDumping() override {}
     void Sync() override;

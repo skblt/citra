@@ -180,8 +180,8 @@ static std::array<float, 3 * 2> MakeOrthographicMatrix(float width, float height
     return matrix;
 }
 
-RendererVulkan::RendererVulkan(Frontend::EmuWindow& window)
-    : RendererBase{window}, instance{window, Settings::values.physical_device},
+RendererVulkan::RendererVulkan(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window)
+    : RendererBase{window, secondary_window}, instance{window, Settings::values.physical_device},
       scheduler{instance, renderpass_cache, *this},
       renderpass_cache{instance, scheduler}, desc_manager{instance, scheduler},
       runtime{instance, scheduler, renderpass_cache, desc_manager},
