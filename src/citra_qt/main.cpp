@@ -1076,6 +1076,9 @@ void GMainWindow::BootGame(const QString& filename) {
             title_id == 0 ? file_path.filename().string() : fmt::format("{:016X}", title_id);
         Config per_game_config(config_file_name, Config::ConfigType::PerGameConfig);
         Settings::Apply();
+
+        LOG_INFO(Frontend, "Using per game config file for title id {}", config_file_name);
+        Settings::LogSettings();
     }
 
     // Save configurations
