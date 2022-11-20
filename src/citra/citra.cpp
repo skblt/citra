@@ -363,7 +363,7 @@ int main(int argc, char** argv) {
     EmuWindow_SDL2::InitializeSDL2();
 
     const auto emu_window{std::make_unique<EmuWindow_SDL2>(fullscreen, false)};
-    const bool use_secondary_window{Settings::values.layout_option ==
+    const bool use_secondary_window{Settings::values.layout_option.GetValue() ==
                                     Settings::LayoutOption::SeparateWindows};
     const auto secondary_window =
         use_secondary_window ? std::make_unique<EmuWindow_SDL2>(false, true) : nullptr;

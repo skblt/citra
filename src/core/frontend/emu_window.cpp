@@ -206,7 +206,7 @@ void EmuWindow::UpdateCurrentFramebufferLayout(unsigned width, unsigned height,
 #ifndef ANDROID
         case Settings::LayoutOption::SeparateWindows:
             layout = Layout::SeparateWindowsLayout(width, height, is_secondary,
-                                                   Settings::values.upright_screen);
+                                                   Settings::values.upright_screen.GetValue());
             break;
 #endif
         case Settings::LayoutOption::MobilePortrait:

@@ -381,7 +381,7 @@ void RendererOpenGL::SwapBuffers() {
     RenderToMailbox(main_layout, render_window.mailbox, false);
 
 #ifndef ANDROID
-    if (Settings::values.layout_option == Settings::LayoutOption::SeparateWindows) {
+    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows) {
         ASSERT(secondary_window);
         const auto& secondary_layout = secondary_window->GetFramebufferLayout();
         RenderToMailbox(secondary_layout, secondary_window->mailbox, false);

@@ -21,20 +21,20 @@ enum class InitClock : u32 {
 };
 
 enum class LayoutOption : u32 {
-    Default = 0,
-    SingleScreen = 1,
-    LargeScreen = 2,
+    Default,
+    SingleScreen,
+    LargeScreen,
     SideScreen,
 #ifndef ANDROID
-    SeparateWindows = 3,
+    SeparateWindows,
 #endif
     // Similiar to default, but better for mobile devices in portrait mode. Top screen in clamped to
     // the top of the frame, and the bottom screen is enlarged to match the top screen.
-    MobilePortrait = 4,
+    MobilePortrait,
 
     // Similiar to LargeScreen, but better for mobile devices in landscape mode. The screens are
     // clamped to the top of the frame, and the bottom screen is a bit bigger.
-    MobileLandscape = 5,
+    MobileLandscape,
 };
 
 enum class MicInputType : u32 {
