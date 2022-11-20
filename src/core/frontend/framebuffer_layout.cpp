@@ -402,8 +402,8 @@ FramebufferLayout FrameLayoutFromResolutionScale(u32 res_scale, bool is_secondar
                     height = Core::kScreenTopHeight * res_scale;
                 }
             }
-            layout =
-                SingleFrameLayout(width, height, swap_screens, Settings::values.upright_screen.GetValue());
+            layout = SingleFrameLayout(width, height, swap_screens,
+                                       Settings::values.upright_screen.GetValue());
             break;
         }
         case Settings::LayoutOption::LargeScreen:

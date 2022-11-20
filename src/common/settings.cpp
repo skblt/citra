@@ -77,7 +77,7 @@ void LogSettings() {
         LOG_INFO(Config, "{}: {}", name, value);
     };
 
-    const auto to_string = [](AudioEmulation emulation) ->  std::string_view {
+    const auto to_string = [](AudioEmulation emulation) -> std::string_view {
         switch (emulation) {
         case AudioEmulation::HLE:
             return "HLE";

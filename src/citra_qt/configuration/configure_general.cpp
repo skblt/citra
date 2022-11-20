@@ -124,8 +124,8 @@ void ConfigureGeneral::SetConfiguration() {
         ui->region_combobox->setCurrentIndex(Settings::values.region_value.GetValue() + 1);
     }
 
-    UISettings::values.screenshot_path.SetGlobal(
-                ui->screenshot_combo->currentIndex() == ConfigurationShared::USE_GLOBAL_INDEX);
+    UISettings::values.screenshot_path.SetGlobal(ui->screenshot_combo->currentIndex() ==
+                                                 ConfigurationShared::USE_GLOBAL_INDEX);
     std::string screenshot_path = UISettings::values.screenshot_path.GetValue();
     if (screenshot_path.empty()) {
         screenshot_path = FileUtil::GetUserPath(FileUtil::UserPath::UserDir) + "screenshots/";
@@ -159,9 +159,8 @@ void ConfigureGeneral::ApplyConfiguration() {
         });
 
     ConfigurationShared::ApplyPerGameSetting(
-        &UISettings::values.screenshot_path, ui->screenshot_combo, [this](s32) {
-            return ui->screenshot_dir_path->text().toStdString();
-        });
+        &UISettings::values.screenshot_path, ui->screenshot_combo,
+        [this](s32) { return ui->screenshot_dir_path->text().toStdString(); });
 
     if (Settings::IsConfiguringGlobal()) {
         UISettings::values.confirm_before_closing = ui->toggle_check_exit->isChecked();

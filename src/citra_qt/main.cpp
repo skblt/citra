@@ -547,8 +547,7 @@ void GMainWindow::InitializeHotkeys() {
             });
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Toggle Alternate Speed"), this),
             &QShortcut::activated, this, [&] {
-                Settings::values.frame_limit.SetGlobal(
-                    !Settings::values.frame_limit.UsingGlobal());
+                Settings::values.frame_limit.SetGlobal(!Settings::values.frame_limit.UsingGlobal());
                 UpdateStatusBar();
             });
     connect(hotkey_registry.GetHotkey(main_window, QStringLiteral("Toggle Texture Dumping"), this),
@@ -730,7 +729,8 @@ void GMainWindow::ConnectMenuEvents() {
     connect(ui->action_Report_Compatibility, &QAction::triggered, this,
             &GMainWindow::OnMenuReportCompatibility);
     connect(ui->action_Configure, &QAction::triggered, this, &GMainWindow::OnConfigure);
-    connect(ui->action_Configure_Current_Game, &QAction::triggered, this, &GMainWindow::OnConfigurePerGame);
+    connect(ui->action_Configure_Current_Game, &QAction::triggered, this,
+            &GMainWindow::OnConfigurePerGame);
     connect(ui->action_Cheats, &QAction::triggered, this, &GMainWindow::OnCheats);
 
     // View
@@ -1839,7 +1839,8 @@ void GMainWindow::ToggleScreenLayout() {
         case Settings::LayoutOption::SeparateWindows:
             return Settings::LayoutOption::Default;
         default:
-            LOG_ERROR(Frontend, "Unknown layout option {}", Settings::values.layout_option.GetValue());
+            LOG_ERROR(Frontend, "Unknown layout option {}",
+                      Settings::values.layout_option.GetValue());
             return Settings::LayoutOption::Default;
         }
     }();
@@ -2088,7 +2089,8 @@ void GMainWindow::OnCaptureScreenshot() {
             UISettings::values.screenshot_path = path;
         };
     }
-    const std::string filename = game_title.remove(QRegularExpression(QStringLiteral("[\\/:?\"<>|]"))).toStdString();
+    const std::string filename =
+        game_title.remove(QRegularExpression(QStringLiteral("[\\/:?\"<>|]"))).toStdString();
     const std::string timestamp =
         QDateTime::currentDateTime().toString(QStringLiteral("dd.MM.yy_hh.mm.ss.z")).toStdString();
     path.append(fmt::format("/{}_{}.png", filename, timestamp));
@@ -2537,8 +2539,8 @@ void GMainWindow::SyncMenuUISettings() {
                                                       Settings::LayoutOption::LargeScreen);
     ui->action_Screen_Layout_Side_by_Side->setChecked(Settings::values.layout_option.GetValue() ==
                                                       Settings::LayoutOption::SideScreen);
-    ui->action_Screen_Layout_Separate_Windows->setChecked(Settings::values.layout_option.GetValue() ==
-                                                          Settings::LayoutOption::SeparateWindows);
+    ui->action_Screen_Layout_Separate_Windows->setChecked(
+        Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows);
     ui->action_Screen_Layout_Swap_Screens->setChecked(Settings::values.swap_screen.GetValue());
     ui->action_Screen_Layout_Upright_Screens->setChecked(
         Settings::values.upright_screen.GetValue());

@@ -29,10 +29,10 @@
 #include "citra_qt/main.h"
 #include "citra_qt/uisettings.h"
 #include "common/logging/log.h"
+#include "common/settings.h"
 #include "core/file_sys/archive_extsavedata.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/hle/service/fs/archive.h"
-#include "common/settings.h"
 #include "qcursor.h"
 
 GameListSearchField::KeyReleaseEater::KeyReleaseEater(GameList* gamelist, QObject* parent)
@@ -559,10 +559,10 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
     });
     connect(open_dlc_location, &QAction::triggered, this, [this, program_id] {
         const u64 trimmed_id = program_id & 0xFFFFFFF;
-        const std::string dlc_path = fmt::format("{}Nintendo 3DS/00000000000000000000000000000000/"
-                                                 "00000000000000000000000000000000/title/0004008c/{:08x}/content/",
-                                                 FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir),
-                                                 trimmed_id);
+        const std::string dlc_path =
+            fmt::format("{}Nintendo 3DS/00000000000000000000000000000000/"
+                        "00000000000000000000000000000000/title/0004008c/{:08x}/content/",
+                        FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir), trimmed_id);
         fmt::print("DLC path {}\n", dlc_path);
         if (FileUtil::CreateFullPath(dlc_path)) {
             emit OpenFolderRequested(trimmed_id, GameListOpenTarget::DLC_DATA);
@@ -583,9 +583,9 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
     connect(delete_opengl_disk_shader_cache, &QAction::triggered, this, [program_id] {
         // Remove both seperable and conventional cache if it exists
         for (const std::string_view cache_type : {"separable", "conventional"}) {
-            const std::string path = fmt::format("{}opengl/precompiled/{}/{:016X}.bin",
-                                                 FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir),
-                                                 cache_type, program_id);
+            const std::string path = fmt::format(
+                "{}opengl/precompiled/{}/{:016X}.bin",
+                FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir), cache_type, program_id);
             QFile file{QString::fromStdString(path)};
             file.remove();
         }
