@@ -37,7 +37,8 @@ enum class GameListOpenTarget {
     TEXTURE_DUMP = 4,
     TEXTURE_LOAD = 5,
     MODS = 6,
-    SHADER_CACHE = 7
+    DLC_DATA = 7,
+    SHADER_CACHE = 8
 };
 
 class GameList : public QWidget {

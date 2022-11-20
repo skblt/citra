@@ -32,7 +32,7 @@
 #include "core/file_sys/archive_extsavedata.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/hle/service/fs/archive.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "qcursor.h"
 
 GameListSearchField::KeyReleaseEater::KeyReleaseEater(GameList* gamelist, QObject* parent)
@@ -479,6 +479,7 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
     QAction* open_texture_load_location =
         context_menu.addAction(tr("Open Custom Texture Location"));
     QAction* open_mods_location = context_menu.addAction(tr("Open Mods Location"));
+    QAction* open_dlc_location = context_menu.addAction(tr("Open DLC Data Location"));
     QMenu* shader_menu = context_menu.addMenu(tr("Disk Shader Cache"));
     QAction* dump_romfs = context_menu.addAction(tr("Dump RomFS"));
     QAction* navigate_to_gamedb_entry = context_menu.addAction(tr("Navigate to GameDB entry"));
@@ -515,10 +516,11 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
                                            "content/"));
     auto it = FindMatchingCompatibilityEntry(compatibility_list, program_id);
 
-    open_texture_dump_location->setVisible(is_application);
-    open_texture_load_location->setVisible(is_application);
-    open_mods_location->setVisible(is_application);
-    dump_romfs->setVisible(is_application);
+    open_texture_dump_location->setEnabled(is_application);
+    open_texture_load_location->setEnabled(is_application);
+    open_mods_location->setEnabled(is_application);
+    open_dlc_location->setEnabled(is_application);
+    dump_romfs->setEnabled(is_application);
 
     navigate_to_gamedb_entry->setVisible(it != compatibility_list.end());
 
@@ -548,13 +550,6 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
             emit OpenFolderRequested(program_id, GameListOpenTarget::TEXTURE_LOAD);
         }
     });
-    connect(open_texture_load_location, &QAction::triggered, this, [this, program_id] {
-        if (FileUtil::CreateFullPath(fmt::format("{}textures/{:016X}/",
-                                                 FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
-                                                 program_id))) {
-            emit OpenFolderRequested(program_id, GameListOpenTarget::TEXTURE_LOAD);
-        }
-    });
     connect(open_mods_location, &QAction::triggered, this, [this, program_id] {
         if (FileUtil::CreateFullPath(fmt::format("{}mods/{:016X}/",
                                                  FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
@@ -562,12 +557,23 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
             emit OpenFolderRequested(program_id, GameListOpenTarget::MODS);
         }
     });
+    connect(open_dlc_location, &QAction::triggered, this, [this, program_id] {
+        const u64 trimmed_id = program_id & 0xFFFFFFF;
+        const std::string dlc_path = fmt::format("{}Nintendo 3DS/00000000000000000000000000000000/"
+                                                 "00000000000000000000000000000000/title/0004008c/{:08x}/content/",
+                                                 FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir),
+                                                 trimmed_id);
+        fmt::print("DLC path {}\n", dlc_path);
+        if (FileUtil::CreateFullPath(dlc_path)) {
+            emit OpenFolderRequested(trimmed_id, GameListOpenTarget::DLC_DATA);
+        }
+    });
     connect(dump_romfs, &QAction::triggered, this,
             [this, path, program_id] { emit DumpRomFSRequested(path, program_id); });
     connect(navigate_to_gamedb_entry, &QAction::triggered, this, [this, program_id]() {
         emit NavigateToGamedbEntryRequested(program_id, compatibility_list);
     });
-    connect(properties, &QAction::triggered,
+    connect(properties, &QAction::triggered, this,
             [this, path]() { emit OpenPerGameGeneralRequested(path); });
     connect(open_shader_cache_location, &QAction::triggered, this, [this, program_id] {
         if (FileUtil::CreateFullPath(FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir))) {

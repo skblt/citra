@@ -1071,9 +1071,9 @@ void GMainWindow::BootGame(const QString& filename) {
 
     if (loader != nullptr && loader->ReadProgramId(title_id) == Loader::ResultStatus::Success) {
         // Load per game settings
-        const auto file_path = std::filesystem::path{filename.toStdString()};
+        const std::string name{FileUtil::GetFilename(filename.toStdString())};
         const std::string config_file_name =
-            title_id == 0 ? file_path.filename().string() : fmt::format("{:016X}", title_id);
+            title_id == 0 ? name : fmt::format("{:016X}", title_id);
         Config per_game_config(config_file_name, Config::ConfigType::PerGameConfig);
         Settings::Apply();
 
@@ -1416,6 +1416,13 @@ void GMainWindow::OnGameListOpenFolder(u64 data_id, GameListOpenTarget target) {
         open_target = "Mods";
         path = fmt::format("{}mods/{:016X}/", FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
                            data_id);
+        break;
+    }
+    case GameListOpenTarget::DLC_DATA: {
+        open_target = "DLC Data";
+        path = fmt::format("{}Nintendo 3DS/00000000000000000000000000000000/"
+                           "00000000000000000000000000000000/title/0004008c/{:08x}/content/",
+                           FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir), data_id);
         break;
     }
     case GameListOpenTarget::SHADER_CACHE: {
