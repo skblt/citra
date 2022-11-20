@@ -42,6 +42,16 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
     }
 }
 
+std::vector<std::string> GetSupportedExtensions(vk::PhysicalDevice physical) {
+    const std::vector extensions = physical.enumerateDeviceExtensionProperties();
+    std::vector<std::string> supported_extensions;
+    supported_extensions.reserve(extensions.size());
+    for (const auto& extension : extensions) {
+        supported_extensions.emplace_back(extension.extensionName.data());
+    }
+    return supported_extensions;
+}
+
 Instance::Instance(bool validation, bool dump_command_buffers) {
     // Fetch instance independant function pointers
     auto vkGetInstanceProcAddr =
@@ -156,10 +166,10 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) {
     }
 
     physical_device = physical_devices[physical_device_index];
-    device_properties = physical_device.getProperties();
+    properties = physical_device.getProperties();
 
     LOG_INFO(Render_Vulkan, "Creating logical device for physical device: {}",
-             device_properties.deviceName);
+             properties.deviceName);
 
     CreateDevice();
     CreateFormatTable();
@@ -261,7 +271,7 @@ void Instance::CreateFormatTable() {
 }
 
 bool Instance::CreateDevice() {
-    auto feature_chain =
+    const vk::StructureChain feature_chain =
         physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
                                      vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
                                      vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR,
@@ -269,14 +279,14 @@ bool Instance::CreateDevice() {
 
     // Not having geometry shaders will cause issues with accelerated rendering.
     const vk::PhysicalDeviceFeatures available = feature_chain.get().features;
-    device_features = available;
+    features = available;
     if (!available.geometryShader) {
         LOG_WARNING(Render_Vulkan,
                     "Geometry shaders not availabe! Accelerated rendering not possible!");
     }
 
-    auto extension_list = physical_device.enumerateDeviceExtensionProperties();
-    if (extension_list.empty()) {
+    available_extensions = GetSupportedExtensions(physical_device);
+    if (available_extensions.empty()) {
         LOG_CRITICAL(Render_Vulkan, "No extensions supported by device.");
         return false;
     }
@@ -285,18 +295,18 @@ bool Instance::CreateDevice() {
     std::array<const char*, 10> enabled_extensions;
     u32 enabled_extension_count = 0;
 
-    auto AddExtension = [&](std::string_view name) -> bool {
+    auto AddExtension = [&](std::string_view extension) -> bool {
         auto result =
-            std::find_if(extension_list.begin(), extension_list.end(),
-                         [&](const auto& prop) { return name.compare(prop.extensionName.data()) == 0; });
+            std::find_if(available_extensions.begin(), available_extensions.end(),
+                         [&](const std::string& name) { return name == extension; });
 
-        if (result != extension_list.end()) {
-            LOG_INFO(Render_Vulkan, "Enabling extension: {}", name);
-            enabled_extensions[enabled_extension_count++] = name.data();
+        if (result != available_extensions.end()) {
+            LOG_INFO(Render_Vulkan, "Enabling extension: {}", extension);
+            enabled_extensions[enabled_extension_count++] = extension.data();
             return true;
         }
 
-        LOG_WARNING(Render_Vulkan, "Extension {} unavailable.", name);
+        LOG_WARNING(Render_Vulkan, "Extension {} unavailable.", extension);
         return false;
     };
 
@@ -410,6 +420,17 @@ void Instance::CreateAllocator() {
         LOG_CRITICAL(Render_Vulkan, "Failed to initialize VMA with error {}", result);
         UNREACHABLE();
     }
+}
+
+void Instance::CollectTelemetryParameters() {
+    const vk::StructureChain property_chain =
+            physical_device.getProperties2<vk::PhysicalDeviceProperties2,
+                                           vk::PhysicalDeviceDriverProperties>();
+    const vk::PhysicalDeviceDriverProperties driver =
+            property_chain.get<vk::PhysicalDeviceDriverProperties>();
+
+    driver_id = driver.driverID;
+    vendor_name = driver.driverName.data();
 }
 
 } // namespace Vulkan

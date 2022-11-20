@@ -180,21 +180,61 @@ static std::array<float, 3 * 2> MakeOrthographicMatrix(float width, float height
     return matrix;
 }
 
+namespace {
+std::string GetReadableVersion(u32 version) {
+    return fmt::format("{}.{}.{}", VK_VERSION_MAJOR(version), VK_VERSION_MINOR(version),
+                       VK_VERSION_PATCH(version));
+}
+
+std::string GetDriverVersion(const Instance& instance) {
+    // Extracted from
+    // https://github.com/SaschaWillems/vulkan.gpuinfo.org/blob/5dddea46ea1120b0df14eef8f15ff8e318e35462/functions.php#L308-L314
+    const u32 version = instance.GetDriverVersion();
+    if (instance.GetDriverID() == vk::DriverId::eNvidiaProprietary) {
+        const u32 major = (version >> 22) & 0x3ff;
+        const u32 minor = (version >> 14) & 0x0ff;
+        const u32 secondary = (version >> 6) & 0x0ff;
+        const u32 tertiary = version & 0x003f;
+        return fmt::format("{}.{}.{}.{}", major, minor, secondary, tertiary);
+    }
+    if (instance.GetDriverID() == vk::DriverId::eIntelProprietaryWindows) {
+        const u32 major = version >> 14;
+        const u32 minor = version & 0x3fff;
+        return fmt::format("{}.{}", major, minor);
+    }
+    return GetReadableVersion(version);
+}
+
+std::string BuildCommaSeparatedExtensions(std::vector<std::string> available_extensions) {
+    std::sort(available_extensions.begin(), available_extensions.end());
+
+    static constexpr std::size_t AverageExtensionSize = 64;
+    std::string separated_extensions;
+    separated_extensions.reserve(available_extensions.size() * AverageExtensionSize);
+
+    const auto end = std::end(available_extensions);
+    for (auto extension = std::begin(available_extensions); extension != end; ++extension) {
+        if (const bool is_last = extension + 1 == end; is_last) {
+            separated_extensions += *extension;
+        } else {
+            separated_extensions += fmt::format("{},", *extension);
+        }
+    }
+    return separated_extensions;
+}
+
+} // Anonymous namespace
+
 RendererVulkan::RendererVulkan(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window)
-    : RendererBase{window, secondary_window}, instance{window, Settings::values.physical_device},
+    : RendererBase{window, secondary_window}, telemetry_session{Core::System::GetInstance().TelemetrySession()},
+      instance{window, Settings::values.physical_device},
       scheduler{instance, renderpass_cache, *this},
       renderpass_cache{instance, scheduler}, desc_manager{instance, scheduler},
       runtime{instance, scheduler, renderpass_cache, desc_manager},
       swapchain{instance, scheduler, renderpass_cache},
       vertex_buffer{instance, scheduler, VERTEX_BUFFER_SIZE, vk::BufferUsageFlagBits::eVertexBuffer, {}},
       rasterizer{render_window, instance, scheduler, desc_manager, runtime, renderpass_cache} {
-
-    auto& telemetry_session = Core::System::GetInstance().TelemetrySession();
-    constexpr auto user_system = Common::Telemetry::FieldType::UserSystem;
-    telemetry_session.AddField(user_system, "GPU_Vendor", "NVIDIA");
-    telemetry_session.AddField(user_system, "GPU_Model", "GTX 1650");
-    telemetry_session.AddField(user_system, "GPU_Vulkan_Version", "Vulkan 1.1");
-
+    Report();
     window.mailbox = nullptr;
 }
 
@@ -982,5 +1022,28 @@ void RendererVulkan::FlushBuffers() {
     rasterizer.FlushBuffers();
     runtime.FlushBuffers();
 }
+
+void RendererVulkan::Report() const {
+    const std::string vendor_name{instance.GetVendorName()};
+    const std::string model_name{instance.GetModelName()};
+    const std::string driver_version = GetDriverVersion(instance);
+    const std::string driver_name = fmt::format("{} {}", vendor_name, driver_version);
+
+    const std::string api_version = GetReadableVersion(instance.ApiVersion());
+
+    const std::string extensions = BuildCommaSeparatedExtensions(instance.GetAvailableExtensions());
+
+    LOG_INFO(Render_Vulkan, "Driver: {}", driver_name);
+    LOG_INFO(Render_Vulkan, "Device: {}", model_name);
+    LOG_INFO(Render_Vulkan, "Vulkan: {}", api_version);
+
+    static constexpr auto field = Common::Telemetry::FieldType::UserSystem;
+    telemetry_session.AddField(field, "GPU_Vendor", vendor_name);
+    telemetry_session.AddField(field, "GPU_Model", model_name);
+    telemetry_session.AddField(field, "GPU_Vulkan_Driver", driver_name);
+    telemetry_session.AddField(field, "GPU_Vulkan_Version", api_version);
+    telemetry_session.AddField(field, "GPU_Vulkan_Extensions", extensions);
+}
+
 
 } // namespace Vulkan

@@ -87,7 +87,7 @@ public:
 
     /// Returns true if logic operations need shader emulation
     bool NeedsLogicOpEmulation() const {
-        return !device_features.logicOp;
+        return !features.logicOp;
     }
 
     /// Returns true when VK_KHR_timeline_semaphore is supported
@@ -112,22 +112,52 @@ public:
 
     /// Returns the vendor ID of the physical device
     u32 GetVendorID() const {
-        return device_properties.vendorID;
+        return properties.vendorID;
     }
 
     /// Returns the device ID of the physical device
     u32 GetDeviceID() const {
-        return device_properties.deviceID;
+        return properties.deviceID;
+    }
+
+    /// Returns the driver ID.
+    vk::DriverId GetDriverID() const {
+        return driver_id;
+    }
+
+    /// Returns the current driver version provided in Vulkan-formatted version numbers.
+    u32 GetDriverVersion() const {
+        return properties.driverVersion;
+    }
+
+    /// Returns the current Vulkan API version provided in Vulkan-formatted version numbers.
+    u32 ApiVersion() const {
+        return properties.apiVersion;
+    }
+
+    /// Returns the vendor name reported from Vulkan.
+    std::string_view GetVendorName() const {
+        return vendor_name;
+    }
+
+    /// Returns the list of available extensions.
+    const std::vector<std::string>& GetAvailableExtensions() const {
+        return available_extensions;
+    }
+
+    /// Returns the device name.
+    std::string_view GetModelName() const {
+        return properties.deviceName;
     }
 
     /// Returns the pipeline cache unique identifier
     const auto GetPipelineCacheUUID() const {
-        return device_properties.pipelineCacheUUID;
+        return properties.pipelineCacheUUID;
     }
 
     /// Returns the minimum required alignment for uniforms
     vk::DeviceSize UniformMinAlignment() const {
-        return device_properties.limits.minUniformBufferOffsetAlignment;
+        return properties.limits.minUniformBufferOffsetAlignment;
     }
 
 private:
@@ -143,19 +173,31 @@ private:
     /// Creates the VMA allocator handle
     void CreateAllocator();
 
+    /// Collects telemetry information from the device.
+    void CollectTelemetryParameters();
+
+    /// Collects information about attached tools.
+    void CollectToolingInfo();
+
+    /// Collects information about the device's local memory.
+    void CollectPhysicalMemoryInfo();
+
 private:
     static vk::DynamicLoader dl;
     vk::Device device;
     vk::PhysicalDevice physical_device;
     vk::Instance instance;
     vk::SurfaceKHR surface;
-    vk::PhysicalDeviceProperties device_properties;
-    vk::PhysicalDeviceFeatures device_features;
+    vk::PhysicalDeviceProperties properties;
+    vk::PhysicalDeviceFeatures features;
+    vk::DriverIdKHR driver_id;
+    std::string vendor_name;
     VmaAllocator allocator;
     vk::Queue present_queue;
     vk::Queue graphics_queue;
     std::vector<vk::PhysicalDevice> physical_devices;
     std::array<FormatTraits, VideoCore::PIXEL_FORMAT_COUNT> format_table;
+    std::vector<std::string> available_extensions;
     u32 present_queue_family_index = 0;
     u32 graphics_queue_family_index = 0;
     bool timeline_semaphores = false;

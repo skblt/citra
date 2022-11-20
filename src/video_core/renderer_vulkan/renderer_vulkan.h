@@ -17,6 +17,10 @@
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 
+namespace Core {
+class TelemetrySession;
+}
+
 namespace Layout {
 struct FramebufferLayout;
 }
@@ -102,7 +106,11 @@ private:
     void LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& framebuffer,
                             ScreenInfo& screen_info, bool right_eye);
 
+    void Report() const;
+
 private:
+    Core::TelemetrySession& telemetry_session;
+
     Instance instance;
     Scheduler scheduler;
     RenderpassCache renderpass_cache;
