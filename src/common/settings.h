@@ -55,6 +55,7 @@ enum class StereoRenderOption : u32 {
 enum class AudioEmulation : u32 { HLE = 0, LLE = 1, LLEMultithreaded = 2 };
 
 namespace NativeButton {
+
 enum Values {
     A,
     B,
@@ -110,6 +111,7 @@ static const std::array<const char*, NumButtons> mapping = {{
     "button_zr",
     "button_home",
 }};
+
 } // namespace NativeButton
 
 namespace NativeAnalog {

@@ -1523,10 +1523,10 @@ void GMainWindow::OnGameListShowList(bool show) {
 };
 
 void GMainWindow::OnGameListOpenPerGameProperties(const QString& file) {
-    u64 title_id{};
     const auto loader = Loader::GetLoader(file.toStdString());
 
-    if (loader == nullptr || loader->ReadProgramId(title_id) != Loader::ResultStatus::Success) {
+    u64 title_id{};
+    if (!loader || loader->ReadProgramId(title_id) != Loader::ResultStatus::Success) {
         QMessageBox::information(this, tr("Properties"),
                                  tr("The game properties could not be loaded."));
         return;

@@ -19,17 +19,6 @@
 
 namespace Settings {
 
-[[nodiscard]] std::string_view ToString(AudioEmulation emulation) {
-    switch (emulation) {
-    case AudioEmulation::HLE:
-        return "HLE";
-    case AudioEmulation::LLE:
-        return "LLE";
-    case AudioEmulation::LLEMultithreaded:
-        return "LLE Multithreaded";
-    }
-}
-
 Values values = {};
 static bool configuring_global = true;
 
@@ -88,6 +77,17 @@ void LogSettings() {
         LOG_INFO(Config, "{}: {}", name, value);
     };
 
+    const auto to_string = [](AudioEmulation emulation) ->  std::string_view {
+        switch (emulation) {
+        case AudioEmulation::HLE:
+            return "HLE";
+        case AudioEmulation::LLE:
+            return "LLE";
+        case AudioEmulation::LLEMultithreaded:
+            return "LLE Multithreaded";
+        }
+    };
+
     LOG_INFO(Config, "Citra Configuration:");
     log_setting("Core_UseCpuJit", values.use_cpu_jit.GetValue());
     log_setting("Core_CPUClockPercentage", values.cpu_clock_percentage.GetValue());
@@ -112,7 +112,7 @@ void LogSettings() {
     log_setting("Utility_DumpTextures", values.dump_textures.GetValue());
     log_setting("Utility_CustomTextures", values.custom_textures.GetValue());
     log_setting("Utility_UseDiskShaderCache", values.use_disk_shader_cache.GetValue());
-    log_setting("Audio_Emulation", ToString(values.audio_emulation.GetValue()));
+    log_setting("Audio_Emulation", to_string(values.audio_emulation.GetValue()));
     log_setting("Audio_OutputEngine", values.sink_id.GetValue());
     log_setting("Audio_EnableAudioStretching", values.enable_audio_stretching.GetValue());
     log_setting("Audio_OutputDevice", values.audio_device_id.GetValue());

@@ -42,8 +42,6 @@ ConfigurePerGame::ConfigurePerGame(QWidget* parent, u64 title_id_, const QString
     // remove Help question mark button from the title bar
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
-    // addons_tab->SetTitleId(title_id);
-
     scene = new QGraphicsScene;
     ui->icon_view->setScene(scene);
 
@@ -59,7 +57,6 @@ ConfigurePerGame::ConfigurePerGame(QWidget* parent, u64 title_id_, const QString
 ConfigurePerGame::~ConfigurePerGame() = default;
 
 void ConfigurePerGame::ApplyConfiguration() {
-    // addons_tab->ApplyConfiguration();
     general_tab->ApplyConfiguration();
     system_tab->ApplyConfiguration();
     graphics_tab->ApplyConfiguration();
@@ -102,8 +99,6 @@ void ConfigurePerGame::LoadConfiguration() {
     if (filename.empty()) {
         return;
     }
-
-    // addons_tab->LoadFromFile(file);
 
     ui->display_title_id->setText(
         QStringLiteral("%1").arg(title_id, 16, 16, QLatin1Char{'0'}).toUpper());
