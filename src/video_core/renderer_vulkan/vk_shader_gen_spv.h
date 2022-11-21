@@ -41,6 +41,9 @@ public:
     /// Writes the code to emulate the specified TEV stage
     void WriteTevStage(s32 index);
 
+    /// Defines the tex3 proctex sampling function
+    void DefineProcTexSampler();
+
     /// Writes the if-statement condition used to evaluate alpha testing.
     /// Returns true if the fragment was discarded
     [[nodiscard]] bool WriteAlphaTestCondition(Pica::FramebufferRegs::CompareFunc func);
@@ -51,8 +54,28 @@ public:
     /// Samples the current fragment texel from shadow plane
     [[nodiscard]] Id SampleShadow();
 
+    [[nodiscard]] Id AppendProcTexShiftOffset(Id v, Pica::TexturingRegs::ProcTexShift mode,
+                                              Pica::TexturingRegs::ProcTexClamp clamp_mode);
+
+    [[nodiscard]] Id AppendProcTexClamp(Id var, Pica::TexturingRegs::ProcTexClamp mode);
+
+    [[nodiscard]] Id AppendProcTexCombineAndMap(Pica::TexturingRegs::ProcTexCombiner combiner,
+                                                Id u, Id v, Id offset);
+
     /// Rounds the provided variable to the nearest 1/255th
     [[nodiscard]] Id Byteround(Id variable_id, u32 size = 1);
+
+    /// LUT sampling uitlity
+    /// For NoiseLUT/ColorMap/AlphaMap, coord=0.0 is lut[0], coord=127.0/128.0 is lut[127] and
+    /// coord=1.0 is lut[127]+lut_diff[127]. For other indices, the result is interpolated using
+    /// value entries and difference entries.
+    [[nodiscard]] Id ProcTexLookupLUT(Id offset, Id coord);
+
+    /// Generates random noise with proctex
+    [[nodiscard]] Id ProcTexNoiseCoef(Id x);
+
+    /// Samples a color value from the rgba texture lut
+    [[nodiscard]] Id SampleProcTexColor(Id lut_coord, Id level);
 
     /// Lookups the lighting LUT at the provided lut_index
     [[nodiscard]] Id LookupLightingLUT(Id lut_index, Id index, Id delta);
@@ -73,9 +96,15 @@ public:
 
     /// Writes the combiner function for the alpha component for the specified TEV stage operation
     [[nodiscard]] Id AppendAlphaCombiner(Pica::TexturingRegs::TevStageConfig::Operation operation);
-    bool dump_shader{false};
 
 private:
+    /// Creates a constant array of integers
+    template <typename... T>
+    void InitTableS32(Id table, T... elems) {
+        const Id table_const{ConstS32(elems...)};
+        OpStore(table, table_const);
+    };
+
     /// Loads the member specified from the shader_data uniform struct
     template <typename... Ids>
     [[nodiscard]] Id GetShaderDataMember(Id type, Ids... ids) {
@@ -114,9 +143,11 @@ private:
         return uniform_id;
     }
 
+    template <bool global = true>
     [[nodiscard]] Id DefineVar(Id type, spv::StorageClass storage_class) {
         const Id pointer_type_id{TypePointer(storage_class, type)};
-        return AddGlobalVariable(pointer_type_id, storage_class);
+        return global ? AddGlobalVariable(pointer_type_id, storage_class)
+                      : AddLocalVariable(pointer_type_id, storage_class);
     }
 
     /// Returns the id of a signed integer constant of value
@@ -126,10 +157,11 @@ private:
 
     template <typename... Args>
     [[nodiscard]] Id ConstU32(Args&&... values) {
-        constexpr auto size = sizeof...(values);
-        static_assert(size >= 2 && size <= 4);
+        constexpr u32 size = static_cast<u32>(sizeof...(values));
+        static_assert(size >= 2);
         const std::array constituents{Constant(u32_id, values)...};
-        return ConstantComposite(uvec_ids.Get(size), constituents);
+        const Id type = size <= 4 ? uvec_ids.Get(size) : TypeArray(u32_id, ConstU32(size));
+        return ConstantComposite(type, constituents);
     }
 
     /// Returns the id of a signed integer constant of value
@@ -139,10 +171,11 @@ private:
 
     template <typename... Args>
     [[nodiscard]] Id ConstS32(Args&&... values) {
-        constexpr auto size = sizeof...(values);
-        static_assert(size >= 2 && size <= 4);
+        constexpr u32 size = static_cast<u32>(sizeof...(values));
+        static_assert(size >= 2);
         const std::array constituents{Constant(i32_id, values)...};
-        return ConstantComposite(ivec_ids.Get(size), constituents);
+        const Id type = size <= 4 ? ivec_ids.Get(size) : TypeArray(i32_id, ConstU32(size));
+        return ConstantComposite(type, constituents);
     }
 
     /// Returns the id of a float constant of value
@@ -152,10 +185,11 @@ private:
 
     template <typename... Args>
     [[nodiscard]] Id ConstF32(Args... values) {
-        constexpr auto size = sizeof...(values);
-        static_assert(size >= 2 && size <= 4);
+        constexpr u32 size = static_cast<u32>(sizeof...(values));
+        static_assert(size >= 2);
         const std::array constituents{Constant(f32_id, values)...};
-        return ConstantComposite(vec_ids.Get(size), constituents);
+        const Id type = size <= 4 ? vec_ids.Get(size) : TypeArray(f32_id, ConstU32(size));
+        return ConstantComposite(type, constituents);
     }
 
     void DefineArithmeticTypes();
@@ -215,6 +249,8 @@ private:
     Id shadow_texture_nz_id{};
 
     Id texture_buffer_lut_lf{};
+    Id texture_buffer_lut_rg{};
+    Id texture_buffer_lut_rgba{};
 
     Id rounded_primary_color{};
     Id primary_fragment_color{};
@@ -229,6 +265,11 @@ private:
     Id alpha_results_1{};
     Id alpha_results_2{};
     Id alpha_results_3{};
+
+    Id proctex_func{};
+    Id noise1d_table{};
+    Id noise2d_table{};
+    Id lut_offsets{};
 };
 
 /**

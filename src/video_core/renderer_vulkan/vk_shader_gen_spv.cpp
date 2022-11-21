@@ -20,6 +20,9 @@ FragmentModule::FragmentModule(const PicaFSConfig& config) : Sirit::Module{0x000
     DefineArithmeticTypes();
     DefineUniformStructs();
     DefineInterface();
+    if (config.state.proctex.enable) {
+        DefineProcTexSampler();
+    }
     DefineEntryPoint();
 }
 
@@ -505,9 +508,15 @@ void FragmentModule::WriteTevStage(s32 index) {
     }
 }
 
+using ProcTexClamp = TexturingRegs::ProcTexClamp;
+using ProcTexShift = TexturingRegs::ProcTexShift;
+using ProcTexCombiner = TexturingRegs::ProcTexCombiner;
+using ProcTexFilter = TexturingRegs::ProcTexFilter;
+
 bool FragmentModule::WriteAlphaTestCondition(FramebufferRegs::CompareFunc func) {
     using CompareFunc = FramebufferRegs::CompareFunc;
 
+    // The compare func is to keep the fragment so we invert it to discard it
     const auto Compare = [this, func](Id alpha, Id alphatest_ref) {
         switch (func) {
         case CompareFunc::Equal:
@@ -625,13 +634,14 @@ Id FragmentModule::SampleTexture(u32 texture_unit) {
     case 1:
         return SampleLod(tex1_id, tex1_sampler_id, texcoord1_id);
     case 2:
-        if (state.texture2_use_coord1)
+        if (state.texture2_use_coord1) {
             return SampleLod(tex2_id, tex2_sampler_id, texcoord1_id);
-        else
+        } else {
             return SampleLod(tex2_id, tex2_sampler_id, texcoord2_id);
+        }
     case 3:
-        if (false && state.proctex.enable) {
-            //return "ProcTex()";
+        if (state.proctex.enable) {
+            return OpFunctionCall(vec_ids.Get(4), proctex_func);
         } else {
             LOG_DEBUG(Render_Vulkan, "Using Texture3 without enabling it");
             return zero_vec;
@@ -645,13 +655,12 @@ Id FragmentModule::SampleTexture(u32 texture_unit) {
 Id FragmentModule::CompareShadow(Id pixel, Id z) {
     const Id pixel_d24{OpShiftRightLogical(u32_id, pixel, ConstS32(8))};
     const Id pixel_s8{OpConvertUToF(f32_id, OpBitwiseAnd(u32_id, pixel, ConstU32(255u)))};
-    const Id s8_mul{OpFMul(f32_id, pixel_s8, ConstF32(1.f / 255.f))};
+    const Id s8_f32{OpFMul(f32_id, pixel_s8, ConstF32(1.f / 255.f))};
     const Id d24_leq_z{OpULessThanEqual(bool_id, pixel_d24, z)};
-    return OpSelect(f32_id, d24_leq_z, ConstF32(0.f), s8_mul);
+    return OpSelect(f32_id, d24_leq_z, ConstF32(0.f), s8_f32);
 }
 
 Id FragmentModule::SampleShadow() {
-    dump_shader = true;
     const Id texcoord0{OpLoad(vec_ids.Get(2), texcoord0_id)};
     const Id texcoord0_w{OpLoad(f32_id, texcoord0_w_id)};
     const Id abs_min_w{OpFMul(f32_id, OpFMin(f32_id, OpFAbs(f32_id, texcoord0_w),
@@ -701,6 +710,200 @@ Id FragmentModule::SampleShadow() {
     return OpCompositeConstruct(vec_ids.Get(4), val, val, val, val);
 }
 
+Id FragmentModule::AppendProcTexShiftOffset(Id v, ProcTexShift mode, ProcTexClamp clamp_mode) {
+    const Id offset{clamp_mode == ProcTexClamp::MirroredRepeat ? ConstF32(1.f) : ConstF32(0.5f)};
+    const Id v_i32{OpConvertFToS(i32_id, v)};
+
+    const auto Shift = [&](bool even) -> Id {
+        const Id temp1{OpSDiv(i32_id, even ? OpIAdd(i32_id, v_i32, ConstS32(1)) : v_i32, ConstS32(2))};
+        const Id temp2{OpConvertSToF(f32_id, OpSMod(i32_id, temp1, ConstS32(2)))};
+        return OpFMul(f32_id, offset, temp2);
+    };
+
+    switch (mode) {
+    case ProcTexShift::None:
+        return ConstF32(0.f);
+    case ProcTexShift::Odd:
+        return Shift(false);
+    case ProcTexShift::Even:
+        return Shift(true);
+    default:
+        LOG_CRITICAL(Render_Vulkan, "Unknown shift mode {}", mode);
+        return ConstF32(0.f);
+    }
+}
+
+Id FragmentModule::AppendProcTexClamp(Id var, ProcTexClamp mode) {
+    const Id zero{ConstF32(0.f)};
+    const Id one{ConstF32(1.f)};
+
+    const auto MirroredRepeat = [&]() -> Id {
+        const Id fract{OpFract(f32_id, var)};
+        const Id cond{OpIEqual(bool_id, OpSMod(i32_id, OpConvertFToS(i32_id, var), ConstS32(2)), ConstS32(0))};
+        return OpSelect(f32_id, cond, fract, OpFSub(f32_id, one, fract));
+    };
+
+    switch (mode) {
+    case ProcTexClamp::ToZero:
+        return OpSelect(f32_id, OpFOrdGreaterThan(bool_id, var, one), zero, var);
+    case ProcTexClamp::ToEdge:
+        return OpFMin(f32_id, var, one);
+    case ProcTexClamp::SymmetricalRepeat:
+        return OpFract(f32_id, var);
+    case ProcTexClamp::MirroredRepeat:
+        return MirroredRepeat();
+    case ProcTexClamp::Pulse:
+        return OpSelect(f32_id, OpFOrdGreaterThan(bool_id, var, ConstF32(0.5f)), one, zero);
+    default:
+        LOG_CRITICAL(Render_Vulkan, "Unknown clamp mode {}", mode);
+        return OpFMin(f32_id, var, one);
+    }
+}
+
+Id FragmentModule::AppendProcTexCombineAndMap(ProcTexCombiner combiner, Id u, Id v, Id offset) {
+    const auto combined = [&]() -> Id {
+        const Id u2v2{OpFma(f32_id, u, u, OpFMul(f32_id, v, v))};
+        switch (combiner) {
+        case ProcTexCombiner::U:
+            return u;
+        case ProcTexCombiner::U2:
+            return OpFMul(f32_id, u, u);
+        case TexturingRegs::ProcTexCombiner::V:
+            return v;
+        case TexturingRegs::ProcTexCombiner::V2:
+            return OpFMul(f32_id, v, v);
+        case TexturingRegs::ProcTexCombiner::Add:
+            return OpFMul(f32_id, OpFAdd(f32_id, u, v), ConstF32(0.5f));
+        case TexturingRegs::ProcTexCombiner::Add2:
+            return OpFMul(f32_id, u2v2, ConstF32(0.5f));
+        case TexturingRegs::ProcTexCombiner::SqrtAdd2:
+            return OpFMin(f32_id, OpSqrt(f32_id, u2v2), ConstF32(1.f));
+        case TexturingRegs::ProcTexCombiner::Min:
+            return OpFMin(f32_id, u, v);
+        case TexturingRegs::ProcTexCombiner::Max:
+            return OpFMax(f32_id, u, v);
+        case TexturingRegs::ProcTexCombiner::RMax: {
+            const Id r{OpFma(f32_id, OpFAdd(f32_id, u, v), ConstF32(0.5f), OpSqrt(f32_id, u2v2))};
+            return OpFMin(f32_id, OpFMul(f32_id, r, ConstF32(0.5f)), ConstF32(1.f));
+        }
+        default:
+            LOG_CRITICAL(Render_Vulkan, "Unknown combiner {}", combiner);
+            return ConstF32(0.f);
+        }
+    }();
+
+    return ProcTexLookupLUT(offset, combined);
+}
+
+void FragmentModule::DefineProcTexSampler() {
+    const Id func_type{TypeFunction(vec_ids.Get(4))};
+    proctex_func = OpFunction(vec_ids.Get(4), spv::FunctionControlMask::MaskNone, func_type);
+    AddLabel(OpLabel());
+
+    // Define noise tables at the beginning of the function
+    if (config.state.proctex.noise_enable) {
+        noise1d_table = DefineVar<false>(TypeArray(i32_id, ConstU32(16u)), spv::StorageClass::Function);
+        noise2d_table = DefineVar<false>(TypeArray(i32_id, ConstU32(16u)), spv::StorageClass::Function);
+    }
+    lut_offsets = DefineVar<false>(TypeArray(i32_id, ConstU32(8u)), spv::StorageClass::Function);
+
+    Id uv{};
+    if (config.state.proctex.coord < 3) {
+        Id texcoord_id{};
+        switch (config.state.proctex.coord.Value()) {
+        case 0: texcoord_id = texcoord0_id; break;
+        case 1: texcoord_id = texcoord1_id; break;
+        case 2: texcoord_id = texcoord2_id; break;
+        }
+
+        const Id texcoord{OpLoad(vec_ids.Get(2), texcoord_id)};
+        uv = OpFAbs(vec_ids.Get(2), texcoord);
+    } else {
+        LOG_CRITICAL(Render_Vulkan, "Unexpected proctex.coord >= 3");
+        uv = OpFAbs(vec_ids.Get(2), OpLoad(vec_ids.Get(2), texcoord0_id));
+    }
+
+    // This LOD formula is the same as the LOD upper limit defined in OpenGL.
+    // f(x, y) <= m_u + m_v + m_w
+    // (See OpenGL 4.6 spec, 8.14.1 - Scale Factor and Level-of-Detail)
+    // Note: this is different from the one normal 2D textures use.
+    const Id uv_1{OpFAbs(vec_ids.Get(2), OpDPdx(vec_ids.Get(2), uv))};
+    const Id uv_2{OpFAbs(vec_ids.Get(2), OpDPdy(vec_ids.Get(2), uv))};
+    const Id duv{OpFMax(vec_ids.Get(2), uv_1, uv_2)};
+
+    // unlike normal texture, the bias is inside the log2
+    const Id proctex_bias{GetShaderDataMember(f32_id, ConstS32(16))};
+    const Id bias{OpFMul(f32_id, ConstF32(static_cast<f32>(config.state.proctex.lut_width)), proctex_bias)};
+    const Id duv_xy{OpFAdd(f32_id, OpCompositeExtract(f32_id, duv, 0), OpCompositeExtract(f32_id, duv, 1))};
+
+    Id lod{OpLog2(f32_id, OpFMul(f32_id, OpFAbs(f32_id, bias), duv_xy))};
+    lod = OpSelect(f32_id, OpFOrdEqual(bool_id, proctex_bias, ConstF32(0.f)), ConstF32(0.f), lod);
+    lod = OpFClamp(f32_id, lod, ConstF32(std::max(0.0f, static_cast<float>(config.state.proctex.lod_min))),
+                                ConstF32(std::min(7.0f, static_cast<float>(config.state.proctex.lod_max))));
+
+    // Get shift offset before noise generation
+    const Id u_shift{AppendProcTexShiftOffset(OpCompositeExtract(f32_id, uv, 1),
+                                              config.state.proctex.u_shift,
+                                              config.state.proctex.u_clamp)};
+    const Id v_shift{AppendProcTexShiftOffset(OpCompositeExtract(f32_id, uv, 0),
+                                              config.state.proctex.v_shift,
+                                              config.state.proctex.v_clamp)};
+
+    // Generate noise
+    if (config.state.proctex.noise_enable) {
+        const Id proctex_noise_a{GetShaderDataMember(vec_ids.Get(2), ConstS32(22))};
+        const Id noise_coef{ProcTexNoiseCoef(uv)};
+        uv = OpFAdd(vec_ids.Get(2), uv, OpVectorTimesScalar(vec_ids.Get(2), proctex_noise_a, noise_coef));
+        uv = OpFAbs(vec_ids.Get(2), uv);
+    }
+
+    // Shift
+    Id u{OpFAdd(f32_id, OpCompositeExtract(f32_id, uv, 0), u_shift)};
+    Id v{OpFAdd(f32_id, OpCompositeExtract(f32_id, uv, 1), v_shift)};
+
+    // Clamp
+    u = AppendProcTexClamp(u, config.state.proctex.u_clamp);
+    v = AppendProcTexClamp(v, config.state.proctex.v_clamp);
+
+    // Combine and map
+    const Id proctex_color_map_offset{GetShaderDataMember(i32_id, ConstS32(12))};
+    const Id lut_coord{AppendProcTexCombineAndMap(config.state.proctex.color_combiner,
+                                                  u, v, proctex_color_map_offset)};
+
+    Id final_color{};
+    switch (config.state.proctex.lut_filter) {
+    case ProcTexFilter::Linear:
+    case ProcTexFilter::Nearest: {
+        final_color = SampleProcTexColor(lut_coord, ConstS32(0));
+        break;
+    }
+    case ProcTexFilter::NearestMipmapNearest:
+    case ProcTexFilter::LinearMipmapNearest: {
+        final_color = SampleProcTexColor(lut_coord, OpConvertFToS(i32_id, OpRound(f32_id, lod)));
+        break;
+    }
+    case ProcTexFilter::NearestMipmapLinear:
+    case ProcTexFilter::LinearMipmapLinear: {
+        const Id lod_i{OpConvertFToS(i32_id, lod)};
+        const Id lod_f{OpFract(f32_id, lod)};
+        const Id color1{SampleProcTexColor(lut_coord, lod_i)};
+        const Id color2{SampleProcTexColor(lut_coord, OpIAdd(i32_id, lod_i, ConstS32(1)))};
+        final_color = OpFMix(f32_id, color1, color2, lod_f);
+        break;
+    }
+    }
+
+    if (config.state.proctex.separate_alpha) {
+        const Id proctex_alpha_map_offset{GetShaderDataMember(i32_id, ConstS32(13))};
+        const Id final_alpha{AppendProcTexCombineAndMap(config.state.proctex.alpha_combiner, u, v,
+                                                        proctex_alpha_map_offset)};
+        final_color = OpCompositeConstruct(vec_ids.Get(4), final_color, final_alpha);
+    }
+
+    OpReturnValue(final_color);
+    OpFunctionEnd();
+}
+
 Id FragmentModule::Byteround(Id variable_id, u32 size) {
     if (size > 1) {
         const Id scaled_vec_id{OpVectorTimesScalar(vec_ids.Get(size), variable_id, ConstF32(255.f))};
@@ -710,6 +913,121 @@ Id FragmentModule::Byteround(Id variable_id, u32 size) {
         const Id rounded_id{OpRound(f32_id, OpFMul(f32_id, variable_id, ConstF32(255.f)))};
         return OpFMul(f32_id, rounded_id, ConstF32(1.f / 255.f));
     }
+}
+
+Id FragmentModule::ProcTexLookupLUT(Id offset, Id coord) {
+    coord = OpFMul(f32_id, coord, ConstF32(128.f));
+    const Id index_i{OpFClamp(f32_id, OpFloor(f32_id, coord), ConstF32(0.f), ConstF32(127.0f))};
+    const Id index_f{OpFSub(f32_id, coord, index_i)};
+    const Id p{OpIAdd(i32_id, OpConvertFToS(i32_id, index_i), offset)};
+    if (!Sirit::ValidId(texture_buffer_lut_rg)) {
+        const Id sampled_image{TypeSampledImage(image_buffer_id)};
+        texture_buffer_lut_rg = OpLoad(sampled_image, texture_buffer_lut_rg_id);
+    }
+    const Id entry{OpImageFetch(vec_ids.Get(4), OpImage(image_buffer_id, texture_buffer_lut_rg), p)};
+    const Id entry_r{OpCompositeExtract(f32_id, entry, 0)};
+    const Id entry_g{OpCompositeExtract(f32_id, entry, 1)};
+    return OpFClamp(f32_id, OpFma(f32_id, entry_g, index_f, entry_r), ConstF32(0.f), ConstF32(1.f));
+};
+
+Id FragmentModule::ProcTexNoiseCoef(Id x) {
+    // Noise utility
+    const auto ProcTexNoiseRand1D = [&](Id v) -> Id {
+        InitTableS32(noise1d_table, 0,4,10,8,4,9,7,12,5,15,13,14,11,15,2,11);
+        const Id table_ptr{TypePointer(spv::StorageClass::Function, i32_id)};
+        const Id left_tmp{OpIAdd(i32_id, OpSMod(i32_id, v, ConstS32(9)), ConstS32(2))};
+        const Id left{OpBitwiseAnd(i32_id, OpIMul(i32_id, left_tmp, ConstS32(3)), ConstS32(0xF))};
+        const Id table_index{OpBitwiseAnd(i32_id, OpSDiv(i32_id, v, ConstS32(9)), ConstS32(0xF))};
+        const Id table_value{OpLoad(i32_id, OpAccessChain(table_ptr, noise1d_table, table_index))};
+        return OpBitwiseXor(i32_id, left, table_value);
+    };
+
+    const auto ProcTexNoiseRand2D = [&](Id point) -> Id {
+        InitTableS32(noise2d_table, 10,2,15,8,0,7,4,5,5,13,2,6,13,9,3,14);
+        const Id table_ptr{TypePointer(spv::StorageClass::Function, i32_id)};
+        const Id point_x{OpConvertFToS(i32_id, OpCompositeExtract(f32_id, point, 0))};
+        const Id point_y{OpConvertFToS(i32_id, OpCompositeExtract(f32_id, point, 1))};
+        const Id u2{ProcTexNoiseRand1D(point_x)};
+        const Id cond{OpIEqual(bool_id, OpBitwiseAnd(i32_id, u2, ConstS32(3)), ConstS32(1))};
+        const Id table_value{OpLoad(i32_id, OpAccessChain(table_ptr, noise2d_table, u2))};
+        Id v2{ProcTexNoiseRand1D(point_y)};
+        v2 = OpIAdd(i32_id, v2, OpSelect(i32_id, cond, ConstS32(4), ConstS32(0)));
+        v2 = OpBitwiseXor(i32_id, v2, OpIMul(i32_id, OpBitwiseAnd(i32_id, u2, ConstS32(1)), ConstS32(6)));
+        v2 = OpIAdd(i32_id, v2, OpIAdd(i32_id, u2, ConstS32(10)));
+        v2 = OpBitwiseAnd(i32_id, v2, ConstS32(0xF));
+        v2 = OpBitwiseXor(i32_id, v2, table_value);
+        return OpFma(f32_id, OpConvertSToF(f32_id, v2), ConstF32(2.f / 15.f), ConstF32(-1.f));
+    };
+
+    const Id proctex_noise_f{GetShaderDataMember(vec_ids.Get(2), ConstS32(21))};
+    const Id proctex_noise_p{GetShaderDataMember(vec_ids.Get(2), ConstS32(23))};
+    const Id grid{OpFMul(vec_ids.Get(2), OpVectorTimesScalar(vec_ids.Get(2), proctex_noise_f, ConstF32(9.f)),
+                                         OpFAbs(vec_ids.Get(2), OpFAdd(vec_ids.Get(2), x, proctex_noise_p)))};
+    const Id point{OpFloor(vec_ids.Get(2), grid)};
+    const Id frac{OpFSub(vec_ids.Get(2), grid, point)};
+    const Id frac_x{OpCompositeExtract(f32_id, frac, 0)};
+    const Id frac_y{OpCompositeExtract(f32_id, frac, 1)};
+    const Id frac_x_y{OpFAdd(f32_id, frac_x, frac_y)};
+    const Id g0{OpFMul(f32_id, ProcTexNoiseRand2D(point), frac_x_y)};
+    const Id frac_x_y_min_one{OpFSub(f32_id, frac_x_y, ConstF32(1.f))};
+    const Id g1{OpFMul(f32_id, ProcTexNoiseRand2D(OpFAdd(vec_ids.Get(2), point, ConstF32(1.f, 0.f))),
+                               frac_x_y_min_one)};
+    const Id g2{OpFMul(f32_id, ProcTexNoiseRand2D(OpFAdd(vec_ids.Get(2), point, ConstF32(0.f, 1.f))),
+                               frac_x_y_min_one)};
+    const Id frac_x_y_min_two{OpFSub(f32_id, frac_x_y, ConstF32(2.f))};
+    const Id g3{OpFMul(f32_id, ProcTexNoiseRand2D(OpFAdd(vec_ids.Get(2), point, ConstF32(1.f, 1.f))),
+                               frac_x_y_min_two)};
+    const Id proctex_noise_lut_offset{GetShaderDataMember(i32_id, ConstS32(11))};
+    const Id x_noise{ProcTexLookupLUT(proctex_noise_lut_offset, frac_x)};
+    const Id y_noise{ProcTexLookupLUT(proctex_noise_lut_offset, frac_y)};
+    const Id x0{OpFMix(f32_id, g0, g1, x_noise)};
+    const Id x1{OpFMix(f32_id, g2, g3, x_noise)};
+    return OpFMix(f32_id, x0, x1, y_noise);
+}
+
+Id FragmentModule::SampleProcTexColor(Id lut_coord, Id level) {
+    const Id lut_width{OpShiftRightArithmetic(i32_id, ConstS32(config.state.proctex.lut_width), level)};
+    const Id lut_ptr{TypePointer(spv::StorageClass::Function, i32_id)};
+    // Offsets for level 4-7 seem to be hardcoded
+    InitTableS32(lut_offsets, config.state.proctex.lut_offset0, config.state.proctex.lut_offset1,
+                              config.state.proctex.lut_offset2, config.state.proctex.lut_offset3,
+                              0xF0, 0xF8, 0xFC, 0xFE);
+    const Id lut_offset{OpLoad(i32_id, OpAccessChain(lut_ptr, lut_offsets, level))};
+    // For the color lut, coord=0.0 is lut[offset] and coord=1.0 is lut[offset+width-1]
+    lut_coord = OpFMul(f32_id, lut_coord, OpConvertSToF(f32_id, OpISub(i32_id, lut_width, ConstS32(1))));
+
+    if (!Sirit::ValidId(texture_buffer_lut_rgba)) {
+        const Id sampled_image{TypeSampledImage(image_buffer_id)};
+        texture_buffer_lut_rgba = OpLoad(sampled_image, texture_buffer_lut_rgba_id);
+    }
+
+    const Id proctex_lut_offset{GetShaderDataMember(i32_id, ConstS32(14))};
+    const Id lut_rgba{OpImage(image_buffer_id, texture_buffer_lut_rgba)};
+
+    switch (config.state.proctex.lut_filter) {
+    case ProcTexFilter::Linear:
+    case ProcTexFilter::LinearMipmapLinear:
+    case ProcTexFilter::LinearMipmapNearest: {
+        const Id lut_index_i{OpIAdd(i32_id, OpConvertFToS(i32_id, lut_coord), lut_offset)};
+        const Id lut_index_f{OpFract(f32_id, lut_coord)};
+        const Id proctex_diff_lut_offset{GetShaderDataMember(i32_id, ConstS32(15))};
+        const Id p1{OpIAdd(i32_id, lut_index_i, proctex_lut_offset)};
+        const Id p2{OpIAdd(i32_id, lut_index_i, proctex_diff_lut_offset)};
+        const Id texel1{OpImageFetch(vec_ids.Get(4), lut_rgba, p1)};
+        const Id texel2{OpImageFetch(vec_ids.Get(4), lut_rgba, p2)};
+        return OpFAdd(vec_ids.Get(4), texel1, OpVectorTimesScalar(vec_ids.Get(4), texel2, lut_index_f));
+    }
+    case ProcTexFilter::Nearest:
+    case ProcTexFilter::NearestMipmapLinear:
+    case ProcTexFilter::NearestMipmapNearest: {
+        lut_coord = OpFAdd(f32_id, lut_coord, OpConvertSToF(f32_id, lut_offset));
+        const Id lut_coord_rounded{OpConvertFToS(i32_id, OpRound(f32_id, lut_coord))};
+        const Id p{OpIAdd(i32_id, lut_coord_rounded, proctex_lut_offset)};
+        return OpImageFetch(vec_ids.Get(4), lut_rgba, p);
+    }
+    }
+
+    return Id{};
 }
 
 Id FragmentModule::LookupLightingLUT(Id lut_index, Id index, Id delta) {
@@ -1021,8 +1339,6 @@ void FragmentModule::DefineInterface() {
     Decorate(gl_frag_coord_id, spv::Decoration::BuiltIn, spv::BuiltIn::FragCoord);
     Decorate(gl_frag_depth_id, spv::Decoration::BuiltIn, spv::BuiltIn::FragDepth);
 }
-
-static int i = 0;
 
 std::vector<u32> GenerateFragmentShaderSPV(const PicaFSConfig& config) {
     FragmentModule module{config};

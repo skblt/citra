@@ -1077,7 +1077,7 @@ float ProcTexNoiseRand2D(vec2 point) {
     v2 += 10 + u2;
     v2 &= 0xF;
     v2 ^= table[u2];
-    return -1.0 + float(v2) * 2.0/ 15.0;
+    return -1.0 + float(v2) * (2.0/15.0);
 }
 
 float ProcTexNoiseCoef(vec2 x) {

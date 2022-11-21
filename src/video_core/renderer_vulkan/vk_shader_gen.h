@@ -115,11 +115,11 @@ struct PicaFSConfigState {
             BitField<22, 2, Pica::TexturingRegs::ProcTexShift> u_shift;
             BitField<24, 2, Pica::TexturingRegs::ProcTexShift> v_shift;
         };
-        u8 lut_width;
-        u8 lut_offset0;
-        u8 lut_offset1;
-        u8 lut_offset2;
-        u8 lut_offset3;
+        s32 lut_width;
+        s32 lut_offset0;
+        s32 lut_offset1;
+        s32 lut_offset2;
+        s32 lut_offset3;
         u8 lod_min;
         u8 lod_max;
     } proctex;

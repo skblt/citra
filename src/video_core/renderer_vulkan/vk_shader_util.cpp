@@ -179,8 +179,7 @@ vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage, v
                        includer)) {
         LOG_CRITICAL(Render_Vulkan, "Shader Info Log:\n{}\n{}", shader->getInfoLog(),
                      shader->getInfoDebugLog());
-        LOG_CRITICAL(Render_Vulkan, "{}", code);
-        ASSERT(false);
+        fmt::print("{}", code);
         return VK_NULL_HANDLE;
     }
 
