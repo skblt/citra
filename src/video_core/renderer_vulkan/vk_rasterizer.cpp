@@ -433,10 +433,9 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     MICROPROFILE_SCOPE(Vulkan_Drawing);
     const auto& regs = Pica::g_state.regs;
 
-    const bool shadow_rendering = regs.framebuffer.output_merger.fragment_operation_mode ==
-                                  Pica::FramebufferRegs::FragmentOperationMode::Shadow;
-    const bool has_stencil =
-        regs.framebuffer.framebuffer.depth_format == Pica::FramebufferRegs::DepthFormat::D24S8;
+    const bool shadow_rendering = regs.framebuffer.IsShadowRendering();
+    const bool has_stencil = regs.framebuffer.HasStencil();
+
     const bool write_color_fb = shadow_rendering || pipeline_info.blending.color_write_mask.Value();
     const bool write_depth_fb = pipeline_info.IsDepthWriteEnabled();
     const bool using_color_fb =
@@ -446,17 +445,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         (write_depth_fb || regs.framebuffer.output_merger.depth_test_enable != 0 ||
          (has_stencil && pipeline_info.depth_stencil.stencil_test_enable));
 
-    const auto viewport_rect_unscaled = Common::Rectangle<s32>{
-        // These registers hold half-width and half-height, so must be multiplied by 2
-        regs.rasterizer.viewport_corner.x,  // left
-        regs.rasterizer.viewport_corner.y + // top
-            static_cast<s32>(Pica::float24::FromRaw(regs.rasterizer.viewport_size_y).ToFloat32() *
-                             2),
-        regs.rasterizer.viewport_corner.x + // right
-            static_cast<s32>(Pica::float24::FromRaw(regs.rasterizer.viewport_size_x).ToFloat32() *
-                             2),
-        regs.rasterizer.viewport_corner.y // bottom
-    };
+    const Common::Rectangle viewport_rect_unscaled = regs.rasterizer.GetViewportRect();
 
     auto [color_surface, depth_surface, surfaces_rect] =
         res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb, viewport_rect_unscaled);
@@ -767,17 +756,14 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     vertex_batch.clear();
 
     // Mark framebuffer surfaces as dirty
-    const VideoCore::Rect2D draw_rect_unscaled = {
-        draw_rect.left / res_scale, draw_rect.top / res_scale, draw_rect.right / res_scale,
-        draw_rect.bottom / res_scale};
-
-    if (color_surface != nullptr && write_color_fb) {
+    const Common::Rectangle draw_rect_unscaled{draw_rect / res_scale};
+    if (color_surface && write_color_fb) {
         auto interval = color_surface->GetSubRectInterval(draw_rect_unscaled);
         res_cache.InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
                                    color_surface);
     }
 
-    if (depth_surface != nullptr && write_depth_fb) {
+    if (depth_surface && write_depth_fb) {
         auto interval = depth_surface->GetSubRectInterval(draw_rect_unscaled);
         res_cache.InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
                                    depth_surface);
@@ -786,9 +772,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     return succeeded;
 }
 
-void RasterizerVulkan::NotifyPicaRegisterChanged(u32 id) {
-    const auto& regs = Pica::g_state.regs;
-
+void RasterizerVulkan::NotifyFixedFunctionPicaRegisterChanged(u32 id) {
     switch (id) {
     // Culling
     case PICA_REG_INDEX(rasterizer.cull_mode):
@@ -807,22 +791,10 @@ void RasterizerVulkan::NotifyPicaRegisterChanged(u32 id) {
         SyncClipCoef();
         break;
 
-    // Depth modifiers
-    case PICA_REG_INDEX(rasterizer.viewport_depth_range):
-        SyncDepthScale();
-        break;
-    case PICA_REG_INDEX(rasterizer.viewport_depth_near_plane):
-        SyncDepthOffset();
-        break;
-
-    // Depth buffering
-    case PICA_REG_INDEX(rasterizer.depthmap_enable):
-        shader_dirty = true;
-        break;
-
     // Blending
     case PICA_REG_INDEX(framebuffer.output_merger.alphablend_enable):
         if (instance.NeedsLogicOpEmulation()) {
+            // We need this in the fragment shader to emulate logic operations
             shader_dirty = true;
         }
         SyncBlendEnabled();
@@ -834,75 +806,7 @@ void RasterizerVulkan::NotifyPicaRegisterChanged(u32 id) {
         SyncBlendColor();
         break;
 
-    // Shadow texture
-    case PICA_REG_INDEX(texturing.shadow):
-        SyncShadowTextureBias();
-        break;
-
-    // Fog state
-    case PICA_REG_INDEX(texturing.fog_color):
-        SyncFogColor();
-        break;
-    case PICA_REG_INDEX(texturing.fog_lut_data[0]):
-    case PICA_REG_INDEX(texturing.fog_lut_data[1]):
-    case PICA_REG_INDEX(texturing.fog_lut_data[2]):
-    case PICA_REG_INDEX(texturing.fog_lut_data[3]):
-    case PICA_REG_INDEX(texturing.fog_lut_data[4]):
-    case PICA_REG_INDEX(texturing.fog_lut_data[5]):
-    case PICA_REG_INDEX(texturing.fog_lut_data[6]):
-    case PICA_REG_INDEX(texturing.fog_lut_data[7]):
-        uniform_block_data.fog_lut_dirty = true;
-        break;
-
-    // ProcTex state
-    case PICA_REG_INDEX(texturing.proctex):
-    case PICA_REG_INDEX(texturing.proctex_lut):
-    case PICA_REG_INDEX(texturing.proctex_lut_offset):
-        SyncProcTexBias();
-        shader_dirty = true;
-        break;
-
-    case PICA_REG_INDEX(texturing.proctex_noise_u):
-    case PICA_REG_INDEX(texturing.proctex_noise_v):
-    case PICA_REG_INDEX(texturing.proctex_noise_frequency):
-        SyncProcTexNoise();
-        break;
-
-    case PICA_REG_INDEX(texturing.proctex_lut_data[0]):
-    case PICA_REG_INDEX(texturing.proctex_lut_data[1]):
-    case PICA_REG_INDEX(texturing.proctex_lut_data[2]):
-    case PICA_REG_INDEX(texturing.proctex_lut_data[3]):
-    case PICA_REG_INDEX(texturing.proctex_lut_data[4]):
-    case PICA_REG_INDEX(texturing.proctex_lut_data[5]):
-    case PICA_REG_INDEX(texturing.proctex_lut_data[6]):
-    case PICA_REG_INDEX(texturing.proctex_lut_data[7]):
-        using Pica::TexturingRegs;
-        switch (regs.texturing.proctex_lut_config.ref_table.Value()) {
-        case TexturingRegs::ProcTexLutTable::Noise:
-            uniform_block_data.proctex_noise_lut_dirty = true;
-            break;
-        case TexturingRegs::ProcTexLutTable::ColorMap:
-            uniform_block_data.proctex_color_map_dirty = true;
-            break;
-        case TexturingRegs::ProcTexLutTable::AlphaMap:
-            uniform_block_data.proctex_alpha_map_dirty = true;
-            break;
-        case TexturingRegs::ProcTexLutTable::Color:
-            uniform_block_data.proctex_lut_dirty = true;
-            break;
-        case TexturingRegs::ProcTexLutTable::ColorDiff:
-            uniform_block_data.proctex_diff_lut_dirty = true;
-            break;
-        }
-        break;
-
-    // Alpha test
-    case PICA_REG_INDEX(framebuffer.output_merger.alpha_test):
-        SyncAlphaTest();
-        shader_dirty = true;
-        break;
-
-    // Sync GL stencil test + stencil write mask
+    // Sync VK stencil test + stencil write mask
     // (Pica stencil test function register also contains a stencil write mask)
     case PICA_REG_INDEX(framebuffer.output_merger.stencil_test.raw_func):
         SyncStencilTest();
@@ -913,7 +817,7 @@ void RasterizerVulkan::NotifyPicaRegisterChanged(u32 id) {
         SyncStencilTest();
         break;
 
-    // Sync GL depth test + depth and color write mask
+    // Sync VK depth test + depth and color write mask
     // (Pica depth test function register also contains a depth and color write mask)
     case PICA_REG_INDEX(framebuffer.output_merger.depth_test_enable):
         SyncDepthTest();
@@ -921,364 +825,27 @@ void RasterizerVulkan::NotifyPicaRegisterChanged(u32 id) {
         SyncColorWriteMask();
         break;
 
-    // Sync GL depth and stencil write mask
+    // Sync VK depth and stencil write mask
     // (This is a dedicated combined depth / stencil write-enable register)
     case PICA_REG_INDEX(framebuffer.framebuffer.allow_depth_stencil_write):
         SyncDepthWriteMask();
         SyncStencilWriteMask();
         break;
 
-    // Sync GL color write mask
+    // Sync VK color write mask
     // (This is a dedicated color write-enable register)
     case PICA_REG_INDEX(framebuffer.framebuffer.allow_color_write):
         SyncColorWriteMask();
         break;
 
-    case PICA_REG_INDEX(framebuffer.shadow):
-        SyncShadowBias();
-        break;
-
-    // Scissor test
-    case PICA_REG_INDEX(rasterizer.scissor_test.mode):
-        shader_dirty = true;
-        break;
-
     // Logic op
     case PICA_REG_INDEX(framebuffer.output_merger.logic_op):
         if (instance.NeedsLogicOpEmulation()) {
+            // We need this in the fragment shader to emulate logic operations
             shader_dirty = true;
         }
         SyncLogicOp();
         break;
-
-    case PICA_REG_INDEX(texturing.main_config):
-        shader_dirty = true;
-        break;
-
-    // Texture 0 type
-    case PICA_REG_INDEX(texturing.texture0.type):
-        shader_dirty = true;
-        break;
-
-    // TEV stages
-    // (This also syncs fog_mode and fog_flip which are part of tev_combiner_buffer_input)
-    case PICA_REG_INDEX(texturing.tev_stage0.color_source1):
-    case PICA_REG_INDEX(texturing.tev_stage0.color_modifier1):
-    case PICA_REG_INDEX(texturing.tev_stage0.color_op):
-    case PICA_REG_INDEX(texturing.tev_stage0.color_scale):
-    case PICA_REG_INDEX(texturing.tev_stage1.color_source1):
-    case PICA_REG_INDEX(texturing.tev_stage1.color_modifier1):
-    case PICA_REG_INDEX(texturing.tev_stage1.color_op):
-    case PICA_REG_INDEX(texturing.tev_stage1.color_scale):
-    case PICA_REG_INDEX(texturing.tev_stage2.color_source1):
-    case PICA_REG_INDEX(texturing.tev_stage2.color_modifier1):
-    case PICA_REG_INDEX(texturing.tev_stage2.color_op):
-    case PICA_REG_INDEX(texturing.tev_stage2.color_scale):
-    case PICA_REG_INDEX(texturing.tev_stage3.color_source1):
-    case PICA_REG_INDEX(texturing.tev_stage3.color_modifier1):
-    case PICA_REG_INDEX(texturing.tev_stage3.color_op):
-    case PICA_REG_INDEX(texturing.tev_stage3.color_scale):
-    case PICA_REG_INDEX(texturing.tev_stage4.color_source1):
-    case PICA_REG_INDEX(texturing.tev_stage4.color_modifier1):
-    case PICA_REG_INDEX(texturing.tev_stage4.color_op):
-    case PICA_REG_INDEX(texturing.tev_stage4.color_scale):
-    case PICA_REG_INDEX(texturing.tev_stage5.color_source1):
-    case PICA_REG_INDEX(texturing.tev_stage5.color_modifier1):
-    case PICA_REG_INDEX(texturing.tev_stage5.color_op):
-    case PICA_REG_INDEX(texturing.tev_stage5.color_scale):
-    case PICA_REG_INDEX(texturing.tev_combiner_buffer_input):
-        shader_dirty = true;
-        break;
-    case PICA_REG_INDEX(texturing.tev_stage0.const_r):
-        SyncTevConstColor(0, regs.texturing.tev_stage0);
-        break;
-    case PICA_REG_INDEX(texturing.tev_stage1.const_r):
-        SyncTevConstColor(1, regs.texturing.tev_stage1);
-        break;
-    case PICA_REG_INDEX(texturing.tev_stage2.const_r):
-        SyncTevConstColor(2, regs.texturing.tev_stage2);
-        break;
-    case PICA_REG_INDEX(texturing.tev_stage3.const_r):
-        SyncTevConstColor(3, regs.texturing.tev_stage3);
-        break;
-    case PICA_REG_INDEX(texturing.tev_stage4.const_r):
-        SyncTevConstColor(4, regs.texturing.tev_stage4);
-        break;
-    case PICA_REG_INDEX(texturing.tev_stage5.const_r):
-        SyncTevConstColor(5, regs.texturing.tev_stage5);
-        break;
-
-    // TEV combiner buffer color
-    case PICA_REG_INDEX(texturing.tev_combiner_buffer_color):
-        SyncCombinerColor();
-        break;
-
-    // Fragment lighting switches
-    case PICA_REG_INDEX(lighting.disable):
-    case PICA_REG_INDEX(lighting.max_light_index):
-    case PICA_REG_INDEX(lighting.config0):
-    case PICA_REG_INDEX(lighting.config1):
-    case PICA_REG_INDEX(lighting.abs_lut_input):
-    case PICA_REG_INDEX(lighting.lut_input):
-    case PICA_REG_INDEX(lighting.lut_scale):
-    case PICA_REG_INDEX(lighting.light_enable):
-        break;
-
-    // Fragment lighting specular 0 color
-    case PICA_REG_INDEX(lighting.light[0].specular_0):
-        SyncLightSpecular0(0);
-        break;
-    case PICA_REG_INDEX(lighting.light[1].specular_0):
-        SyncLightSpecular0(1);
-        break;
-    case PICA_REG_INDEX(lighting.light[2].specular_0):
-        SyncLightSpecular0(2);
-        break;
-    case PICA_REG_INDEX(lighting.light[3].specular_0):
-        SyncLightSpecular0(3);
-        break;
-    case PICA_REG_INDEX(lighting.light[4].specular_0):
-        SyncLightSpecular0(4);
-        break;
-    case PICA_REG_INDEX(lighting.light[5].specular_0):
-        SyncLightSpecular0(5);
-        break;
-    case PICA_REG_INDEX(lighting.light[6].specular_0):
-        SyncLightSpecular0(6);
-        break;
-    case PICA_REG_INDEX(lighting.light[7].specular_0):
-        SyncLightSpecular0(7);
-        break;
-
-    // Fragment lighting specular 1 color
-    case PICA_REG_INDEX(lighting.light[0].specular_1):
-        SyncLightSpecular1(0);
-        break;
-    case PICA_REG_INDEX(lighting.light[1].specular_1):
-        SyncLightSpecular1(1);
-        break;
-    case PICA_REG_INDEX(lighting.light[2].specular_1):
-        SyncLightSpecular1(2);
-        break;
-    case PICA_REG_INDEX(lighting.light[3].specular_1):
-        SyncLightSpecular1(3);
-        break;
-    case PICA_REG_INDEX(lighting.light[4].specular_1):
-        SyncLightSpecular1(4);
-        break;
-    case PICA_REG_INDEX(lighting.light[5].specular_1):
-        SyncLightSpecular1(5);
-        break;
-    case PICA_REG_INDEX(lighting.light[6].specular_1):
-        SyncLightSpecular1(6);
-        break;
-    case PICA_REG_INDEX(lighting.light[7].specular_1):
-        SyncLightSpecular1(7);
-        break;
-
-    // Fragment lighting diffuse color
-    case PICA_REG_INDEX(lighting.light[0].diffuse):
-        SyncLightDiffuse(0);
-        break;
-    case PICA_REG_INDEX(lighting.light[1].diffuse):
-        SyncLightDiffuse(1);
-        break;
-    case PICA_REG_INDEX(lighting.light[2].diffuse):
-        SyncLightDiffuse(2);
-        break;
-    case PICA_REG_INDEX(lighting.light[3].diffuse):
-        SyncLightDiffuse(3);
-        break;
-    case PICA_REG_INDEX(lighting.light[4].diffuse):
-        SyncLightDiffuse(4);
-        break;
-    case PICA_REG_INDEX(lighting.light[5].diffuse):
-        SyncLightDiffuse(5);
-        break;
-    case PICA_REG_INDEX(lighting.light[6].diffuse):
-        SyncLightDiffuse(6);
-        break;
-    case PICA_REG_INDEX(lighting.light[7].diffuse):
-        SyncLightDiffuse(7);
-        break;
-
-    // Fragment lighting ambient color
-    case PICA_REG_INDEX(lighting.light[0].ambient):
-        SyncLightAmbient(0);
-        break;
-    case PICA_REG_INDEX(lighting.light[1].ambient):
-        SyncLightAmbient(1);
-        break;
-    case PICA_REG_INDEX(lighting.light[2].ambient):
-        SyncLightAmbient(2);
-        break;
-    case PICA_REG_INDEX(lighting.light[3].ambient):
-        SyncLightAmbient(3);
-        break;
-    case PICA_REG_INDEX(lighting.light[4].ambient):
-        SyncLightAmbient(4);
-        break;
-    case PICA_REG_INDEX(lighting.light[5].ambient):
-        SyncLightAmbient(5);
-        break;
-    case PICA_REG_INDEX(lighting.light[6].ambient):
-        SyncLightAmbient(6);
-        break;
-    case PICA_REG_INDEX(lighting.light[7].ambient):
-        SyncLightAmbient(7);
-        break;
-
-    // Fragment lighting position
-    case PICA_REG_INDEX(lighting.light[0].x):
-    case PICA_REG_INDEX(lighting.light[0].z):
-        SyncLightPosition(0);
-        break;
-    case PICA_REG_INDEX(lighting.light[1].x):
-    case PICA_REG_INDEX(lighting.light[1].z):
-        SyncLightPosition(1);
-        break;
-    case PICA_REG_INDEX(lighting.light[2].x):
-    case PICA_REG_INDEX(lighting.light[2].z):
-        SyncLightPosition(2);
-        break;
-    case PICA_REG_INDEX(lighting.light[3].x):
-    case PICA_REG_INDEX(lighting.light[3].z):
-        SyncLightPosition(3);
-        break;
-    case PICA_REG_INDEX(lighting.light[4].x):
-    case PICA_REG_INDEX(lighting.light[4].z):
-        SyncLightPosition(4);
-        break;
-    case PICA_REG_INDEX(lighting.light[5].x):
-    case PICA_REG_INDEX(lighting.light[5].z):
-        SyncLightPosition(5);
-        break;
-    case PICA_REG_INDEX(lighting.light[6].x):
-    case PICA_REG_INDEX(lighting.light[6].z):
-        SyncLightPosition(6);
-        break;
-    case PICA_REG_INDEX(lighting.light[7].x):
-    case PICA_REG_INDEX(lighting.light[7].z):
-        SyncLightPosition(7);
-        break;
-
-    // Fragment spot lighting direction
-    case PICA_REG_INDEX(lighting.light[0].spot_x):
-    case PICA_REG_INDEX(lighting.light[0].spot_z):
-        SyncLightSpotDirection(0);
-        break;
-    case PICA_REG_INDEX(lighting.light[1].spot_x):
-    case PICA_REG_INDEX(lighting.light[1].spot_z):
-        SyncLightSpotDirection(1);
-        break;
-    case PICA_REG_INDEX(lighting.light[2].spot_x):
-    case PICA_REG_INDEX(lighting.light[2].spot_z):
-        SyncLightSpotDirection(2);
-        break;
-    case PICA_REG_INDEX(lighting.light[3].spot_x):
-    case PICA_REG_INDEX(lighting.light[3].spot_z):
-        SyncLightSpotDirection(3);
-        break;
-    case PICA_REG_INDEX(lighting.light[4].spot_x):
-    case PICA_REG_INDEX(lighting.light[4].spot_z):
-        SyncLightSpotDirection(4);
-        break;
-    case PICA_REG_INDEX(lighting.light[5].spot_x):
-    case PICA_REG_INDEX(lighting.light[5].spot_z):
-        SyncLightSpotDirection(5);
-        break;
-    case PICA_REG_INDEX(lighting.light[6].spot_x):
-    case PICA_REG_INDEX(lighting.light[6].spot_z):
-        SyncLightSpotDirection(6);
-        break;
-    case PICA_REG_INDEX(lighting.light[7].spot_x):
-    case PICA_REG_INDEX(lighting.light[7].spot_z):
-        SyncLightSpotDirection(7);
-        break;
-
-    // Fragment lighting light source config
-    case PICA_REG_INDEX(lighting.light[0].config):
-    case PICA_REG_INDEX(lighting.light[1].config):
-    case PICA_REG_INDEX(lighting.light[2].config):
-    case PICA_REG_INDEX(lighting.light[3].config):
-    case PICA_REG_INDEX(lighting.light[4].config):
-    case PICA_REG_INDEX(lighting.light[5].config):
-    case PICA_REG_INDEX(lighting.light[6].config):
-    case PICA_REG_INDEX(lighting.light[7].config):
-        shader_dirty = true;
-        break;
-
-    // Fragment lighting distance attenuation bias
-    case PICA_REG_INDEX(lighting.light[0].dist_atten_bias):
-        SyncLightDistanceAttenuationBias(0);
-        break;
-    case PICA_REG_INDEX(lighting.light[1].dist_atten_bias):
-        SyncLightDistanceAttenuationBias(1);
-        break;
-    case PICA_REG_INDEX(lighting.light[2].dist_atten_bias):
-        SyncLightDistanceAttenuationBias(2);
-        break;
-    case PICA_REG_INDEX(lighting.light[3].dist_atten_bias):
-        SyncLightDistanceAttenuationBias(3);
-        break;
-    case PICA_REG_INDEX(lighting.light[4].dist_atten_bias):
-        SyncLightDistanceAttenuationBias(4);
-        break;
-    case PICA_REG_INDEX(lighting.light[5].dist_atten_bias):
-        SyncLightDistanceAttenuationBias(5);
-        break;
-    case PICA_REG_INDEX(lighting.light[6].dist_atten_bias):
-        SyncLightDistanceAttenuationBias(6);
-        break;
-    case PICA_REG_INDEX(lighting.light[7].dist_atten_bias):
-        SyncLightDistanceAttenuationBias(7);
-        break;
-
-    // Fragment lighting distance attenuation scale
-    case PICA_REG_INDEX(lighting.light[0].dist_atten_scale):
-        SyncLightDistanceAttenuationScale(0);
-        break;
-    case PICA_REG_INDEX(lighting.light[1].dist_atten_scale):
-        SyncLightDistanceAttenuationScale(1);
-        break;
-    case PICA_REG_INDEX(lighting.light[2].dist_atten_scale):
-        SyncLightDistanceAttenuationScale(2);
-        break;
-    case PICA_REG_INDEX(lighting.light[3].dist_atten_scale):
-        SyncLightDistanceAttenuationScale(3);
-        break;
-    case PICA_REG_INDEX(lighting.light[4].dist_atten_scale):
-        SyncLightDistanceAttenuationScale(4);
-        break;
-    case PICA_REG_INDEX(lighting.light[5].dist_atten_scale):
-        SyncLightDistanceAttenuationScale(5);
-        break;
-    case PICA_REG_INDEX(lighting.light[6].dist_atten_scale):
-        SyncLightDistanceAttenuationScale(6);
-        break;
-    case PICA_REG_INDEX(lighting.light[7].dist_atten_scale):
-        SyncLightDistanceAttenuationScale(7);
-        break;
-
-    // Fragment lighting global ambient color (emission + ambient * ambient)
-    case PICA_REG_INDEX(lighting.global_ambient):
-        SyncGlobalAmbient();
-        break;
-
-    // Fragment lighting lookup tables
-    case PICA_REG_INDEX(lighting.lut_data[0]):
-    case PICA_REG_INDEX(lighting.lut_data[1]):
-    case PICA_REG_INDEX(lighting.lut_data[2]):
-    case PICA_REG_INDEX(lighting.lut_data[3]):
-    case PICA_REG_INDEX(lighting.lut_data[4]):
-    case PICA_REG_INDEX(lighting.lut_data[5]):
-    case PICA_REG_INDEX(lighting.lut_data[6]):
-    case PICA_REG_INDEX(lighting.lut_data[7]): {
-        const auto& lut_config = regs.lighting.lut_config;
-        uniform_block_data.lighting_lut_dirty[lut_config.type] = true;
-        uniform_block_data.lighting_lut_dirty_any = true;
-        break;
-    }
     }
 }
 

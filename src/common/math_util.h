@@ -36,6 +36,9 @@ struct Rectangle {
     [[nodiscard]] constexpr Rectangle operator*(const T value) const {
         return Rectangle{left * value, top * value, right * value, bottom * value};
     }
+    [[nodiscard]] constexpr Rectangle operator/(const T value) const {
+        return Rectangle{left / value, top / value, right / value, bottom / value};
+    }
     [[nodiscard]] constexpr T GetWidth() const {
         return std::abs(static_cast<std::make_signed_t<T>>(right - left));
     }

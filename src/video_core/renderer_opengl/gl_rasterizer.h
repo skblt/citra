@@ -31,7 +31,6 @@ public:
                            const VideoCore::DiskResourceLoadCallback& callback) override;
 
     void DrawTriangles() override;
-    void NotifyPicaRegisterChanged(u32 id) override;
     void FlushAll() override;
     void FlushRegion(PAddr addr, u32 size) override;
     void InvalidateRegion(PAddr addr, u32 size) override;
@@ -72,6 +71,8 @@ private:
         // TODO(wwylele): remove this once mipmap for cube is implemented
         bool supress_mipmap_for_cube = false;
     };
+
+    void NotifyFixedFunctionPicaRegisterChanged(u32 id) override;
 
     /// Syncs the clip enabled status to match the PICA register
     void SyncClipEnabled();

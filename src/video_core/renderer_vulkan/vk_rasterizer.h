@@ -84,7 +84,6 @@ public:
                            const VideoCore::DiskResourceLoadCallback& callback) override;
 
     void DrawTriangles() override;
-    void NotifyPicaRegisterChanged(u32 id) override;
     void FlushAll() override;
     void FlushRegion(PAddr addr, u32 size) override;
     void InvalidateRegion(PAddr addr, u32 size) override;
@@ -106,6 +105,8 @@ public:
     void FlushBuffers();
 
 private:
+    void NotifyFixedFunctionPicaRegisterChanged(u32 id) override;
+
     /// Syncs the clip enabled status to match the PICA register
     void SyncClipEnabled();
 

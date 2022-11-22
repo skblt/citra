@@ -21,9 +21,13 @@ public:
                      const Pica::Shader::OutputVertex& v2) override;
 
     void UpdatePagesCachedCount(PAddr addr, u32 size, int delta) override;
+    void NotifyPicaRegisterChanged(u32 id) override;
     void ClearAll(bool flush) override;
 
 protected:
+    /// Notifies that a fixed function PICA register changed to the video backend
+    virtual void NotifyFixedFunctionPicaRegisterChanged(u32 id) = 0;
+
     /// Syncs the depth scale to match the PICA register
     void SyncDepthScale();
 
