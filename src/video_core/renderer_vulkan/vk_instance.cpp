@@ -15,6 +15,56 @@ namespace Vulkan {
 
 vk::DynamicLoader Instance::dl;
 
+inline std::string_view GetType(vk::DebugUtilsMessageTypeFlagBitsEXT type) {
+    switch (type) {
+    case vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral:
+        return "General";
+    case vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation:
+        return "Validation";
+    case vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance:
+        return "Performance";
+    case vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding:
+        return "DeviceAddressBinding";
+    default:
+        return "";
+    };
+}
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL DebugHandler(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+    void* user_data) {
+
+    switch (callback_data->messageIdNumber) {
+    case 0x609a13b: // Vertex attribute at location not consumed by shader
+        return VK_FALSE;
+    default:
+        break;
+    }
+
+    Log::Level level{};
+    switch (severity) {
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+        level = Log::Level::Error;
+        break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+        level = Log::Level::Info;
+        break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+        level = Log::Level::Debug;
+        break;
+    default:
+        level = Log::Level::Info;
+    }
+
+    LOG_GENERIC(Log::Class::Render_Vulkan, level, "{}: {}",
+                callback_data->pMessageIdName, callback_data->pMessage);
+
+    return VK_FALSE;
+}
+
 vk::Format ToVkFormat(VideoCore::PixelFormat format) {
     switch (format) {
     case VideoCore::PixelFormat::RGBA8:
@@ -42,6 +92,20 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
     }
 }
 
+[[nodiscard]] vk::DebugUtilsMessengerCreateInfoEXT MakeDebugUtilsMessengerInfo() {
+    return {
+        .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
+                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
+        .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+                        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+                        vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding |
+                        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
+        .pfnUserCallback = DebugHandler
+    };
+}
+
 std::vector<std::string> GetSupportedExtensions(vk::PhysicalDevice physical) {
     const std::vector extensions = physical.enumerateDeviceExtensionProperties();
     std::vector<std::string> supported_extensions;
@@ -52,7 +116,9 @@ std::vector<std::string> GetSupportedExtensions(vk::PhysicalDevice physical) {
     return supported_extensions;
 }
 
-Instance::Instance(bool validation, bool dump_command_buffers) {
+Instance::Instance(bool validation, bool dump_command_buffers) :
+    enable_validation{validation},
+    dump_command_buffers{dump_command_buffers}{
     // Fetch instance independant function pointers
     auto vkGetInstanceProcAddr =
         dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
@@ -73,22 +139,27 @@ Instance::Instance(bool validation, bool dump_command_buffers) {
     u32 layer_count = 0;
     std::array<const char*, 2> layers;
 
-    if (validation) {
+    if (enable_validation) {
         layers[layer_count++] = "VK_LAYER_KHRONOS_validation";
     }
     if (dump_command_buffers) {
         layers[layer_count++] = "VK_LAYER_LUNARG_api_dump";
     }
 
-    const vk::InstanceCreateInfo instance_info = {.flags = flags,
-                                                  .pApplicationInfo = &application_info,
-                                                  .enabledLayerCount = layer_count,
-                                                  .ppEnabledLayerNames = layers.data(),
-                                                  .enabledExtensionCount =
-                                                      static_cast<u32>(extensions.size()),
-                                                  .ppEnabledExtensionNames = extensions.data()};
+    const vk::StructureChain instance_chain = {
+        vk::InstanceCreateInfo{
+            .flags = flags,
+            .pApplicationInfo = &application_info,
+            .enabledLayerCount = layer_count,
+            .ppEnabledLayerNames = layers.data(),
+            .enabledExtensionCount =
+                static_cast<u32>(extensions.size()),
+            .ppEnabledExtensionNames = extensions.data()
+        },
+        MakeDebugUtilsMessengerInfo()
+    };
 
-    instance = vk::createInstance(instance_info);
+    instance = vk::createInstance(instance_chain.get());
 
     // Load required function pointers for querying the physical device
     VULKAN_HPP_DEFAULT_DISPATCHER.vkEnumeratePhysicalDevices = PFN_vkEnumeratePhysicalDevices(
@@ -101,7 +172,9 @@ Instance::Instance(bool validation, bool dump_command_buffers) {
     physical_devices = instance.enumeratePhysicalDevices();
 }
 
-Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) {
+Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) :
+    enable_validation{Settings::values.renderer_debug},
+    dump_command_buffers{Settings::values.dump_command_buffers} {
     auto window_info = window.GetWindowInfo();
 
     // Fetch instance independant function pointers
@@ -131,29 +204,39 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) {
     u32 layer_count = 0;
     std::array<const char*, 2> layers;
 
-    if (Settings::values.renderer_debug) {
+    if (enable_validation) {
         layers[layer_count++] = "VK_LAYER_KHRONOS_validation";
     }
-    if (Settings::values.dump_command_buffers) {
+    if (dump_command_buffers) {
         layers[layer_count++] = "VK_LAYER_LUNARG_api_dump";
     }
 
-    const vk::InstanceCreateInfo instance_info = {.flags = flags,
-                                                  .pApplicationInfo = &application_info,
-                                                  .enabledLayerCount = layer_count,
-                                                  .ppEnabledLayerNames = layers.data(),
-                                                  .enabledExtensionCount =
-                                                      static_cast<u32>(extensions.size()),
-                                                  .ppEnabledExtensionNames = extensions.data()};
+    const vk::StructureChain instance_chain = {
+        vk::InstanceCreateInfo{
+            .flags = flags,
+            .pApplicationInfo = &application_info,
+            .enabledLayerCount = layer_count,
+            .ppEnabledLayerNames = layers.data(),
+            .enabledExtensionCount =
+                static_cast<u32>(extensions.size()),
+            .ppEnabledExtensionNames = extensions.data()
+        },
+        MakeDebugUtilsMessengerInfo()
+    };
 
     try {
-        instance = vk::createInstance(instance_info);
+        instance = vk::createInstance(instance_chain.get());
     } catch (vk::LayerNotPresentError& err) {
         LOG_CRITICAL(Render_Vulkan, "Validation requested but layer is not available {}", err.what());
         UNREACHABLE();
     }
 
     surface = CreateSurface(instance, window);
+
+    // Calling this after CreateSurface to ensure the function has been loaded
+    if (enable_validation) {
+        CreateDebugMessenger();
+    }
 
     // Pick physical device
     physical_devices = instance.enumeratePhysicalDevices();
@@ -180,6 +263,10 @@ Instance::~Instance() {
         vmaDestroyAllocator(allocator);
         device.destroy();
         instance.destroySurfaceKHR(surface);
+
+        if (enable_validation) {
+            instance.destroyDebugUtilsMessengerEXT(debug_messenger);
+        }
     }
 
     instance.destroy();
@@ -420,6 +507,22 @@ void Instance::CreateAllocator() {
         LOG_CRITICAL(Render_Vulkan, "Failed to initialize VMA with error {}", result);
         UNREACHABLE();
     }
+}
+
+void Instance::CreateDebugMessenger() {
+    const vk::DebugUtilsMessengerCreateInfoEXT debug_info = {
+        .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
+                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
+        .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+                        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+                        vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding |
+                        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
+        .pfnUserCallback = DebugHandler
+    };
+
+    debug_messenger = instance.createDebugUtilsMessengerEXT(debug_info);
 }
 
 void Instance::CollectTelemetryParameters() {

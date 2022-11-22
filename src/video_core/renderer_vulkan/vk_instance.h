@@ -173,6 +173,9 @@ private:
     /// Creates the VMA allocator handle
     void CreateAllocator();
 
+    /// Creates the debug messenger
+    void CreateDebugMessenger();
+
     /// Collects telemetry information from the device.
     void CollectTelemetryParameters();
 
@@ -191,6 +194,7 @@ private:
     vk::PhysicalDeviceProperties properties;
     vk::PhysicalDeviceFeatures features;
     vk::DriverIdKHR driver_id;
+    vk::DebugUtilsMessengerEXT debug_messenger;
     std::string vendor_name;
     VmaAllocator allocator;
     vk::Queue present_queue;
@@ -198,12 +202,14 @@ private:
     std::vector<vk::PhysicalDevice> physical_devices;
     std::array<FormatTraits, VideoCore::PIXEL_FORMAT_COUNT> format_table;
     std::vector<std::string> available_extensions;
-    u32 present_queue_family_index = 0;
-    u32 graphics_queue_family_index = 0;
-    bool timeline_semaphores = false;
-    bool extended_dynamic_state = false;
-    bool push_descriptors = false;
-    bool custom_border_color = false;
+    u32 present_queue_family_index{0};
+    u32 graphics_queue_family_index{0};
+    bool timeline_semaphores{false};
+    bool extended_dynamic_state{false};
+    bool push_descriptors{false};
+    bool custom_border_color{false};
+    bool enable_validation{false};
+    bool dump_command_buffers{false};
 };
 
 } // namespace Vulkan
