@@ -125,7 +125,11 @@ public:
     explicit OpenGLSharedContext(QSurface* surface) : surface(surface) {
         QSurfaceFormat format;
 
-        format.setVersion(4, 4);
+#ifdef __APPLE__
+        format.setVersion(4, 1);
+#else
+        format.setVersion(4, 3);
+#endif
         format.setProfile(QSurfaceFormat::CoreProfile);
 
         if (Settings::values.renderer_debug) {
