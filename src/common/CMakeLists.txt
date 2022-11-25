@@ -106,6 +106,7 @@ add_library(common STATIC
     serialization/boost_flat_set.h
     serialization/boost_small_vector.hpp
     serialization/boost_vector.hpp
+    string_literal.h
     string_util.cpp
     string_util.h
     swap.h
