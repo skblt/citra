@@ -469,6 +469,16 @@ void GameList::PopupContextMenu(const QPoint& menu_location) {
     context_menu.exec(tree_view->viewport()->mapToGlobal(menu_location));
 }
 
+void ForEachOpenGLCacheFile(u64 program_id, auto func) {
+    for (const std::string_view cache_type : {"separable", "conventional"}) {
+        const std::string path = fmt::format(
+            "{}opengl/precompiled/{}/{:016X}.bin",
+            FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir), cache_type, program_id);
+        QFile file{QString::fromStdString(path)};
+        func(file);
+    }
+}
+
 void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 program_id,
                             u64 extdata_id) {
     QAction* open_save_location = context_menu.addAction(tr("Open Save Data Location"));
@@ -493,6 +503,11 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
 
     const bool is_application =
         0x0004000000000000 <= program_id && program_id <= 0x00040000FFFFFFFF;
+
+    bool opengl_cache_exists = false;
+    ForEachOpenGLCacheFile(program_id, [&opengl_cache_exists](QFile& file) {
+        opengl_cache_exists |= file.exists();
+    });
 
     std::string sdmc_dir = FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir);
     open_save_location->setEnabled(
@@ -521,6 +536,7 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
     open_mods_location->setEnabled(is_application);
     open_dlc_location->setEnabled(is_application);
     dump_romfs->setEnabled(is_application);
+    delete_opengl_disk_shader_cache->setEnabled(opengl_cache_exists);
 
     navigate_to_gamedb_entry->setVisible(it != compatibility_list.end());
 
@@ -581,14 +597,9 @@ void GameList::AddGamePopup(QMenu& context_menu, const QString& path, u64 progra
         }
     });
     connect(delete_opengl_disk_shader_cache, &QAction::triggered, this, [program_id] {
-        // Remove both seperable and conventional cache if it exists
-        for (const std::string_view cache_type : {"separable", "conventional"}) {
-            const std::string path = fmt::format(
-                "{}opengl/precompiled/{}/{:016X}.bin",
-                FileUtil::GetUserPath(FileUtil::UserPath::ShaderDir), cache_type, program_id);
-            QFile file{QString::fromStdString(path)};
+        ForEachOpenGLCacheFile(program_id, [](QFile& file) {
             file.remove();
-        }
+        });
     });
 };
 
