@@ -1432,10 +1432,10 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
         return;
     }
 
-    u32 used_bytes = 0;
-    const u32 uniform_size = static_cast<u32>(uniform_size_aligned_vs + uniform_size_aligned_fs);
+    std::size_t used_bytes = 0;
+    const std::size_t uniform_size = uniform_size_aligned_vs + uniform_size_aligned_fs;
     auto [uniforms, offset, invalidate] =
-        uniform_buffer.Map(uniform_size, static_cast<u32>(uniform_buffer_alignment));
+        uniform_buffer.Map(uniform_size, uniform_buffer_alignment);
 
     if (sync_vs) {
         Pica::Shader::VSUniformData vs_uniforms;
@@ -1444,7 +1444,7 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
 
         pipeline_cache.BindBuffer(0, uniform_buffer.GetHandle(), offset + used_bytes,
                                   sizeof(vs_uniforms));
-        used_bytes += static_cast<u32>(uniform_size_aligned_vs);
+        used_bytes += uniform_size_aligned_vs;
     }
 
     if (sync_fs || invalidate) {
@@ -1454,7 +1454,7 @@ void RasterizerVulkan::UploadUniforms(bool accelerate_draw) {
         pipeline_cache.BindBuffer(1, uniform_buffer.GetHandle(), offset + used_bytes,
                                   sizeof(uniform_block_data.data));
         uniform_block_data.dirty = false;
-        used_bytes += static_cast<u32>(uniform_size_aligned_fs);
+        used_bytes += uniform_size_aligned_fs;
     }
 
     uniform_buffer.Commit(used_bytes);

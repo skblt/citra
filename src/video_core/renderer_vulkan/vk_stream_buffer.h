@@ -18,7 +18,7 @@ class Instance;
 class Scheduler;
 
 struct StagingBuffer {
-    StagingBuffer(const Instance& instance, u32 size, bool readback);
+    StagingBuffer(const Instance& instance, std::size_t size, bool readback);
     ~StagingBuffer();
 
     const Instance& instance;
@@ -28,14 +28,14 @@ struct StagingBuffer {
 };
 
 class StreamBuffer {
-    static constexpr u32 MAX_BUFFER_VIEWS = 3;
-    static constexpr u32 BUCKET_COUNT = 8;
+    static constexpr std::size_t MAX_BUFFER_VIEWS = 3;
+    static constexpr std::size_t BUCKET_COUNT = 32;
 public:
     /// Staging only constructor
-    StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
+    StreamBuffer(const Instance& instance, Scheduler& scheduler, std::size_t size,
                  bool readback = false);
     /// Staging + GPU streaming constructor
-    StreamBuffer(const Instance& instance, Scheduler& scheduler, u32 size,
+    StreamBuffer(const Instance& instance, Scheduler& scheduler, std::size_t size,
                  vk::BufferUsageFlagBits usage, std::span<const vk::Format> views,
                  bool readback = false);
     ~StreamBuffer();
@@ -44,10 +44,10 @@ public:
     StreamBuffer& operator=(const StreamBuffer&) = delete;
 
     /// Maps aligned staging memory of size bytes
-    std::tuple<u8*, u32, bool> Map(u32 size, u32 alignment = 0);
+    std::tuple<u8*, std::size_t, bool> Map(std::size_t size, std::size_t alignment = 0);
 
     /// Commits size bytes from the currently mapped staging memory
-    void Commit(u32 size = 0);
+    void Commit(std::size_t size = 0);
 
     /// Flushes staging memory to the GPU buffer
     void Flush();
@@ -80,11 +80,11 @@ private:
     vk::BufferUsageFlagBits usage;
     std::array<vk::BufferView, MAX_BUFFER_VIEWS> views{};
     std::size_t view_count = 0;
-    u32 total_size = 0;
-    u32 bucket_size = 0;
-    u32 buffer_offset = 0;
-    u32 flush_offset = 0;
-    u32 bucket_index = 0;
+    std::size_t total_size = 0;
+    std::size_t bucket_size = 0;
+    std::size_t buffer_offset = 0;
+    std::size_t flush_offset = 0;
+    std::size_t bucket_index = 0;
     bool readback = false;
     std::array<u64, BUCKET_COUNT> ticks{};
 };

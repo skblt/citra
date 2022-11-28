@@ -646,7 +646,7 @@ void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, fl
     auto& screen_info = screen_infos[screen_id];
     const auto& texcoords = screen_info.display_texcoords;
 
-    u32 size = sizeof(ScreenRectVertex) * 4;
+    const std::size_t size = sizeof(ScreenRectVertex) * 4;
     auto [ptr, offset, invalidate] = vertex_buffer.Map(size);
 
     const std::array vertices = {
@@ -672,7 +672,7 @@ void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, fl
     draw_info.o_resolution = Common::Vec4f{h, w, 1.0f / h, 1.0f / w};
     draw_info.screen_id_l = screen_id;
 
-    scheduler.Record([this, offset = offset,
+    scheduler.Record([this, offset = static_cast<u32>(offset),
                      info = draw_info](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         render_cmdbuf.pushConstants(present_pipeline_layout,
                                      vk::ShaderStageFlagBits::eFragment |
@@ -688,7 +688,7 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
     auto& screen_info = screen_infos[screen_id];
     const auto& texcoords = screen_info.display_texcoords;
 
-    u32 size = sizeof(ScreenRectVertex) * 4;
+    const std::size_t size = sizeof(ScreenRectVertex) * 4;
     auto [ptr, offset, invalidate] = vertex_buffer.Map(size);
 
     const std::array vertices = {
@@ -711,7 +711,7 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
     draw_info.o_resolution = Common::Vec4f{h, w, 1.0f / h, 1.0f / w};
     draw_info.screen_id_l = screen_id;
 
-    scheduler.Record([this, offset = offset,
+    scheduler.Record([this, offset = static_cast<u32>(offset),
                      info = draw_info](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         render_cmdbuf.pushConstants(present_pipeline_layout,
                                      vk::ShaderStageFlagBits::eFragment |
@@ -728,7 +728,7 @@ void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_i
     const ScreenInfo& screen_info_l = screen_infos[screen_id_l];
     const auto& texcoords = screen_info_l.display_texcoords;
 
-    u32 size = sizeof(ScreenRectVertex) * 4;
+    const std::size_t size = sizeof(ScreenRectVertex) * 4;
     auto [ptr, offset, invalidate] = vertex_buffer.Map(size);
 
     const std::array vertices = {ScreenRectVertex{x, y, texcoords.bottom, texcoords.left},
@@ -751,7 +751,7 @@ void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_i
     draw_info.screen_id_l = screen_id_l;
     draw_info.screen_id_r = screen_id_r;
 
-    scheduler.Record([this, offset = offset,
+    scheduler.Record([this, offset = static_cast<u32>(offset),
                      info = draw_info](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         render_cmdbuf.pushConstants(present_pipeline_layout,
                                      vk::ShaderStageFlagBits::eFragment |
@@ -768,7 +768,7 @@ void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, fl
     const ScreenInfo& screen_info_l = screen_infos[screen_id_l];
     const auto& texcoords = screen_info_l.display_texcoords;
 
-    u32 size = sizeof(ScreenRectVertex) * 4;
+    const std::size_t size = sizeof(ScreenRectVertex) * 4;
     auto [ptr, offset, invalidate] = vertex_buffer.Map(size);
 
     const std::array<ScreenRectVertex, 4> vertices = {{
@@ -793,7 +793,7 @@ void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, fl
     draw_info.screen_id_l = screen_id_l;
     draw_info.screen_id_r = screen_id_r;
 
-    scheduler.Record([this, offset = offset,
+    scheduler.Record([this, offset = static_cast<u32>(offset),
                      info = draw_info](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         render_cmdbuf.pushConstants(present_pipeline_layout,
                                      vk::ShaderStageFlagBits::eFragment |

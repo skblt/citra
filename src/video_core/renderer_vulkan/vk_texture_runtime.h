@@ -19,9 +19,9 @@ namespace Vulkan {
 
 struct StagingData {
     vk::Buffer buffer;
-    u32 size = 0;
+    u32 size{0};
     std::span<std::byte> mapped{};
-    u32 buffer_offset = 0;
+    std::size_t buffer_offset{0};
 };
 
 struct ImageAlloc {

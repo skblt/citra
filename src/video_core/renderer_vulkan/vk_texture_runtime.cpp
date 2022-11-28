@@ -33,9 +33,9 @@ vk::ImageAspectFlags ToVkAspect(VideoCore::SurfaceType type) {
     return vk::ImageAspectFlagBits::eColor;
 }
 
-u32 UnpackDepthStencil(const StagingData& data, vk::Format dest) {
-    u32 depth_offset = 0;
-    u32 stencil_offset = 4 * data.size / 5;
+std::size_t UnpackDepthStencil(const StagingData& data, vk::Format dest) {
+    std::size_t depth_offset = 0;
+    std::size_t stencil_offset = 4 * data.size / 5;
     const auto& mapped = data.mapped;
 
     switch (dest) {

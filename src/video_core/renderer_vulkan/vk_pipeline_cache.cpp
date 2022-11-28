@@ -288,7 +288,7 @@ void PipelineCache::BindStorageImage(u32 binding, vk::ImageView image_view) {
     desc_manager.SetBinding(3, binding, DescriptorData{image_info});
 }
 
-void PipelineCache::BindBuffer(u32 binding, vk::Buffer buffer, u32 offset, u32 size) {
+void PipelineCache::BindBuffer(u32 binding, vk::Buffer buffer, std::size_t offset, std::size_t size) {
     const DescriptorData data = {
         .buffer_info = vk::DescriptorBufferInfo{.buffer = buffer, .offset = offset, .range = size}};
     desc_manager.SetBinding(0, binding, data);
