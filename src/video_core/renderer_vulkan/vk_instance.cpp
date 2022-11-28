@@ -15,21 +15,6 @@ namespace Vulkan {
 
 vk::DynamicLoader Instance::dl;
 
-inline std::string_view GetType(vk::DebugUtilsMessageTypeFlagBitsEXT type) {
-    switch (type) {
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral:
-        return "General";
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation:
-        return "Validation";
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance:
-        return "Performance";
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding:
-        return "DeviceAddressBinding";
-    default:
-        return "";
-    };
-}
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugHandler(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
     VkDebugUtilsMessageTypeFlagsEXT type,
@@ -235,7 +220,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) :
 
     // Calling this after CreateSurface to ensure the function has been loaded
     if (enable_validation) {
-        CreateDebugMessenger();
+        debug_messenger = instance.createDebugUtilsMessengerEXT(MakeDebugUtilsMessengerInfo());
     }
 
     // Pick physical device
@@ -264,7 +249,7 @@ Instance::~Instance() {
         device.destroy();
         instance.destroySurfaceKHR(surface);
 
-        if (enable_validation) {
+        if (debug_messenger) {
             instance.destroyDebugUtilsMessengerEXT(debug_messenger);
         }
     }
@@ -507,22 +492,6 @@ void Instance::CreateAllocator() {
         LOG_CRITICAL(Render_Vulkan, "Failed to initialize VMA with error {}", result);
         UNREACHABLE();
     }
-}
-
-void Instance::CreateDebugMessenger() {
-    const vk::DebugUtilsMessengerCreateInfoEXT debug_info = {
-        .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
-        .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
-        .pfnUserCallback = DebugHandler
-    };
-
-    debug_messenger = instance.createDebugUtilsMessengerEXT(debug_info);
 }
 
 void Instance::CollectTelemetryParameters() {

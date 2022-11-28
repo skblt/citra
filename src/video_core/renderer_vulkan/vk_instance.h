@@ -173,9 +173,6 @@ private:
     /// Creates the VMA allocator handle
     void CreateAllocator();
 
-    /// Creates the debug messenger
-    void CreateDebugMessenger();
-
     /// Collects telemetry information from the device.
     void CollectTelemetryParameters();
 
