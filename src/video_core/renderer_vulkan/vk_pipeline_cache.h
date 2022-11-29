@@ -177,7 +177,7 @@ public:
     void BindSampler(u32 binding, vk::Sampler sampler);
 
     /// Sets the viewport rectangle to the provided values
-    void SetViewport(float x, float y, float width, float height);
+    void SetViewport(u32 x, u32 y, u32 width, u32 height);
 
     /// Sets the scissor rectange to the provided values
     void SetScissor(s32 x, s32 y, u32 width, u32 height);

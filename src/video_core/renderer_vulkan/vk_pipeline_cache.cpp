@@ -304,15 +304,33 @@ void PipelineCache::BindSampler(u32 binding, vk::Sampler sampler) {
     desc_manager.SetBinding(2, binding, data);
 }
 
-void PipelineCache::SetViewport(float x, float y, float width, float height) {
-    const vk::Viewport viewport{x, y, width, height, 0.f, 1.f};
+void PipelineCache::SetViewport(u32 x, u32 y, u32 width, u32 height) {
+    const vk::Viewport viewport = {
+        .x = static_cast<f32>(x),
+        .y = static_cast<f32>(y),
+        .width = static_cast<f32>(width),
+        .height = static_cast<f32>(height),
+        .minDepth = 0.f,
+        .maxDepth = 1.f
+    };
+
     scheduler.Record([viewport](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         render_cmdbuf.setViewport(0, viewport);
     });
 }
 
 void PipelineCache::SetScissor(s32 x, s32 y, u32 width, u32 height) {
-    const vk::Rect2D scissor{{x, y}, {width, height}};
+    const vk::Rect2D scissor = {
+        .offset = vk::Offset2D{
+            .x = x,
+            .y = y
+        },
+        .extent = vk::Extent2D{
+            .width = width,
+            .height = height
+        }
+    };
+
     scheduler.Record([scissor](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         render_cmdbuf.setScissor(0, scissor);
     });

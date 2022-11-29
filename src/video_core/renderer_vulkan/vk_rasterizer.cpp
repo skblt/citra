@@ -350,6 +350,147 @@ bool RasterizerVulkan::SetupGeometryShader() {
     return true;
 }
 
+void RasterizerVulkan::SetupTextureUnits(Surface* const color_surface) {
+    const auto& regs = Pica::g_state.regs;
+    const auto BindSampler = [&](u32 binding, SamplerInfo& info,
+                                 const Pica::TexturingRegs::TextureConfig& config) {
+        // TODO(GPUCode): Cubemaps don't contain any mipmaps for now, so sampling from them returns
+        // nothing. Always sample from the base level until mipmaps for texture cubes are
+        // implemented
+        const bool skip_mipmap = config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
+        info = SamplerInfo{.mag_filter = config.mag_filter,
+                           .min_filter = config.min_filter,
+                           .mip_filter = config.mip_filter,
+                           .wrap_s = config.wrap_s,
+                           .wrap_t = config.wrap_t,
+                           .border_color = config.border_color.raw,
+                           .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
+                           .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level),
+                           .lod_bias = static_cast<float>(config.lod.bias)};
+
+        // Search the cache and bind the appropriate sampler
+        if (auto it = samplers.find(info); it != samplers.end()) {
+            pipeline_cache.BindSampler(binding, it->second);
+        } else {
+            vk::Sampler texture_sampler = CreateSampler(info);
+            samplers.emplace(info, texture_sampler);
+            pipeline_cache.BindSampler(binding, texture_sampler);
+        }
+    };
+
+    // Sync and bind the texture surfaces
+    const std::array pica_textures = regs.texturing.GetTextures();
+    for (u32 texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
+        const auto& texture = pica_textures[texture_index];
+
+        if (texture.enabled) {
+            if (texture_index == 0) {
+                using TextureType = Pica::TexturingRegs::TextureConfig::TextureType;
+                switch (texture.config.type.Value()) {
+                case TextureType::Shadow2D: {
+                    auto surface = res_cache.GetTextureSurface(texture);
+                    if (surface) {
+                        surface->Transition(vk::ImageLayout::eGeneral, 0, surface->alloc.levels);
+                        pipeline_cache.BindStorageImage(0, surface->GetStorageView());
+                    } else {
+                        pipeline_cache.BindStorageImage(0, null_storage_surface.GetImageView());
+                    }
+                    continue;
+                }
+                case TextureType::ShadowCube: {
+                    using CubeFace = Pica::TexturingRegs::CubeFace;
+                    auto info = Pica::Texture::TextureInfo::FromPicaRegister(texture.config,
+                                                                             texture.format);
+                    for (CubeFace face : {CubeFace::PositiveX,
+                                          CubeFace::NegativeX,
+                                          CubeFace::PositiveY,
+                                          CubeFace::NegativeY,
+                                          CubeFace::PositiveZ,
+                                          CubeFace::NegativeZ}) {
+                        info.physical_address = regs.texturing.GetCubePhysicalAddress(face);
+                        auto surface = res_cache.GetTextureSurface(info);
+
+                        const u32 binding = static_cast<u32>(face);
+                        if (surface) {
+                            pipeline_cache.BindStorageImage(binding, surface->GetImageView());
+                        } else {
+                            pipeline_cache.BindStorageImage(binding, null_storage_surface.GetImageView());
+                        }
+                    }
+                    continue;
+                }
+                case TextureType::TextureCube: {
+                    using CubeFace = Pica::TexturingRegs::CubeFace;
+                    const VideoCore::TextureCubeConfig config = {
+                        .px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX),
+                        .nx = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX),
+                        .py = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY),
+                        .ny = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY),
+                        .pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ),
+                        .nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ),
+                        .width = texture.config.width,
+                        .format = texture.format};
+
+                    auto surface = res_cache.GetTextureCube(config);
+                    if (surface) {
+                        surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
+                                            surface->alloc.levels);
+                        pipeline_cache.BindTexture(3, surface->GetImageView());
+                    } else {
+                        pipeline_cache.BindTexture(3, null_surface.GetImageView());
+                    }
+
+                    BindSampler(3, texture_cube_sampler, texture.config);
+                    continue; // Texture unit 0 setup finished. Continue to next unit
+                }
+                default:
+                    break;
+                }
+            }
+
+            // Update sampler key
+            BindSampler(texture_index, texture_samplers[texture_index], texture.config);
+
+            auto surface = res_cache.GetTextureSurface(texture);
+            if (surface) {
+                if (color_surface && color_surface->GetImageView() == surface->GetImageView()) {
+                    Surface temp{*color_surface, runtime};
+                    const VideoCore::TextureCopy copy = {
+                        .src_level = 0,
+                        .dst_level = 0,
+                        .src_layer = 0,
+                        .dst_layer = 0,
+                        .src_offset = VideoCore::Offset{0, 0},
+                        .dst_offset = VideoCore::Offset{0, 0},
+                        .extent = VideoCore::Extent{temp.GetScaledWidth(), temp.GetScaledHeight()}};
+
+                    runtime.CopyTextures(*color_surface, temp, copy);
+                    temp.Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0, temp.alloc.levels);
+
+                    pipeline_cache.BindTexture(texture_index, temp.GetImageView());
+                } else {
+                    surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
+                                        surface->alloc.levels);
+                    pipeline_cache.BindTexture(texture_index, surface->GetImageView());
+                }
+
+            } else {
+                // Can occur when texture addr is null or its memory is unmapped/invalid
+                // HACK: In this case, the correct behaviour for the PICA is to use the last
+                // rendered colour. But because this would be impractical to implement, the
+                // next best alternative is to use a clear texture, essentially skipping
+                // the geometry in question.
+                // For example: a bug in Pokemon X/Y causes NULL-texture squares to be drawn
+                // on the male character's face, which in the OpenGL default appear black.
+                pipeline_cache.BindTexture(texture_index, null_surface.GetImageView());
+            }
+        } else {
+            pipeline_cache.BindTexture(texture_index, null_surface.GetImageView());
+            pipeline_cache.BindSampler(texture_index, default_sampler);
+        }
+    }
+}
+
 bool RasterizerVulkan::AccelerateDrawBatch(bool is_indexed) {
     const auto& regs = Pica::g_state.regs;
     if (regs.pipeline.use_gs != Pica::PipelineRegs::UseGS::No) {
@@ -391,11 +532,6 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
         bool index_u16 = regs.pipeline.index_array.format != 0;
         const u32 index_buffer_size = regs.pipeline.num_vertices * (index_u16 ? 2 : 1);
 
-        if (index_buffer_size > INDEX_BUFFER_SIZE) {
-            LOG_WARNING(Render_Vulkan, "Too large index input size {}", index_buffer_size);
-            return false;
-        }
-
         const u8* index_data = VideoCore::g_memory->GetPhysicalPointer(
             regs.pipeline.vertex_attributes.GetPhysicalBaseAddress() +
             regs.pipeline.index_array.offset);
@@ -406,13 +542,16 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
         index_buffer.Commit(index_buffer_size);
 
         scheduler.Record([this, offset = index_offset, num_vertices = regs.pipeline.num_vertices,
-                         index_u16, vertex_offset = vs_input_index_min](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-            const vk::IndexType index_type = index_u16 ? vk::IndexType::eUint16 : vk::IndexType::eUint8EXT;
+                         index_u16, vertex_offset = vs_input_index_min]
+                         (vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+            const vk::IndexType index_type = index_u16 ? vk::IndexType::eUint16
+                                                       : vk::IndexType::eUint8EXT;
             render_cmdbuf.bindIndexBuffer(index_buffer.GetHandle(), offset, index_type);
             render_cmdbuf.drawIndexed(num_vertices, 1, 0, -vertex_offset, 0);
         });
     } else {
-        scheduler.Record([num_vertices = regs.pipeline.num_vertices](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        scheduler.Record([num_vertices = regs.pipeline.num_vertices]
+                         (vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
             render_cmdbuf.draw(num_vertices, 1, 0, 0);
         });
     }
@@ -508,149 +647,10 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         uniform_block_data.dirty = true;
     }
 
-    const auto BindCubeFace = [&](Pica::TexturingRegs::CubeFace face,
-                                  Pica::Texture::TextureInfo& info) {
-        info.physical_address = regs.texturing.GetCubePhysicalAddress(face);
-        auto surface = res_cache.GetTextureSurface(info);
-
-        const u32 binding = static_cast<u32>(face);
-        if (surface) {
-            pipeline_cache.BindStorageImage(binding, surface->GetImageView());
-        } else {
-            pipeline_cache.BindStorageImage(binding, null_storage_surface.GetImageView());
-        }
-    };
-
-    const auto BindSampler = [&](u32 binding, SamplerInfo& info,
-                                 const Pica::TexturingRegs::TextureConfig& config) {
-        // TODO(GPUCode): Cubemaps don't contain any mipmaps for now, so sampling from them returns
-        // nothing. Always sample from the base level until mipmaps for texture cubes are
-        // implemented
-        const bool skip_mipmap = config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
-        info = SamplerInfo{.mag_filter = config.mag_filter,
-                           .min_filter = config.min_filter,
-                           .mip_filter = config.mip_filter,
-                           .wrap_s = config.wrap_s,
-                           .wrap_t = config.wrap_t,
-                           .border_color = config.border_color.raw,
-                           .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
-                           .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level),
-                           .lod_bias = static_cast<float>(config.lod.bias)};
-
-        // Search the cache and bind the appropriate sampler
-        if (auto it = samplers.find(info); it != samplers.end()) {
-            pipeline_cache.BindSampler(binding, it->second);
-        } else {
-            vk::Sampler texture_sampler = CreateSampler(info);
-            samplers.emplace(info, texture_sampler);
-            pipeline_cache.BindSampler(binding, texture_sampler);
-        }
-    };
-
-    // Sync and bind the texture surfaces
-    const auto pica_textures = regs.texturing.GetTextures();
-    for (u32 texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
-        const auto& texture = pica_textures[texture_index];
-
-        if (texture.enabled) {
-            if (texture_index == 0) {
-                using TextureType = Pica::TexturingRegs::TextureConfig::TextureType;
-                switch (texture.config.type.Value()) {
-                case TextureType::Shadow2D: {
-                    auto surface = res_cache.GetTextureSurface(texture);
-                    if (surface) {
-                        surface->Transition(vk::ImageLayout::eGeneral, 0, surface->alloc.levels);
-                        pipeline_cache.BindStorageImage(0, surface->GetStorageView());
-                    } else {
-                        pipeline_cache.BindStorageImage(0, null_storage_surface.GetImageView());
-                    }
-                    continue;
-                }
-                case TextureType::ShadowCube: {
-                    using CubeFace = Pica::TexturingRegs::CubeFace;
-                    auto info = Pica::Texture::TextureInfo::FromPicaRegister(texture.config,
-                                                                             texture.format);
-                    BindCubeFace(CubeFace::PositiveX, info);
-                    BindCubeFace(CubeFace::NegativeX, info);
-                    BindCubeFace(CubeFace::PositiveY, info);
-                    BindCubeFace(CubeFace::NegativeY, info);
-                    BindCubeFace(CubeFace::PositiveZ, info);
-                    BindCubeFace(CubeFace::NegativeZ, info);
-                    continue;
-                }
-                case TextureType::TextureCube: {
-                    using CubeFace = Pica::TexturingRegs::CubeFace;
-                    const VideoCore::TextureCubeConfig config = {
-                        .px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX),
-                        .nx = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX),
-                        .py = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY),
-                        .ny = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY),
-                        .pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ),
-                        .nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ),
-                        .width = texture.config.width,
-                        .format = texture.format};
-
-                    auto surface = res_cache.GetTextureCube(config);
-                    if (surface) {
-                        surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
-                                            surface->alloc.levels);
-                        pipeline_cache.BindTexture(3, surface->GetImageView());
-                    } else {
-                        pipeline_cache.BindTexture(3, null_surface.GetImageView());
-                    }
-
-                    BindSampler(3, texture_cube_sampler, texture.config);
-                    continue; // Texture unit 0 setup finished. Continue to next unit
-                }
-                default:
-                    break;
-                }
-            }
-
-            // Update sampler key
-            BindSampler(texture_index, texture_samplers[texture_index], texture.config);
-
-            auto surface = res_cache.GetTextureSurface(texture);
-            if (surface) {
-                if (color_surface && color_surface->GetImageView() == surface->GetImageView()) {
-                    Surface temp{*color_surface, runtime};
-                    const VideoCore::TextureCopy copy = {
-                        .src_level = 0,
-                        .dst_level = 0,
-                        .src_layer = 0,
-                        .dst_layer = 0,
-                        .src_offset = VideoCore::Offset{0, 0},
-                        .dst_offset = VideoCore::Offset{0, 0},
-                        .extent = VideoCore::Extent{temp.GetScaledWidth(), temp.GetScaledHeight()}};
-
-                    runtime.CopyTextures(*color_surface, temp, copy);
-                    temp.Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0, temp.alloc.levels);
-
-                    pipeline_cache.BindTexture(texture_index, temp.GetImageView());
-                } else {
-                    surface->Transition(vk::ImageLayout::eShaderReadOnlyOptimal, 0,
-                                        surface->alloc.levels);
-                    pipeline_cache.BindTexture(texture_index, surface->GetImageView());
-                }
-
-            } else {
-                // Can occur when texture addr is null or its memory is unmapped/invalid
-                // HACK: In this case, the correct behaviour for the PICA is to use the last
-                // rendered colour. But because this would be impractical to implement, the
-                // next best alternative is to use a clear texture, essentially skipping
-                // the geometry in question.
-                // For example: a bug in Pokemon X/Y causes NULL-texture squares to be drawn
-                // on the male character's face, which in the OpenGL default appear black.
-                pipeline_cache.BindTexture(texture_index, null_surface.GetImageView());
-            }
-        } else {
-            pipeline_cache.BindTexture(texture_index, null_surface.GetImageView());
-            pipeline_cache.BindSampler(texture_index, default_sampler);
-        }
-    }
-
+    // Bind texture units
     // NOTE: From here onwards its a safe zone to set the draw state, doing that any earlier will
     // cause issues as the rasterizer cache might cause a scheduler switch and invalidate our state
+    SetupTextureUnits(color_surface.get());
 
     // Sync the viewport
     pipeline_cache.SetViewport(surfaces_rect.left + viewport_rect_unscaled.left * res_scale,

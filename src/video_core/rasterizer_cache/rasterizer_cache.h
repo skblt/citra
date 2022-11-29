@@ -1036,7 +1036,7 @@ bool RasterizerCache<T>::IntervalHasInvalidPixelFormat(SurfaceParams& params,
     params.pixel_format = PixelFormat::Invalid;
     for (const auto& set : RangeFromInterval(surface_cache, interval)) {
         for (const auto& surface : set.second) {
-            if (surface->pixel_format == PixelFormat::Invalid) {
+            if (surface->pixel_format == PixelFormat::Invalid && surface->type != SurfaceType::Fill) {
                 LOG_DEBUG(HW_GPU, "Surface {:#x} found with invalid pixel format", surface->addr);
                 return true;
             }

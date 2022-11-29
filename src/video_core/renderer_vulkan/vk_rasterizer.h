@@ -168,6 +168,9 @@ private:
     /// Setup geometry shader for AccelerateDrawBatch
     bool SetupGeometryShader();
 
+    /// Setup texture units for drawing
+    void SetupTextureUnits(Surface* const color_surface);
+
     /// Creates the vertex layout struct used for software shader pipelines
     void MakeSoftwareVertexLayout();
 
