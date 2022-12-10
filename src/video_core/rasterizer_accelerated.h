@@ -13,11 +13,10 @@ namespace VideoCore {
 
 class RasterizerAccelerated : public RasterizerInterface {
 public:
-    RasterizerAccelerated();
+    RasterizerAccelerated(Memory::MemorySystem& memory);
     virtual ~RasterizerAccelerated() = default;
 
-    void AddTriangle(const Pica::Shader::OutputVertex& v0,
-                     const Pica::Shader::OutputVertex& v1,
+    void AddTriangle(const Pica::Shader::OutputVertex& v0, const Pica::Shader::OutputVertex& v1,
                      const Pica::Shader::OutputVertex& v2) override;
 
     void UpdatePagesCachedCount(PAddr addr, u32 size, int delta) override;
@@ -126,6 +125,8 @@ protected:
     VertexArrayInfo AnalyzeVertexArray(bool is_indexed);
 
 protected:
+    Memory::MemorySystem& memory;
+
     std::array<u16, 0x30000> cached_pages{};
     std::vector<HardwareVertex> vertex_batch;
     bool shader_dirty = true;

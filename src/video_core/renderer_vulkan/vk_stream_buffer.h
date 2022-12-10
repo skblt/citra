@@ -30,21 +30,20 @@ struct StagingBuffer {
 class StreamBuffer {
     static constexpr std::size_t MAX_BUFFER_VIEWS = 3;
     static constexpr std::size_t BUCKET_COUNT = 32;
+
 public:
-    /// Staging only constructor
     StreamBuffer(const Instance& instance, Scheduler& scheduler, std::size_t size,
-                 bool readback = false);
-    /// Staging + GPU streaming constructor
+                 std::size_t alignment = 16, bool readback = false);
     StreamBuffer(const Instance& instance, Scheduler& scheduler, std::size_t size,
                  vk::BufferUsageFlagBits usage, std::span<const vk::Format> views,
-                 bool readback = false);
+                 std::size_t alignment = 16, bool readback = false);
     ~StreamBuffer();
 
     StreamBuffer(const StreamBuffer&) = delete;
     StreamBuffer& operator=(const StreamBuffer&) = delete;
 
     /// Maps aligned staging memory of size bytes
-    std::tuple<u8*, std::size_t, bool> Map(std::size_t size, std::size_t alignment = 0);
+    std::tuple<u8*, std::size_t, bool> Map(std::size_t size);
 
     /// Commits size bytes from the currently mapped staging memory
     void Commit(std::size_t size = 0);
@@ -85,6 +84,7 @@ private:
     std::size_t buffer_offset = 0;
     std::size_t flush_offset = 0;
     std::size_t bucket_index = 0;
+    std::size_t alignment;
     bool readback = false;
     std::array<u64, BUCKET_COUNT> ticks{};
 };

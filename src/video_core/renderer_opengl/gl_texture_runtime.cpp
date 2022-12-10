@@ -2,15 +2,24 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#include <bit>
-#include "common/scope_exit.h"
-#include "video_core/rasterizer_cache/utils.h"
+#include "common/microprofile.h"
 #include "video_core/renderer_opengl/gl_driver.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_texture_runtime.h"
+#include "video_core/renderer_opengl/pica_to_gl.h"
+
+MICROPROFILE_DEFINE(OpenGL_Upload, "OpenGL", "Texture Upload", MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(OpenGL_Download, "OpenGL", "Texture Download", MP_RGB(128, 192, 64));
 
 namespace OpenGL {
+
+using namespace Pica::Texture;
+using VideoCore::AllocationId;
+using VideoCore::SurfaceBase;
+
+constexpr u32 UPLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
+constexpr u32 DOWNLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 
 constexpr FormatTuple DEFAULT_TUPLE = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
 
@@ -49,20 +58,48 @@ static constexpr std::array COLOR_TUPLES_OES = {
     default:
         UNREACHABLE_MSG("Invalid surface type!");
     }
-
     return GL_COLOR_BUFFER_BIT;
 }
 
-constexpr u32 UPLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
-constexpr u32 DOWNLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
+[[nodiscard]] u32 FboIndex(VideoCore::SurfaceType type) {
+    switch (type) {
+    case VideoCore::SurfaceType::Color:
+    case VideoCore::SurfaceType::Texture:
+    case VideoCore::SurfaceType::Fill:
+        return 0;
+    case VideoCore::SurfaceType::Depth:
+        return 1;
+    case VideoCore::SurfaceType::DepthStencil:
+        return 2;
+    default:
+        UNREACHABLE_MSG("Invalid surface type!");
+    }
+    return 0;
+}
+
+[[nodiscard]] GLuint MakeHandle(GLsizei width, GLsizei height, GLsizei levels,
+                                GLint internalformat) {
+    GLuint handle{};
+    glGenTextures(1, &handle);
+
+    glTextureStorage2D(handle, levels, internalformat, width, height);
+
+    glTextureParameteri(handle, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(handle, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(handle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    return handle;
+}
 
 TextureRuntime::TextureRuntime(Driver& driver)
-    : driver{driver}, filterer{Settings::values.texture_filter_name, VideoCore::GetResolutionScaleFactor()},
+    : driver{driver}, filterer{Settings::values.texture_filter_name,
+                               VideoCore::GetResolutionScaleFactor()},
       downloader_es{false}, upload_buffer{GL_PIXEL_UNPACK_BUFFER, UPLOAD_BUFFER_SIZE},
-      download_buffer{GL_PIXEL_PACK_BUFFER, DOWNLOAD_BUFFER_SIZE, true}  {
+      download_buffer{GL_PIXEL_PACK_BUFFER, DOWNLOAD_BUFFER_SIZE, true} {
 
-    read_fbo.Create();
-    draw_fbo.Create();
+    for (std::size_t i = 0; i < rescale_draw_fbos.size(); ++i) {
+        rescale_draw_fbos[i].Create();
+        rescale_read_fbos[i].Create();
+    }
 
     auto Register = [this](VideoCore::PixelFormat dest,
                            std::unique_ptr<FormatReinterpreterBase>&& obj) {
@@ -74,17 +111,21 @@ TextureRuntime::TextureRuntime(Driver& driver)
     Register(VideoCore::PixelFormat::RGB5A1, std::make_unique<RGBA4toRGB5A1>());
 }
 
-StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
-    auto& buffer = upload ? upload_buffer : download_buffer;
-    auto [data, offset, invalidate] = buffer.Map(size, 4);
+TextureRuntime::~TextureRuntime() = default;
 
-    return StagingData{.buffer = buffer.GetHandle(),
-                       .size = size,
-                       .mapped = std::span<std::byte>{reinterpret_cast<std::byte*>(data), size},
-                       .buffer_offset = offset};
+StagingData TextureRuntime::FindStaging(u32 size, bool upload) {
+    OGLStreamBuffer& buffer = upload ? upload_buffer : download_buffer;
+    const auto [data, offset, invalidate] = buffer.Map(size, 4);
+
+    return StagingData{
+        .buffer = buffer.GetHandle(),
+        .size = size,
+        .mapped = std::span{reinterpret_cast<std::byte*>(data), size},
+        .buffer_offset = offset,
+    };
 }
 
-const FormatTuple& TextureRuntime::GetFormatTuple(VideoCore::PixelFormat pixel_format) {
+FormatTuple TextureRuntime::NativeFormat(VideoCore::PixelFormat pixel_format) const {
     const auto type = GetFormatType(pixel_format);
     const std::size_t format_index = static_cast<std::size_t>(pixel_format);
 
@@ -105,9 +146,9 @@ void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::spa
                                    std::span<std::byte> dest) {
     const VideoCore::PixelFormat format = surface.pixel_format;
     if (format == VideoCore::PixelFormat::RGBA8 && driver.IsOpenGLES()) {
-        return Pica::Texture::ConvertABGRToRGBA(source, dest);
+        return ConvertABGRToRGBA(source, dest);
     } else if (format == VideoCore::PixelFormat::RGB8 && driver.IsOpenGLES()) {
-        return Pica::Texture::ConvertBGRToRGB(source, dest);
+        return ConvertBGRToRGB(source, dest);
     } else {
         // Sometimes the source size might be larger than the destination.
         // This can happen during texture downloads when FromInterval aligns
@@ -118,48 +159,8 @@ void TextureRuntime::FormatConvert(const Surface& surface, bool upload, std::spa
     }
 }
 
-OGLTexture TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
-                                    VideoCore::TextureType type) {
-    const u32 layers = type == VideoCore::TextureType::CubeMap ? 6 : 1;
-    const u32 levels = std::log2(std::max(width, height)) + 1;
-    const GLenum target =
-        type == VideoCore::TextureType::CubeMap ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
-
-    // Attempt to recycle an unused texture
-    const VideoCore::HostTextureTag key = {
-        .format = format, .width = width, .height = height, .layers = layers};
-
-    if (auto it = texture_recycler.find(key); it != texture_recycler.end()) {
-        OGLTexture texture = std::move(it->second);
-        texture_recycler.erase(it);
-        return texture;
-    }
-
-    const auto& tuple = GetFormatTuple(format);
-    const OpenGLState& state = OpenGLState::GetCurState();
-    GLuint old_tex = state.texture_units[0].texture_2d;
-
-    // Allocate new texture
-    OGLTexture texture{};
-    texture.Create();
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(target, texture.handle);
-
-    glTexStorage2D(target, levels, tuple.internal_format, width, height);
-
-    glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    glBindTexture(target, old_tex);
-    return texture;
-}
-
-bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
-                                  VideoCore::ClearValue value) {
+bool TextureRuntime::FramebufferClear(Framebuffer& framebuffer, const VideoCore::TextureClear& clear) {
     OpenGLState prev_state = OpenGLState::GetCurState();
-    SCOPE_EXIT({ prev_state.Apply(); });
 
     // Setup scissor rectangle according to the clear rectangle
     OpenGLState state{};
@@ -168,118 +169,71 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
     state.scissor.y = clear.texture_rect.bottom;
     state.scissor.width = clear.texture_rect.GetWidth();
     state.scissor.height = clear.texture_rect.GetHeight();
-    state.draw.draw_framebuffer = draw_fbo.handle;
+    state.draw.draw_framebuffer = framebuffer.Handle();
     state.Apply();
 
-    GLint handle = surface.texture.handle;
-    switch (surface.type) {
+    switch (clear.type) {
     case VideoCore::SurfaceType::Color:
     case VideoCore::SurfaceType::Texture:
     case VideoCore::SurfaceType::Fill:
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, handle,
-                               clear.texture_level);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
-                               0);
-
         state.color_mask.red_enabled = true;
         state.color_mask.green_enabled = true;
         state.color_mask.blue_enabled = true;
         state.color_mask.alpha_enabled = true;
         state.Apply();
 
-        glClearBufferfv(GL_COLOR, 0, value.color.AsArray());
+        glClearBufferfv(GL_COLOR, 0, clear.value.color.AsArray());
         break;
     case VideoCore::SurfaceType::Depth:
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, handle,
-                               clear.texture_level);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
-
         state.depth.write_mask = GL_TRUE;
         state.Apply();
 
-        glClearBufferfv(GL_DEPTH, 0, &value.depth);
+        glClearBufferfv(GL_DEPTH, 0, &clear.value.depth);
         break;
     case VideoCore::SurfaceType::DepthStencil:
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D,
-                               handle, clear.texture_level);
-
         state.depth.write_mask = GL_TRUE;
         state.stencil.write_mask = -1;
         state.Apply();
 
-        glClearBufferfi(GL_DEPTH_STENCIL, 0, value.depth, value.stencil);
+        glClearBufferfi(GL_DEPTH_STENCIL, 0, clear.value.depth, clear.value.stencil);
         break;
     default:
         UNREACHABLE_MSG("Invalid surface type!");
     }
 
+    prev_state.Apply();
     return true;
 }
 
-bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
-                                  const VideoCore::TextureCopy& copy) {
-    // Emulate texture copy with blit for now
-    const VideoCore::TextureBlit blit = {
-        .src_level = copy.src_level,
-        .dst_level = copy.dst_level,
-        .src_layer = copy.src_layer,
-        .dst_layer = copy.dst_layer,
-        .src_rect = {copy.src_offset.x, copy.src_offset.y + copy.extent.height,
-                     copy.src_offset.x + copy.extent.width, copy.src_offset.y},
-        .dst_rect = {copy.dst_offset.x, copy.dst_offset.y + copy.extent.height,
-                     copy.dst_offset.x + copy.extent.width, copy.dst_offset.y}};
+bool TextureRuntime::SurfaceClear(Surface& surface, const VideoCore::TextureClear& clear) {
+    if (driver.IsOpenGLES()) {
+        return false;
+    }
 
-    return BlitTextures(source, dest, blit);
+    glClearTexSubImage(surface.Handle(), clear.texture_level, clear.texture_rect.left,
+                       clear.texture_rect.bottom, 0, clear.texture_rect.GetWidth(),
+                       clear.texture_rect.GetHeight(), 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                       clear.value.color.AsArray());
+    return true;
 }
 
-bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
-                                  const VideoCore::TextureBlit& blit) {
-    OpenGLState prev_state = OpenGLState::GetCurState();
-    SCOPE_EXIT({ prev_state.Apply(); });
-
-    OpenGLState state{};
-    state.draw.read_framebuffer = read_fbo.handle;
-    state.draw.draw_framebuffer = draw_fbo.handle;
-    state.Apply();
-
-    const GLenum src_textarget = source.texture_type == VideoCore::TextureType::CubeMap
-                                     ? GL_TEXTURE_CUBE_MAP_POSITIVE_X + blit.src_layer
-                                     : GL_TEXTURE_2D;
-    BindFramebuffer(GL_READ_FRAMEBUFFER, blit.src_level, src_textarget, source.type,
-                    source.texture);
-
-    const GLenum dst_textarget = dest.texture_type == VideoCore::TextureType::CubeMap
-                                     ? GL_TEXTURE_CUBE_MAP_POSITIVE_X + blit.dst_layer
-                                     : GL_TEXTURE_2D;
-    BindFramebuffer(GL_DRAW_FRAMEBUFFER, blit.dst_level, dst_textarget, dest.type, dest.texture);
+bool TextureRuntime::FramebufferBlit(const Framebuffer& source, const Framebuffer& dest,
+                                     const VideoCore::TextureBlit& blit) {
+    ASSERT(source.BufferMask() == dest.BufferMask());
 
     // TODO (wwylele): use GL_NEAREST for shadow map texture
     // Note: shadow map is treated as RGBA8 format in PICA, as well as in the rasterizer cache, but
     // doing linear intepolation componentwise would cause incorrect value. However, for a
     // well-programmed game this code path should be rarely executed for shadow map with
     // inconsistent scale.
-    const GLbitfield buffer_mask = MakeBufferMask(source.type);
+    const GLbitfield buffer_mask = source.BufferMask();
     const GLenum filter = buffer_mask == GL_COLOR_BUFFER_BIT ? GL_LINEAR : GL_NEAREST;
-    glBlitFramebuffer(blit.src_rect.left, blit.src_rect.bottom, blit.src_rect.right,
-                      blit.src_rect.top, blit.dst_rect.left, blit.dst_rect.bottom,
-                      blit.dst_rect.right, blit.dst_rect.top, buffer_mask, filter);
 
+    glBlitNamedFramebuffer(source.Handle(), dest.Handle(), blit.src_rect.left, blit.src_rect.bottom,
+                           blit.src_rect.right, blit.src_rect.top, blit.dst_rect.left,
+                           blit.dst_rect.bottom, blit.dst_rect.right, blit.dst_rect.top,
+                           buffer_mask, filter);
     return true;
-}
-
-void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {
-    OpenGLState prev_state = OpenGLState::GetCurState();
-    SCOPE_EXIT({ prev_state.Apply(); });
-
-    OpenGLState state{};
-    state.texture_units[0].texture_2d = surface.texture.handle;
-    state.Apply();
-
-    glActiveTexture(GL_TEXTURE0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, max_level);
-    glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 const ReinterpreterList& TextureRuntime::GetPossibleReinterpretations(
@@ -292,189 +246,221 @@ bool TextureRuntime::NeedsConvertion(VideoCore::PixelFormat format) const {
            (format == VideoCore::PixelFormat::RGB8 || format == VideoCore::PixelFormat::RGBA8);
 }
 
-void TextureRuntime::BindFramebuffer(GLenum target, GLint level, GLenum textarget,
-                                     VideoCore::SurfaceType type, OGLTexture& texture) const {
-    const GLint framebuffer = target == GL_DRAW_FRAMEBUFFER ? draw_fbo.handle : read_fbo.handle;
-    glBindFramebuffer(target, framebuffer);
+Framebuffer TextureRuntime::MakeRescaleFramebuffer(Surface& surface, GLenum target, GLint level,
+                                                   bool scaled) const {
+    const u32 fbo_index = FboIndex(surface.type);
+    const GLuint framebuffer = target == GL_DRAW_FRAMEBUFFER ? rescale_draw_fbos[fbo_index].handle
+                                                             : rescale_read_fbos[fbo_index].handle;
 
-    switch (type) {
+    switch (surface.type) {
     case VideoCore::SurfaceType::Color:
     case VideoCore::SurfaceType::Texture:
-        glFramebufferTexture2D(target, GL_COLOR_ATTACHMENT0, textarget, texture.handle, level);
-        glFramebufferTexture2D(target, GL_DEPTH_STENCIL_ATTACHMENT, textarget, 0, 0);
+        glNamedFramebufferTexture(framebuffer, GL_COLOR_ATTACHMENT0, surface.Handle(scaled), level);
+        glNamedFramebufferTexture(framebuffer, GL_DEPTH_STENCIL_ATTACHMENT, 0, 0);
         break;
     case VideoCore::SurfaceType::Depth:
-        glFramebufferTexture2D(target, GL_COLOR_ATTACHMENT0, textarget, 0, 0);
-        glFramebufferTexture2D(target, GL_DEPTH_ATTACHMENT, textarget, texture.handle, level);
-        glFramebufferTexture2D(target, GL_STENCIL_ATTACHMENT, textarget, 0, 0);
+        glNamedFramebufferTexture(framebuffer, GL_COLOR_ATTACHMENT0, 0, 0);
+        glNamedFramebufferTexture(framebuffer, GL_DEPTH_ATTACHMENT, surface.Handle(scaled), level);
+        glNamedFramebufferTexture(framebuffer, GL_STENCIL_ATTACHMENT, 0, 0);
         break;
     case VideoCore::SurfaceType::DepthStencil:
-        glFramebufferTexture2D(target, GL_COLOR_ATTACHMENT0, textarget, 0, 0);
-        glFramebufferTexture2D(target, GL_DEPTH_STENCIL_ATTACHMENT, textarget, texture.handle,
-                               level);
+        glNamedFramebufferTexture(framebuffer, GL_COLOR_ATTACHMENT0, 0, 0);
+        glNamedFramebufferTexture(framebuffer, GL_DEPTH_STENCIL_ATTACHMENT, surface.Handle(scaled),
+                                  level);
         break;
     default:
         UNREACHABLE_MSG("Invalid surface type!");
     }
+
+    return Framebuffer{framebuffer, MakeBufferMask(surface.type)};
 }
 
-Surface::Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
-    : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, driver{runtime.GetDriver()} {
-    if (pixel_format != VideoCore::PixelFormat::Invalid) {
-        texture = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format,
-                                   texture_type);
+Allocation::Allocation(TextureRuntime&) {}
+
+Allocation::Allocation(TextureRuntime& runtime, const VideoCore::SurfaceParams& params) {
+    const GLsizei num_levels = params.levels;
+
+    tuple = runtime.NativeFormat(params.pixel_format);
+    handles[0] = MakeHandle(params.GetScaledWidth(), params.GetScaledHeight(), num_levels,
+                            tuple.internal_format);
+
+    if (params.res_scale != 1) {
+        handles[1] = MakeHandle(params.width, params.height, num_levels, tuple.internal_format);
+    } else {
+        handles[1] = handles[0];
     }
 }
 
-Surface::~Surface() {
-    if (pixel_format != VideoCore::PixelFormat::Invalid) {
-        const VideoCore::HostTextureTag tag = {
-            .format = pixel_format,
-            .width = GetScaledWidth(),
-            .height = GetScaledHeight(),
-            .layers = texture_type == VideoCore::TextureType::CubeMap ? 6u : 1u};
-
-        runtime.texture_recycler.emplace(tag, std::move(texture));
+Allocation::~Allocation() {
+    if (handles[1] && handles[1] != handles[0]) {
+        glDeleteTextures(1, &handles[1]);
+    }
+    if (handles[0]) {
+        glDeleteTextures(1, &handles[0]);
     }
 }
 
-MICROPROFILE_DEFINE(OpenGL_Upload, "OpenGL", "Texture Upload", MP_RGB(128, 192, 64));
+Surface::Surface(VideoCore::SurfaceParams params) : SurfaceBase{params} {}
+
+Surface::Surface(TextureRuntime& runtime, Allocation&& alloc, SurfaceParams params)
+    : SurfaceBase{params}, driver{&runtime.GetDriver()}, runtime{&runtime},
+      alloc{std::move(alloc)} {}
+
+Surface::~Surface() = default;
+
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
     MICROPROFILE_SCOPE(OpenGL_Upload);
 
-    // Ensure no bad interactions with GL_UNPACK_ALIGNMENT
-    ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(stride));
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, staging.buffer);
 
-    const bool is_scaled = res_scale != 1;
-    if (is_scaled) {
-        ScaledUpload(upload, staging);
-    } else {
-        OpenGLState prev_state = OpenGLState::GetCurState();
-        SCOPE_EXIT({ prev_state.Apply(); });
+    const FormatTuple& tuple = runtime->NativeFormat(pixel_format);
+    const void* const offset = reinterpret_cast<const void*>(staging.buffer_offset);
+    const GLuint handle = Handle(false);
 
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(stride));
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, staging.buffer);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture.handle);
-
-        const auto& tuple = runtime.GetFormatTuple(pixel_format);
-        glTexSubImage2D(GL_TEXTURE_2D, upload.texture_level, upload.texture_rect.left,
+    glTextureSubImage2D(handle, upload.texture_level, upload.texture_rect.left,
                         upload.texture_rect.bottom, upload.texture_rect.GetWidth(),
-                        upload.texture_rect.GetHeight(), tuple.format, tuple.type,
-                        reinterpret_cast<void*>(staging.buffer_offset));
+                        upload.texture_rect.GetHeight(), tuple.format, tuple.type, offset);
 
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-        runtime.upload_buffer.Unmap(staging.size);
+    runtime->upload_buffer.Unmap(staging.size);
+
+    if (res_scale != 1) {
+        ScaledUpload(upload);
     }
 
-    InvalidateAllWatcher();
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 }
 
-MICROPROFILE_DEFINE(OpenGL_Download, "OpenGL", "Texture Download", MP_RGB(128, 192, 64));
 void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
     MICROPROFILE_SCOPE(OpenGL_Download);
-
-    // Ensure no bad interactions with GL_PACK_ALIGNMENT
-    ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
-
-    OpenGLState prev_state = OpenGLState::GetCurState();
-    SCOPE_EXIT({ prev_state.Apply(); });
 
     glPixelStorei(GL_PACK_ROW_LENGTH, static_cast<GLint>(stride));
     glBindBuffer(GL_PIXEL_PACK_BUFFER, staging.buffer);
 
-    const bool is_scaled = res_scale != 1;
-    if (is_scaled) {
-        ScaledDownload(download, staging);
-    } else {
-        runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, download.texture_level, GL_TEXTURE_2D, type,
-                                texture);
-
-        const auto& tuple = runtime.GetFormatTuple(pixel_format);
-        glReadPixels(download.texture_rect.left, download.texture_rect.bottom,
-                     download.texture_rect.GetWidth(), download.texture_rect.GetHeight(),
-                     tuple.format, tuple.type,
-                     reinterpret_cast<void*>(staging.buffer_offset));
-
-        runtime.download_buffer.Unmap(staging.size);
+    if (res_scale != 1) {
+        ScaledDownload(download);
     }
+
+    const FormatTuple& tuple = runtime->NativeFormat(pixel_format);
+    const GLuint handle = Handle(false);
+    const GLsizei buffer_size = static_cast<GLsizei>(staging.size);
+    void* const offset = reinterpret_cast<void*>(staging.buffer_offset);
+
+    glGetTextureSubImage(handle, download.texture_level, download.texture_rect.left,
+                         download.texture_rect.bottom, 0, download.texture_rect.GetWidth(),
+                         download.texture_rect.GetHeight(), 1, tuple.format, tuple.type,
+                         buffer_size, offset);
+
+    runtime->download_buffer.Unmap(staging.size);
 
     glPixelStorei(GL_PACK_ROW_LENGTH, 0);
 }
 
-void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload,
-                           const StagingData& staging) {
+void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload) {
     const u32 rect_width = upload.texture_rect.GetWidth();
     const u32 rect_height = upload.texture_rect.GetHeight();
-    const auto scaled_rect = upload.texture_rect * res_scale;
-    const auto unscaled_rect = VideoCore::Rect2D{0, rect_height, rect_width, 0};
+    const VideoCore::Rect2D scaled_rect = upload.texture_rect * res_scale;
+    const VideoCore::Rect2D unscaled_rect{0, rect_height, rect_width, 0};
 
-    SurfaceParams unscaled_params = *this;
-    unscaled_params.width = rect_width;
-    unscaled_params.stride = rect_width;
-    unscaled_params.height = rect_height;
-    unscaled_params.res_scale = 1;
-    Surface unscaled_surface{unscaled_params, runtime};
+    const VideoCore::TextureBlit blit = {
+        .src_level = 0,
+        .dst_level = upload.texture_level,
+        .src_layer = 0,
+        .dst_layer = 0,
+        .src_rect = unscaled_rect,
+        .dst_rect = scaled_rect,
+    };
 
-    const VideoCore::BufferTextureCopy unscaled_upload = {.buffer_offset = upload.buffer_offset,
-                                                          .buffer_size = upload.buffer_size,
-                                                          .texture_rect = unscaled_rect};
+    const Framebuffer source_fbo =
+        runtime->MakeRescaleFramebuffer(*this, GL_READ_FRAMEBUFFER, upload.texture_level, false);
+    const Framebuffer dest_fbo =
+        runtime->MakeRescaleFramebuffer(*this, GL_DRAW_FRAMEBUFFER, upload.texture_level, true);
 
-    unscaled_surface.Upload(unscaled_upload, staging);
-
-    const auto& filterer = runtime.GetFilterer();
-    if (!filterer.Filter(unscaled_surface.texture, unscaled_rect, texture, scaled_rect, type)) {
-        const VideoCore::TextureBlit blit = {.src_level = 0,
-                                             .dst_level = upload.texture_level,
-                                             .src_layer = 0,
-                                             .dst_layer = 0,
-                                             .src_rect = unscaled_rect,
-                                             .dst_rect = scaled_rect};
-
-        // If filtering fails, resort to normal blitting
-        runtime.BlitTextures(unscaled_surface, *this, blit);
-    }
+    runtime->FramebufferBlit(source_fbo, dest_fbo, blit);
 }
 
-void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
+void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download) {
     const u32 rect_width = download.texture_rect.GetWidth();
     const u32 rect_height = download.texture_rect.GetHeight();
     const VideoCore::Rect2D scaled_rect = download.texture_rect * res_scale;
-    const VideoCore::Rect2D unscaled_rect = VideoCore::Rect2D{0, rect_height, rect_width, 0};
+    const VideoCore::Rect2D unscaled_rect{0, rect_height, rect_width, 0};
 
-    // Allocate an unscaled texture that fits the download rectangle to use as a blit destination
-    SurfaceParams unscaled_params = *this;
-    unscaled_params.width = rect_width;
-    unscaled_params.stride = rect_width;
-    unscaled_params.height = rect_height;
-    unscaled_params.res_scale = 1;
-    Surface unscaled_surface{unscaled_params, runtime};
+    const VideoCore::TextureBlit blit = {
+        .src_level = download.texture_level,
+        .dst_level = 0,
+        .src_layer = 0,
+        .dst_layer = 0,
+        .src_rect = scaled_rect,
+        .dst_rect = unscaled_rect,
+    };
 
-    const VideoCore::TextureBlit blit = {.src_level = download.texture_level,
-                                         .dst_level = 0,
-                                         .src_layer = 0,
-                                         .dst_layer = 0,
-                                         .src_rect = scaled_rect,
-                                         .dst_rect = unscaled_rect};
+    const Framebuffer source_fbo =
+        runtime->MakeRescaleFramebuffer(*this, GL_READ_FRAMEBUFFER, download.texture_level, true);
+    const Framebuffer dest_fbo =
+        runtime->MakeRescaleFramebuffer(*this, GL_DRAW_FRAMEBUFFER, download.texture_level, false);
 
-    // Blit the scaled rectangle to the unscaled texture
-    runtime.BlitTextures(*this, unscaled_surface, blit);
+    runtime->FramebufferBlit(source_fbo, dest_fbo, blit);
+}
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, unscaled_surface.texture.handle);
+Framebuffer::Framebuffer(TextureRuntime&, Surface* color, Surface* depth,
+                         VideoCore::RenderTargets) {
+    framebuffer.Create();
 
-    const auto& tuple = runtime.GetFormatTuple(pixel_format);
-    if (driver.IsOpenGLES()) {
-        const auto& downloader_es = runtime.GetDownloaderES();
-        downloader_es.GetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, rect_height, rect_width,
-                                  reinterpret_cast<void*>(staging.buffer_offset));
-    } else {
-        glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type,
-                      reinterpret_cast<void*>(staging.buffer_offset));
+    if (color) {
+        ASSERT(color->type == VideoCore::SurfaceType::Color);
+        glNamedFramebufferTexture(framebuffer.handle, GL_COLOR_ATTACHMENT0, color->Handle(), 0);
+        buffer_mask = GL_COLOR_BUFFER_BIT;
     }
 
-    runtime.download_buffer.Unmap(staging.size);
+    if (depth) {
+        const VideoCore::SurfaceType type = depth->type;
+        switch (type) {
+        case VideoCore::SurfaceType::Depth:
+            glNamedFramebufferTexture(framebuffer.handle, GL_DEPTH_ATTACHMENT, depth->Handle(), 0);
+            buffer_mask = GL_DEPTH_BUFFER_BIT;
+            break;
+        case VideoCore::SurfaceType::DepthStencil:
+            glNamedFramebufferTexture(framebuffer.handle, GL_DEPTH_STENCIL_ATTACHMENT,
+                                      depth->Handle(), 0);
+            buffer_mask = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+            break;
+        default:
+            UNREACHABLE_MSG("Depth surface with incompatible surface type!");
+        }
+    }
 }
+
+Framebuffer::Framebuffer(GLuint acquired_framebuffer, GLbitfield mask)
+    : acquired_framebuffer{acquired_framebuffer}, buffer_mask{mask} {}
+
+Framebuffer::~Framebuffer() = default;
+
+Sampler::Sampler(TextureRuntime&, VideoCore::SamplerParams params) {
+    const GLenum mag_filter = PicaToGL::TextureMagFilterMode(params.min_filter);
+    const GLenum min_filter = PicaToGL::TextureMinFilterMode(params.min_filter, params.mip_filter);
+    const GLenum wrap_s = PicaToGL::WrapMode(params.wrap_s);
+    const GLenum wrap_t = PicaToGL::WrapMode(params.wrap_t);
+    const Common::Vec4f gl_color = PicaToGL::ColorRGBA8(params.border_color);
+    const float lod_min = params.lod_min;
+    const float lod_max = params.lod_max;
+    const float lod_bias = params.lod_bias / 256.f;
+
+    sampler.Create();
+
+    const GLuint handle = sampler.handle;
+    glSamplerParameteri(handle, GL_TEXTURE_MAG_FILTER, mag_filter);
+    glSamplerParameteri(handle, GL_TEXTURE_MIN_FILTER, min_filter);
+
+    glSamplerParameteri(handle, GL_TEXTURE_WRAP_S, wrap_s);
+    glSamplerParameteri(handle, GL_TEXTURE_WRAP_T, wrap_t);
+
+    glSamplerParameterfv(handle, GL_TEXTURE_BORDER_COLOR, gl_color.AsArray());
+
+    glSamplerParameterf(handle, GL_TEXTURE_MIN_LOD, lod_min);
+    glSamplerParameterf(handle, GL_TEXTURE_MAX_LOD, lod_max);
+    glSamplerParameterf(handle, GL_TEXTURE_LOD_BIAS, lod_bias);
+}
+
+Sampler::~Sampler() = default;
 
 } // namespace OpenGL

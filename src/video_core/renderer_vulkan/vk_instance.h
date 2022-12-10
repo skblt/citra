@@ -110,6 +110,11 @@ public:
         return custom_border_color;
     }
 
+    /// Returns true when VK_EXT_shader_stencil_export is supported
+    bool IsShaderStencilExportSupported() const {
+        return shader_stencil_export;
+    }
+
     /// Returns the vendor ID of the physical device
     u32 GetVendorID() const {
         return properties.vendorID;
@@ -199,14 +204,15 @@ private:
     std::vector<vk::PhysicalDevice> physical_devices;
     std::array<FormatTraits, VideoCore::PIXEL_FORMAT_COUNT> format_table;
     std::vector<std::string> available_extensions;
-    u32 present_queue_family_index{0};
-    u32 graphics_queue_family_index{0};
-    bool timeline_semaphores{false};
-    bool extended_dynamic_state{false};
-    bool push_descriptors{false};
-    bool custom_border_color{false};
-    bool enable_validation{false};
-    bool dump_command_buffers{false};
+    u32 present_queue_family_index{};
+    u32 graphics_queue_family_index{};
+    bool timeline_semaphores{};
+    bool extended_dynamic_state{};
+    bool push_descriptors{};
+    bool custom_border_color{};
+    bool shader_stencil_export{};
+    bool enable_validation{};
+    bool dump_command_buffers{};
 };
 
 } // namespace Vulkan

@@ -128,10 +128,7 @@ void Driver::DeduceVendor() {
 }
 
 void Driver::CheckExtensionSupport() {
-    ext_buffer_storage = GLAD_GL_EXT_buffer_storage;
-    arb_buffer_storage = GLAD_GL_ARB_buffer_storage;
     ext_clip_cull_distance = GLAD_GL_EXT_clip_cull_distance;
-    arb_direct_state_access = GLAD_GL_ARB_direct_state_access;
 }
 
 void Driver::FindBugs() {

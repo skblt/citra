@@ -29,15 +29,21 @@ add_library(video_core STATIC
     rasterizer_cache/pixel_format.h
     rasterizer_cache/rasterizer_cache.cpp
     rasterizer_cache/rasterizer_cache.h
+    rasterizer_cache/render_targets.h
+    rasterizer_cache/slot_vector.h
+    rasterizer_cache/surface_base.cpp
     rasterizer_cache/surface_base.h
-    rasterizer_cache/utils.cpp
-    rasterizer_cache/utils.h
     rasterizer_cache/surface_params.cpp
     rasterizer_cache/surface_params.h
+    rasterizer_cache/types.h
+    rasterizer_cache/utils.cpp
+    rasterizer_cache/utils.h
     renderer_opengl/frame_dumper_opengl.cpp
     renderer_opengl/frame_dumper_opengl.h
     renderer_opengl/gl_driver.cpp
     renderer_opengl/gl_driver.h
+    renderer_opengl/gl_format_reinterpreter.cpp
+    renderer_opengl/gl_format_reinterpreter.h
     renderer_opengl/gl_rasterizer.cpp
     renderer_opengl/gl_rasterizer.h
     renderer_opengl/gl_resource_manager.cpp
@@ -80,9 +86,6 @@ add_library(video_core STATIC
     renderer_opengl/texture_filters/texture_filterer.h
     renderer_opengl/texture_filters/xbrz/xbrz_freescale.cpp
     renderer_opengl/texture_filters/xbrz/xbrz_freescale.h
-    #temporary, move these back in alphabetical order before merging
-    renderer_opengl/gl_format_reinterpreter.cpp
-    renderer_opengl/gl_format_reinterpreter.h
     renderer_vulkan/pica_to_vk.h
     renderer_vulkan/renderer_vulkan.cpp
     renderer_vulkan/renderer_vulkan.h
@@ -94,7 +97,6 @@ add_library(video_core STATIC
     renderer_vulkan/vk_descriptor_manager.h
     renderer_vulkan/vk_format_reinterpreter.cpp
     renderer_vulkan/vk_format_reinterpreter.h
-    renderer_vulkan/vk_layout_tracker.h
     renderer_vulkan/vk_master_semaphore.cpp
     renderer_vulkan/vk_master_semaphore.h
     renderer_vulkan/vk_rasterizer.cpp

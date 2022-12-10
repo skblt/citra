@@ -4,79 +4,71 @@
 
 #pragma once
 
-#include <array>
-#include <climits>
-#include <boost/icl/interval_map.hpp>
 #include <boost/icl/interval_set.hpp>
-#include "common/math_util.h"
-#include "video_core/rasterizer_cache/pixel_format.h"
+#include "video_core/rasterizer_cache/types.h"
 
 namespace VideoCore {
 
 using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
 
-enum class TextureType { Texture2D = 0, CubeMap = 1 };
-
 class SurfaceParams {
 public:
-    /// Surface match traits
+    /// Returns true if other_surface matches exactly params
     bool ExactMatch(const SurfaceParams& other_surface) const;
+
+    /// Returns true if sub_surface is a subrect of params
     bool CanSubRect(const SurfaceParams& sub_surface) const;
+
+    /// Returns true if params can be expanded to match expanded_surface
     bool CanExpand(const SurfaceParams& expanded_surface) const;
+
+    /// Returns true if params can be used for texcopy
     bool CanTexCopy(const SurfaceParams& texcopy_params) const;
 
-    Common::Rectangle<u32> GetSubRect(const SurfaceParams& sub_surface) const;
-    Common::Rectangle<u32> GetScaledSubRect(const SurfaceParams& sub_surface) const;
-
-    /// Returns the outer rectangle containing "interval"
-    SurfaceParams FromInterval(SurfaceInterval interval) const;
-    SurfaceInterval GetSubRectInterval(Common::Rectangle<u32> unscaled_rect) const;
-
     /// Updates remaining members from the already set addr, width, height and pixel_format
-    void UpdateParams() {
-        if (stride == 0) {
-            stride = width;
-        }
+    void UpdateParams();
 
-        type = GetFormatType(pixel_format);
-        size = !is_tiled ? BytesInPixels(stride * (height - 1) + width)
-                         : BytesInPixels(stride * 8 * (height / 8 - 1) + width * 8);
-        end = addr + size;
+    /// Returns the unscaled rectangle referenced by sub_surface
+    Rect2D GetSubRect(const SurfaceParams& sub_surface) const;
+
+    /// Returns the scaled rectangle referenced by sub_surface
+    Rect2D GetScaledSubRect(const SurfaceParams& sub_surface) const;
+
+    /// Returns the outer rectangle containing interval
+    SurfaceParams FromInterval(SurfaceInterval interval) const;
+
+    /// Returns the address interval referenced by unscaled_rect
+    SurfaceInterval GetSubRectInterval(Rect2D unscaled_rect) const;
+
+    [[nodiscard]] SurfaceInterval GetInterval() const noexcept {
+        return SurfaceInterval{addr, end};
     }
 
-    bool IsScaled() const {
-        return res_scale > 1;
-    }
-
-    SurfaceInterval GetInterval() const {
-        return SurfaceInterval(addr, end);
-    }
-
-    u32 GetFormatBpp() const {
+    [[nodiscard]] u32 GetFormatBpp() const noexcept {
         return VideoCore::GetFormatBpp(pixel_format);
     }
 
-    u32 GetScaledWidth() const {
+    [[nodiscard]] u32 GetScaledWidth() const noexcept {
         return width * res_scale;
     }
 
-    u32 GetScaledHeight() const {
+    [[nodiscard]] u32 GetScaledHeight() const noexcept {
         return height * res_scale;
     }
 
-    Common::Rectangle<u32> GetRect() const {
-        return {0, height, width, 0};
+    [[nodiscard]] Rect2D GetRect() const noexcept {
+        return Rect2D{0, height, width, 0};
     }
 
-    Common::Rectangle<u32> GetScaledRect() const {
-        return {0, GetScaledHeight(), GetScaledWidth(), 0};
+    [[nodiscard]] Rect2D GetScaledRect() const noexcept {
+        return Rect2D{0, GetScaledHeight(), GetScaledWidth(), 0};
     }
 
-    u32 PixelsInBytes(u32 size) const {
+    [[nodiscard]] u32 PixelsInBytes(u32 size) const noexcept {
         return size * 8 / GetFormatBpp();
     }
 
-    u32 BytesInPixels(u32 pixels) const {
+    [[nodiscard]] u32 BytesInPixels(u32 pixels) const noexcept {
         return pixels * GetFormatBpp() / 8;
     }
 
@@ -88,6 +80,7 @@ public:
     u32 width = 0;
     u32 height = 0;
     u32 stride = 0;
+    u32 levels = 1;
     u16 res_scale = 1;
 
     bool is_tiled = false;

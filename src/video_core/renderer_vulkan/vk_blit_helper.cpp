@@ -4,15 +4,16 @@
 
 #include "common/vector_math.h"
 #include "video_core/renderer_vulkan/vk_blit_helper.h"
-#include "video_core/renderer_vulkan/vk_instance.h"
-#include "video_core/renderer_vulkan/vk_shader_util.h"
-#include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_descriptor_manager.h"
+#include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
 namespace Vulkan {
 
-BlitHelper::BlitHelper(const Instance& instance, Scheduler& scheduler, DescriptorManager& desc_manager)
+BlitHelper::BlitHelper(const Instance& instance, Scheduler& scheduler,
+                       DescriptorManager& desc_manager)
     : scheduler{scheduler}, desc_manager{desc_manager}, device{instance.GetDevice()} {
     constexpr std::string_view cs_source = R"(
 #version 450 core
@@ -127,29 +128,107 @@ BlitHelper::~BlitHelper() {
 
 void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
                                 const VideoCore::TextureBlit& blit) {
-    source.Transition(vk::ImageLayout::eDepthStencilReadOnlyOptimal, 0, source.alloc.levels);
-    dest.Transition(vk::ImageLayout::eGeneral, 0, dest.alloc.levels);
-
     const std::array textures = {
-        vk::DescriptorImageInfo{.imageView = source.GetDepthView(),
+        vk::DescriptorImageInfo{.imageView = source.DepthView(),
                                 .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal},
-        vk::DescriptorImageInfo{.imageView = source.GetStencilView(),
+        vk::DescriptorImageInfo{.imageView = source.StencilView(),
                                 .imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal},
-        vk::DescriptorImageInfo{.imageView = dest.GetImageView(),
+        vk::DescriptorImageInfo{.imageView = dest.ImageView(),
                                 .imageLayout = vk::ImageLayout::eGeneral}};
 
     vk::DescriptorSet set = desc_manager.AllocateSet(descriptor_layout);
     device.updateDescriptorSetWithTemplate(set, update_template, textures[0]);
 
-    scheduler.Record([this, set, blit](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        render_cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout, 0, set, {});
+    scheduler.Record([this, set, blit, src_image = source.Handle(), dst_image = dest.Handle()](
+                         vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
+        const std::array pre_barriers = {
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eShaderWrite |
+                                 vk::AccessFlagBits::eDepthStencilAttachmentWrite |
+                                 vk::AccessFlagBits::eDepthStencilAttachmentRead,
+                .dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
+                .oldLayout = vk::ImageLayout::eGeneral,
+                .newLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = src_image,
+                .subresourceRange{
+                    .aspectMask =
+                        vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil,
+                    .baseMipLevel = 0,
+                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            },
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eNone,
+                .dstAccessMask = vk::AccessFlagBits::eShaderWrite,
+                .oldLayout = vk::ImageLayout::eUndefined,
+                .newLayout = vk::ImageLayout::eGeneral,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = dst_image,
+                .subresourceRange{
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            }};
+        const std::array post_barriers = {
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eShaderRead,
+                .dstAccessMask = vk::AccessFlagBits::eShaderWrite |
+                                 vk::AccessFlagBits::eDepthStencilAttachmentWrite,
+                .oldLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+                .newLayout = vk::ImageLayout::eGeneral,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = src_image,
+                .subresourceRange{
+                    .aspectMask =
+                        vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil,
+                    .baseMipLevel = 0,
+                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            },
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
+                .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+                .oldLayout = vk::ImageLayout::eGeneral,
+                .newLayout = vk::ImageLayout::eGeneral,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = dst_image,
+                .subresourceRange{
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            }};
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::PipelineStageFlagBits::eComputeShader,
+                                      vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
+
+        render_cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout,
+                                         0, set, {});
         render_cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
 
         const auto src_offset = Common::MakeVec(blit.src_rect.left, blit.src_rect.bottom);
         render_cmdbuf.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
-                                     sizeof(Common::Vec2i), src_offset.AsArray());
+                                    sizeof(Common::Vec2i), src_offset.AsArray());
 
         render_cmdbuf.dispatch(blit.src_rect.GetWidth() / 8, blit.src_rect.GetHeight() / 8, 1);
+
+        render_cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
+                                      vk::PipelineStageFlagBits::eAllCommands,
+                                      vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
     });
 }
 

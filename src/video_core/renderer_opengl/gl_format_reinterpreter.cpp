@@ -40,14 +40,14 @@ void D24S8toRGBA8::Reinterpret(const Surface& source, VideoCore::Rect2D src_rect
     SCOPE_EXIT({ prev_state.Apply(); });
 
     OpenGLState state;
-    state.texture_units[0].texture_2d = source.texture.handle;
+    state.texture_units[0].texture_2d = source.Handle();
 
     // Use glTextureView on desktop to avoid intermediate copy
     if (use_texture_view) {
         temp_tex.Create();
         glActiveTexture(GL_TEXTURE1);
-        glTextureView(temp_tex.handle, GL_TEXTURE_2D, source.texture.handle, GL_DEPTH24_STENCIL8, 0,
-                      1, 0, 1);
+        glTextureView(temp_tex.handle, GL_TEXTURE_2D, source.Handle(), GL_DEPTH24_STENCIL8, 0, 1, 0,
+                      1);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     } else {
@@ -66,12 +66,12 @@ void D24S8toRGBA8::Reinterpret(const Surface& source, VideoCore::Rect2D src_rect
     state.draw.shader_program = program.handle;
     state.Apply();
 
-    glBindImageTexture(2, dest.texture.handle, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
+    glBindImageTexture(2, dest.Handle(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
 
     glActiveTexture(GL_TEXTURE1);
     if (!use_texture_view) {
-        glCopyImageSubData(source.texture.handle, GL_TEXTURE_2D, 0, src_rect.left, src_rect.bottom,
-                           0, temp_tex.handle, GL_TEXTURE_2D, 0, src_rect.left, src_rect.bottom, 0,
+        glCopyImageSubData(source.Handle(), GL_TEXTURE_2D, 0, src_rect.left, src_rect.bottom, 0,
+                           temp_tex.handle, GL_TEXTURE_2D, 0, src_rect.left, src_rect.bottom, 0,
                            src_rect.GetWidth(), src_rect.GetHeight(), 1);
     }
     glTexParameteri(GL_TEXTURE_2D, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_STENCIL_INDEX);
@@ -143,7 +143,7 @@ void RGBA4toRGB5A1::Reinterpret(const Surface& source, VideoCore::Rect2D src_rec
     SCOPE_EXIT({ prev_state.Apply(); });
 
     OpenGLState state;
-    state.texture_units[0].texture_2d = source.texture.handle;
+    state.texture_units[0].texture_2d = source.Handle();
     state.draw.draw_framebuffer = draw_fbo.handle;
     state.draw.shader_program = program.handle;
     state.draw.vertex_array = vao.handle;
@@ -152,8 +152,8 @@ void RGBA4toRGB5A1::Reinterpret(const Surface& source, VideoCore::Rect2D src_rec
                       static_cast<GLsizei>(dst_rect.GetHeight())};
     state.Apply();
 
-    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                           dest.texture.handle, 0);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dest.Handle(),
+                           0);
     glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
 
     glUniform2i(dst_size_loc, dst_rect.GetWidth(), dst_rect.GetHeight());

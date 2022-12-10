@@ -18,6 +18,8 @@ struct FormatTuple {
     GLint internal_format;
     GLenum format;
     GLenum type;
+
+    auto operator<=>(const FormatTuple&) const noexcept = default;
 };
 
 struct StagingData {
@@ -29,6 +31,7 @@ struct StagingData {
 
 class Driver;
 class Surface;
+class Framebuffer;
 
 /**
  * Provides texture manipulation functions to the rasterizer cache
@@ -39,48 +42,7 @@ class TextureRuntime {
 
 public:
     TextureRuntime(Driver& driver);
-    ~TextureRuntime() = default;
-
-    /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
-    StagingData FindStaging(u32 size, bool upload);
-
-    /// Returns the OpenGL format tuple associated with the provided pixel format
-    const FormatTuple& GetFormatTuple(VideoCore::PixelFormat pixel_format);
-
-    void Finish() const {}
-
-    /// Performs required format convertions on the staging data
-    void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
-                       std::span<std::byte> dest);
-
-    /// Allocates an OpenGL texture with the specified dimentions and format
-    OGLTexture Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
-                        VideoCore::TextureType type);
-
-    /// Fills the rectangle of the texture with the clear value provided
-    bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
-                      VideoCore::ClearValue value);
-
-    /// Copies a rectangle of src_tex to another rectange of dst_rect
-    bool CopyTextures(Surface& source, Surface& dest, const VideoCore::TextureCopy& copy);
-
-    /// Blits a rectangle of src_tex to another rectange of dst_rect
-    bool BlitTextures(Surface& surface, Surface& dest, const VideoCore::TextureBlit& blit);
-
-    /// Generates mipmaps for all the available levels of the texture
-    void GenerateMipmaps(Surface& surface, u32 max_level);
-
-    /// Returns all source formats that support reinterpretation to the dest format
-    [[nodiscard]] const ReinterpreterList& GetPossibleReinterpretations(
-        VideoCore::PixelFormat dest_format) const;
-
-    /// Returns true if the provided pixel format needs convertion
-    [[nodiscard]] bool NeedsConvertion(VideoCore::PixelFormat format) const;
-
-private:
-    /// Returns the framebuffer used for texture downloads
-    void BindFramebuffer(GLenum target, GLint level, GLenum textarget, VideoCore::SurfaceType type,
-                         OGLTexture& texture) const;
+    ~TextureRuntime();
 
     /// Returns the OpenGL driver class
     const Driver& GetDriver() const {
@@ -97,20 +59,86 @@ private:
         return filterer;
     }
 
+    /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
+    [[nodiscard]] StagingData FindStaging(u32 size, bool upload);
+
+    /// Returns the OpenGL format tuple associated with the provided pixel format
+    FormatTuple NativeFormat(VideoCore::PixelFormat pixel_format) const;
+
+    /// Causes a GPU command flush
+    void Finish() const {}
+
+    /// Performs required format convertions on the staging data
+    void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
+                       std::span<std::byte> dest);
+
+    /// Fills the rectangle of the texture with the clear value provided
+    bool SurfaceClear(Surface& surface, const VideoCore::TextureClear& clear);
+
+    /// Fills a partial texture rect using a clear renderpass
+    bool FramebufferClear(Framebuffer& framebuffer, const VideoCore::TextureClear& clear);
+
+    /// Blits a rectangle of source framebuffer to another rectange of dest framebuffer
+    bool FramebufferBlit(const Framebuffer& source, const Framebuffer& dest,
+                         const VideoCore::TextureBlit& blit);
+
+    /// Returns all source formats that support reinterpretation to the dest format
+    [[nodiscard]] const ReinterpreterList& GetPossibleReinterpretations(
+        VideoCore::PixelFormat dest_format) const;
+
+    /// Returns true if the provided pixel format needs convertion
+    [[nodiscard]] bool NeedsConvertion(VideoCore::PixelFormat format) const;
+
+private:
+    /// Binds a texture to the appropriate rescale framebuffer
+    Framebuffer MakeRescaleFramebuffer(Surface& surface, GLenum target, GLint level,
+                                       bool scaled) const;
+
 private:
     Driver& driver;
     TextureFilterer filterer;
     TextureDownloaderES downloader_es;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
-    std::unordered_multimap<VideoCore::HostTextureTag, OGLTexture> texture_recycler;
     OGLStreamBuffer upload_buffer, download_buffer;
-    OGLFramebuffer read_fbo, draw_fbo;
+    std::array<OGLFramebuffer, 3> rescale_draw_fbos;
+    std::array<OGLFramebuffer, 3> rescale_read_fbos;
 };
 
-class Surface : public VideoCore::SurfaceBase<Surface> {
+struct Allocation {
+    Allocation() = default;
+    Allocation(TextureRuntime&);
+    Allocation(TextureRuntime& runtime, const VideoCore::SurfaceParams& params);
+    ~Allocation();
+
+    Allocation(const Allocation&) noexcept = delete;
+    Allocation& operator=(const Allocation&) noexcept = delete;
+
+    Allocation(Allocation&&) noexcept = default;
+    Allocation& operator=(Allocation&&) noexcept = default;
+
+    std::array<GLuint, 2> handles{};
+    FormatTuple tuple;
+};
+
+class Surface : public VideoCore::SurfaceBase {
 public:
-    Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
+    Surface(VideoCore::SurfaceParams params);
+    Surface(TextureRuntime& runtime, Allocation&& alloc, VideoCore::SurfaceParams params);
     ~Surface() override;
+
+    Surface(const Surface&) noexcept = delete;
+    Surface& operator=(const Surface&) noexcept = delete;
+
+    Surface(Surface&&) noexcept = default;
+    Surface& operator=(Surface&&) noexcept = default;
+
+    [[nodiscard]] Allocation&& Release() noexcept {
+        return std::move(alloc);
+    }
+
+    [[nodiscard]] GLuint Handle(bool scaled = true) const noexcept {
+        return alloc.handles[scaled];
+    }
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture
     void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
@@ -119,28 +147,92 @@ public:
     void Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging);
 
     /// Returns the bpp of the internal surface format
-    u32 GetInternalBytesPerPixel() const {
+    [[nodiscard]] u32 InternalBytesPerPixel() const noexcept {
         return VideoCore::GetBytesPerPixel(pixel_format);
     }
 
 private:
     /// Uploads pixel data to scaled texture
-    void ScaledUpload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
+    void ScaledUpload(const VideoCore::BufferTextureCopy& upload);
 
     /// Downloads scaled image by downscaling the requested rectangle
-    void ScaledDownload(const VideoCore::BufferTextureCopy& download, const StagingData& staging);
+    void ScaledDownload(const VideoCore::BufferTextureCopy& download);
 
 private:
-    TextureRuntime& runtime;
-    const Driver& driver;
+    const Driver* driver{};
+    TextureRuntime* runtime{};
+    Allocation alloc;
+};
 
+class Framebuffer {
 public:
-    OGLTexture texture{};
+    Framebuffer(TextureRuntime&, Surface* color, Surface* depth, VideoCore::RenderTargets);
+    Framebuffer(GLuint acquired_framebuffer, GLbitfield mask);
+    ~Framebuffer();
+
+    Framebuffer(const Framebuffer&) = delete;
+    Framebuffer& operator=(const Framebuffer&) = delete;
+
+    Framebuffer(Framebuffer&&) = default;
+    Framebuffer& operator=(Framebuffer&&) = default;
+
+    [[nodiscard]] GLuint Handle() const noexcept {
+        if (acquired_framebuffer) {
+            return acquired_framebuffer;
+        }
+        return framebuffer.handle;
+    }
+
+    [[nodiscard]] GLbitfield BufferMask() const noexcept {
+        return buffer_mask;
+    }
+
+    [[nodiscard]] VideoCore::Rect2D RenderArea() const noexcept {
+        return render_area;
+    }
+
+    void SetRenderArea(VideoCore::Rect2D draw_rect) noexcept {
+        render_area = draw_rect;
+    }
+
+    /// Binds the framebuffer as render target
+    void Bind() {}
+
+private:
+    OGLFramebuffer framebuffer;
+    GLuint acquired_framebuffer;
+    GLbitfield buffer_mask;
+    VideoCore::Rect2D render_area;
+};
+
+class Sampler {
+public:
+    Sampler(TextureRuntime&, VideoCore::SamplerParams params);
+    ~Sampler();
+
+    Sampler(const Sampler&) = delete;
+    Sampler& operator=(const Sampler&) = delete;
+
+    Sampler(Sampler&&) = default;
+    Sampler& operator=(Sampler&&) = default;
+
+    [[nodiscard]] GLuint Handle() const noexcept {
+        return sampler.handle;
+    }
+
+private:
+    OGLSampler sampler;
 };
 
 struct Traits {
-    using RuntimeType = TextureRuntime;
-    using SurfaceType = Surface;
+    static constexpr bool FRAMEBUFFER_BLITS = true;
+
+    using Runtime = OpenGL::TextureRuntime;
+    using Surface = OpenGL::Surface;
+    using Framebuffer = OpenGL::Framebuffer;
+    using Allocation = OpenGL::Allocation;
+    using Sampler = OpenGL::Sampler;
+    using Format = OpenGL::FormatTuple;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;

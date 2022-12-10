@@ -11,6 +11,10 @@
 #include "video_core/renderer_opengl/gl_stream_buffer.h"
 #include "video_core/renderer_opengl/gl_texture_runtime.h"
 
+namespace Memory {
+class MemorySystem;
+}
+
 namespace Frontend {
 class EmuWindow;
 }
@@ -24,7 +28,8 @@ class ShaderProgramManager;
 
 class RasterizerOpenGL : public VideoCore::RasterizerAccelerated {
 public:
-    explicit RasterizerOpenGL(Frontend::EmuWindow& emu_window, Driver& driver);
+    explicit RasterizerOpenGL(Core::System& system, Frontend::EmuWindow& emu_window,
+                              Driver& driver);
     ~RasterizerOpenGL() override;
 
     void LoadDiskResources(const std::atomic_bool& stop_loading,
@@ -46,32 +51,6 @@ public:
     void SyncEntireState() override;
 
 private:
-    struct SamplerInfo {
-        using TextureConfig = Pica::TexturingRegs::TextureConfig;
-
-        OGLSampler sampler;
-
-        /// Creates the sampler object, initializing its state so that it's in sync with the
-        /// SamplerInfo struct.
-        void Create();
-        /// Syncs the sampler object with the config, updating any necessary state.
-        void SyncWithConfig(const TextureConfig& config);
-
-    private:
-        TextureConfig::TextureFilter mag_filter;
-        TextureConfig::TextureFilter min_filter;
-        TextureConfig::TextureFilter mip_filter;
-        TextureConfig::WrapMode wrap_s;
-        TextureConfig::WrapMode wrap_t;
-        u32 border_color;
-        u32 lod_min;
-        u32 lod_max;
-        s32 lod_bias;
-
-        // TODO(wwylele): remove this once mipmap for cube is implemented
-        bool supress_mipmap_for_cube = false;
-    };
-
     void NotifyFixedFunctionPicaRegisterChanged(u32 id) override;
 
     /// Syncs the clip enabled status to match the PICA register
@@ -136,6 +115,12 @@ private:
     /// Setup geometry shader for AccelerateDrawBatch
     bool SetupGeometryShader();
 
+    /// Setup texture units for drawing
+    void SetupTextureUnits();
+
+    /// Creates the vertex layout struct used for software shader pipelines
+    void MakeSoftwareVertexLayout();
+
 private:
     Driver& driver;
     OpenGLState state;
@@ -146,9 +131,9 @@ private:
     OGLVertexArray sw_vao; // VAO for software shader draw
     OGLVertexArray hw_vao; // VAO for hardware shader / accelerate draw
     std::array<bool, 16> hw_vao_enabled_attributes{};
+    Surface& null_surface;
+    Sampler& null_sampler;
 
-    OGLTexture default_texture;
-    std::array<SamplerInfo, 3> texture_samplers;
     OGLStreamBuffer vertex_buffer;
     OGLStreamBuffer uniform_buffer;
     OGLStreamBuffer index_buffer;
@@ -158,8 +143,6 @@ private:
     GLint uniform_buffer_alignment;
     std::size_t uniform_size_aligned_vs;
     std::size_t uniform_size_aligned_fs;
-
-    SamplerInfo texture_cube_sampler;
 
     OGLTexture texture_buffer_lut_lf;
     OGLTexture texture_buffer_lut_rg;

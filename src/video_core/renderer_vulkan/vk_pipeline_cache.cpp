@@ -5,14 +5,14 @@
 #include <filesystem>
 #include "common/common_paths.h"
 #include "common/file_util.h"
-#include "common/microprofile.h"
 #include "common/logging/log.h"
+#include "common/microprofile.h"
 #include "core/settings.h"
 #include "video_core/renderer_vulkan/pica_to_vk.h"
+#include "video_core/renderer_vulkan/vk_descriptor_manager.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
-#include "video_core/renderer_vulkan/vk_descriptor_manager.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 
 namespace Vulkan {
@@ -62,7 +62,8 @@ vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
     return vk::ShaderStageFlagBits::eVertex;
 }
 
-[[nodiscard]] bool IsAttribFormatSupported(const VertexAttribute& attrib, const Instance& instance) {
+[[nodiscard]] bool IsAttribFormatSupported(const VertexAttribute& attrib,
+                                           const Instance& instance) {
     static std::unordered_map<vk::Format, bool> format_support_cache;
 
     vk::PhysicalDevice physical_device = instance.GetPhysicalDevice();
@@ -70,8 +71,10 @@ vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
     auto [it, new_format] = format_support_cache.try_emplace(format, false);
     if (new_format) {
         LOG_INFO(Render_Vulkan, "Quering support for format {}", vk::to_string(format));
-        const vk::FormatFeatureFlags features = physical_device.getFormatProperties(format).bufferFeatures;
-        it->second = (features & vk::FormatFeatureFlagBits::eVertexBuffer) == vk::FormatFeatureFlagBits::eVertexBuffer;
+        const vk::FormatFeatureFlags features =
+            physical_device.getFormatProperties(format).bufferFeatures;
+        it->second = (features & vk::FormatFeatureFlagBits::eVertexBuffer) ==
+                     vk::FormatFeatureFlagBits::eVertexBuffer;
     }
 
     return it->second;
@@ -79,7 +82,8 @@ vk::ShaderStageFlagBits ToVkShaderStage(std::size_t index) {
 
 PipelineCache::PipelineCache(const Instance& instance, Scheduler& scheduler,
                              RenderpassCache& renderpass_cache, DescriptorManager& desc_manager)
-    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache}, desc_manager{desc_manager} {
+    : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache},
+      desc_manager{desc_manager} {
     trivial_vertex_shader = Compile(GenerateTrivialVertexShader(), vk::ShaderStageFlagBits::eVertex,
                                     instance.GetDevice(), ShaderOptimization::Debug);
 }
@@ -211,8 +215,7 @@ bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
         ASSERT(is_supported || attrib.size == 3);
 
         config.state.attrib_types[location] = attrib.type.Value();
-        config.state.emulated_attrib_locations[location] =
-                is_supported ? 0 : emulated_attrib_loc++;
+        config.state.emulated_attrib_locations[location] = is_supported ? 0 : emulated_attrib_loc++;
     }
 
     auto [handle, result] =
@@ -223,10 +226,11 @@ bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
         return false;
     }
 
-    scheduler.Record([this, handle = handle, hash = config.Hash()](vk::CommandBuffer, vk::CommandBuffer) {
-        current_shaders[ProgramType::VS] = handle;
-        shader_hashes[ProgramType::VS] = hash;
-    });
+    scheduler.Record(
+        [this, handle = handle, hash = config.Hash()](vk::CommandBuffer, vk::CommandBuffer) {
+            current_shaders[ProgramType::VS] = handle;
+            shader_hashes[ProgramType::VS] = hash;
+        });
 
     return true;
 }
@@ -242,8 +246,9 @@ void PipelineCache::UseFixedGeometryShader(const Pica::Regs& regs) {
     const PicaFixedGSConfig gs_config{regs};
 
     scheduler.Record([this, gs_config](vk::CommandBuffer, vk::CommandBuffer) {
-        vk::ShaderModule handle = fixed_geometry_shaders.Get(gs_config, vk::ShaderStageFlagBits::eGeometry,
-                                                             instance.GetDevice(), ShaderOptimization::High);
+        vk::ShaderModule handle =
+            fixed_geometry_shaders.Get(gs_config, vk::ShaderStageFlagBits::eGeometry,
+                                       instance.GetDevice(), ShaderOptimization::High);
         current_shaders[ProgramType::GS] = handle;
         shader_hashes[ProgramType::GS] = gs_config.Hash();
     });
@@ -256,7 +261,8 @@ void PipelineCache::UseTrivialGeometryShader() {
     });
 }
 
-MICROPROFILE_DEFINE(Vulkan_FragmentGeneration, "Vulkan", "Fragment Shader Compilation", MP_RGB(255, 100, 100));
+MICROPROFILE_DEFINE(Vulkan_FragmentGeneration, "Vulkan", "Fragment Shader Compilation",
+                    MP_RGB(255, 100, 100));
 void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
     const PicaFSConfig config{regs, instance};
 
@@ -268,7 +274,7 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
             handle = fragment_shaders_spv.Get(config, instance.GetDevice());
         } else {
             handle = fragment_shaders_glsl.Get(config, vk::ShaderStageFlagBits::eFragment,
-                                              instance.GetDevice(), ShaderOptimization::High);
+                                               instance.GetDevice(), ShaderOptimization::High);
         }
 
         current_shaders[ProgramType::FS] = handle;
@@ -277,8 +283,8 @@ void PipelineCache::UseFragmentShader(const Pica::Regs& regs) {
 }
 
 void PipelineCache::BindTexture(u32 binding, vk::ImageView image_view) {
-    const vk::DescriptorImageInfo image_info = {
-        .imageView = image_view, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+    const vk::DescriptorImageInfo image_info = {.imageView = image_view,
+                                                .imageLayout = vk::ImageLayout::eGeneral};
     desc_manager.SetBinding(1, binding, DescriptorData{image_info});
 }
 
@@ -288,7 +294,8 @@ void PipelineCache::BindStorageImage(u32 binding, vk::ImageView image_view) {
     desc_manager.SetBinding(3, binding, DescriptorData{image_info});
 }
 
-void PipelineCache::BindBuffer(u32 binding, vk::Buffer buffer, std::size_t offset, std::size_t size) {
+void PipelineCache::BindBuffer(u32 binding, vk::Buffer buffer, std::size_t offset,
+                               std::size_t size) {
     const DescriptorData data = {
         .buffer_info = vk::DescriptorBufferInfo{.buffer = buffer, .offset = offset, .range = size}};
     desc_manager.SetBinding(0, binding, data);
@@ -305,14 +312,12 @@ void PipelineCache::BindSampler(u32 binding, vk::Sampler sampler) {
 }
 
 void PipelineCache::SetViewport(u32 x, u32 y, u32 width, u32 height) {
-    const vk::Viewport viewport = {
-        .x = static_cast<f32>(x),
-        .y = static_cast<f32>(y),
-        .width = static_cast<f32>(width),
-        .height = static_cast<f32>(height),
-        .minDepth = 0.f,
-        .maxDepth = 1.f
-    };
+    const vk::Viewport viewport = {.x = static_cast<f32>(x),
+                                   .y = static_cast<f32>(y),
+                                   .width = static_cast<f32>(width),
+                                   .height = static_cast<f32>(height),
+                                   .minDepth = 0.f,
+                                   .maxDepth = 1.f};
 
     scheduler.Record([viewport](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         render_cmdbuf.setViewport(0, viewport);
@@ -320,16 +325,8 @@ void PipelineCache::SetViewport(u32 x, u32 y, u32 width, u32 height) {
 }
 
 void PipelineCache::SetScissor(s32 x, s32 y, u32 width, u32 height) {
-    const vk::Rect2D scissor = {
-        .offset = vk::Offset2D{
-            .x = x,
-            .y = y
-        },
-        .extent = vk::Extent2D{
-            .width = width,
-            .height = height
-        }
-    };
+    const vk::Rect2D scissor = {.offset = vk::Offset2D{.x = x, .y = y},
+                                .extent = vk::Extent2D{.width = width, .height = height}};
 
     scheduler.Record([scissor](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
         render_cmdbuf.setScissor(0, scissor);
@@ -340,24 +337,21 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
     const bool is_dirty = scheduler.IsStateDirty(StateFlags::Pipeline);
 
     PipelineInfo current = current_info;
-    scheduler.Record([this, info, is_dirty, current](vk::CommandBuffer render_cmdbuf, vk::CommandBuffer) {
-        if (info.dynamic.stencil_compare_mask !=
-                current.dynamic.stencil_compare_mask ||
-            is_dirty) {
+    scheduler.Record([this, info, is_dirty, current](vk::CommandBuffer render_cmdbuf,
+                                                     vk::CommandBuffer) {
+        if (info.dynamic.stencil_compare_mask != current.dynamic.stencil_compare_mask || is_dirty) {
             render_cmdbuf.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                                 info.dynamic.stencil_compare_mask);
+                                                info.dynamic.stencil_compare_mask);
         }
 
-        if (info.dynamic.stencil_write_mask != current.dynamic.stencil_write_mask ||
-            is_dirty) {
+        if (info.dynamic.stencil_write_mask != current.dynamic.stencil_write_mask || is_dirty) {
             render_cmdbuf.setStencilWriteMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                               info.dynamic.stencil_write_mask);
+                                              info.dynamic.stencil_write_mask);
         }
 
-        if (info.dynamic.stencil_reference != current.dynamic.stencil_reference ||
-            is_dirty) {
+        if (info.dynamic.stencil_reference != current.dynamic.stencil_reference || is_dirty) {
             render_cmdbuf.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
-                                               info.dynamic.stencil_reference);
+                                              info.dynamic.stencil_reference);
         }
 
         if (info.dynamic.blend_color != current.dynamic.blend_color || is_dirty) {
@@ -382,8 +376,7 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
                 render_cmdbuf.setDepthTestEnableEXT(info.depth_stencil.depth_test_enable);
             }
 
-            if (info.depth_stencil.depth_write_enable !=
-                    current.depth_stencil.depth_write_enable ||
+            if (info.depth_stencil.depth_write_enable != current.depth_stencil.depth_write_enable ||
                 is_dirty) {
                 render_cmdbuf.setDepthWriteEnableEXT(info.depth_stencil.depth_write_enable);
             }
@@ -403,8 +396,7 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
                 info.depth_stencil.stencil_pass_op != current.depth_stencil.stencil_pass_op ||
                 info.depth_stencil.stencil_depth_fail_op !=
                     current.depth_stencil.stencil_depth_fail_op ||
-                info.depth_stencil.stencil_compare_op !=
-                    current.depth_stencil.stencil_compare_op ||
+                info.depth_stencil.stencil_compare_op != current.depth_stencil.stencil_compare_op ||
                 is_dirty) {
                 render_cmdbuf.setStencilOpEXT(
                     vk::StencilFaceFlagBits::eFrontAndBack,
@@ -434,15 +426,18 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         }
 
         shader_stages[shader_count++] = vk::PipelineShaderStageCreateInfo{
-            .stage = ToVkShaderStage(i), .module = shader, .pName = "main"};
+            .stage = ToVkShaderStage(i),
+            .module = shader,
+            .pName = "main",
+        };
     }
 
     /**
-    * Vulkan doesn't intuitively support fixed attributes. To avoid duplicating the data and
-    * increasing data upload, when the fixed flag is true, we specify VK_VERTEX_INPUT_RATE_INSTANCE
-    * as the input rate. Since one instance is all we render, the shader will always read the
-    * single attribute.
-    **/
+     * Vulkan doesn't intuitively support fixed attributes. To avoid duplicating the data and
+     * increasing data upload, when the fixed flag is true, we specify VK_VERTEX_INPUT_RATE_INSTANCE
+     * as the input rate. Since one instance is all we render, the shader will always read the
+     * single attribute.
+     **/
     std::array<vk::VertexInputBindingDescription, MAX_VERTEX_BINDINGS> bindings;
     for (u32 i = 0; i < info.vertex_layout.binding_count; i++) {
         const auto& binding = info.vertex_layout.bindings[i];
@@ -450,7 +445,8 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
             .binding = binding.binding,
             .stride = binding.stride,
             .inputRate = binding.fixed.Value() ? vk::VertexInputRate::eInstance
-                                               : vk::VertexInputRate::eVertex};
+                                               : vk::VertexInputRate::eVertex,
+        };
     }
 
     u32 emulated_attrib_count = 0;
@@ -461,34 +457,41 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         const bool is_supported = IsAttribFormatSupported(attrib, instance);
         ASSERT_MSG(is_supported || attrib.size == 3);
 
-        attributes[i] = vk::VertexInputAttributeDescription{.location = attrib.location,
-                                                            .binding = attrib.binding,
-                                                            .format = is_supported ? format
-                                                                                   : ToVkAttributeFormat(attrib.type, 2),
-                                                            .offset = attrib.offset};
+        attributes[i] = vk::VertexInputAttributeDescription{
+            .location = attrib.location,
+            .binding = attrib.binding,
+            .format = is_supported ? format : ToVkAttributeFormat(attrib.type, 2),
+            .offset = attrib.offset,
+        };
 
         // When the requested 3-component vertex format is unsupported by the hardware
         // is it emulated by breaking it into a vec2 + vec1. These are combined to a vec3
         // by the vertex shader.
         if (!is_supported) {
             const u32 location = MAX_VERTEX_ATTRIBUTES + emulated_attrib_count++;
-            LOG_WARNING(Render_Vulkan, "\nEmulating attrib {} at location {}\n", attrib.location, location);
-            attributes[location] = vk::VertexInputAttributeDescription{.location = location,
-                                                                       .binding = attrib.binding,
-                                                                       .format = ToVkAttributeFormat(attrib.type, 1),
-                                                                       .offset = attrib.offset + AttribBytes(attrib.type, 2)};
+            LOG_WARNING(Render_Vulkan, "\nEmulating attrib {} at location {}\n", attrib.location,
+                        location);
+            attributes[location] = vk::VertexInputAttributeDescription{
+                .location = location,
+                .binding = attrib.binding,
+                .format = ToVkAttributeFormat(attrib.type, 1),
+                .offset = attrib.offset + AttribBytes(attrib.type, 2),
+            };
         }
     }
 
     const vk::PipelineVertexInputStateCreateInfo vertex_input_info = {
         .vertexBindingDescriptionCount = info.vertex_layout.binding_count,
         .pVertexBindingDescriptions = bindings.data(),
-        .vertexAttributeDescriptionCount = info.vertex_layout.attribute_count + emulated_attrib_count,
-        .pVertexAttributeDescriptions = attributes.data()};
+        .vertexAttributeDescriptionCount =
+            info.vertex_layout.attribute_count + emulated_attrib_count,
+        .pVertexAttributeDescriptions = attributes.data(),
+    };
 
     const vk::PipelineInputAssemblyStateCreateInfo input_assembly = {
         .topology = PicaToVK::PrimitiveTopology(info.rasterization.topology),
-        .primitiveRestartEnable = false};
+        .primitiveRestartEnable = false,
+    };
 
     const vk::PipelineRasterizationStateCreateInfo raster_state = {
         .depthClampEnable = false,
@@ -496,10 +499,12 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .cullMode = PicaToVK::CullMode(info.rasterization.cull_mode),
         .frontFace = PicaToVK::FrontFace(info.rasterization.cull_mode),
         .depthBiasEnable = false,
-        .lineWidth = 1.0f};
+        .lineWidth = 1.0f,
+    };
 
     const vk::PipelineMultisampleStateCreateInfo multisampling = {
-        .rasterizationSamples = vk::SampleCountFlagBits::e1, .sampleShadingEnable = false};
+        .rasterizationSamples = vk::SampleCountFlagBits::e1, .sampleShadingEnable = false,
+    };
 
     const vk::PipelineColorBlendAttachmentState colorblend_attachment = {
         .blendEnable = info.blending.blend_enable.Value(),
@@ -509,14 +514,16 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .srcAlphaBlendFactor = PicaToVK::BlendFunc(info.blending.src_alpha_blend_factor),
         .dstAlphaBlendFactor = PicaToVK::BlendFunc(info.blending.dst_alpha_blend_factor),
         .alphaBlendOp = PicaToVK::BlendEquation(info.blending.alpha_blend_eq),
-        .colorWriteMask = static_cast<vk::ColorComponentFlags>(info.blending.color_write_mask)};
+        .colorWriteMask = static_cast<vk::ColorComponentFlags>(info.blending.color_write_mask),
+    };
 
     const vk::PipelineColorBlendStateCreateInfo color_blending = {
         .logicOpEnable = !info.blending.blend_enable.Value() && !instance.NeedsLogicOpEmulation(),
         .logicOp = PicaToVK::LogicOp(info.blending.logic_op.Value()),
         .attachmentCount = 1,
         .pAttachments = &colorblend_attachment,
-        .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f}};
+        .blendConstants = std::array{1.0f, 1.0f, 1.0f, 1.0f},
+    };
 
     const vk::Viewport viewport = {
         .x = 0.0f, .y = 0.0f, .width = 1.0f, .height = 1.0f, .minDepth = 0.0f, .maxDepth = 1.0f};
@@ -551,13 +558,15 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
 
     const vk::PipelineDynamicStateCreateInfo dynamic_info = {
         .dynamicStateCount = extended_dynamic_states ? static_cast<u32>(dynamic_states.size()) : 6u,
-        .pDynamicStates = dynamic_states.data()};
+        .pDynamicStates = dynamic_states.data(),
+    };
 
     const vk::StencilOpState stencil_op_state = {
         .failOp = PicaToVK::StencilOp(info.depth_stencil.stencil_fail_op),
         .passOp = PicaToVK::StencilOp(info.depth_stencil.stencil_pass_op),
         .depthFailOp = PicaToVK::StencilOp(info.depth_stencil.stencil_depth_fail_op),
-        .compareOp = PicaToVK::CompareFunc(info.depth_stencil.stencil_compare_op)};
+        .compareOp = PicaToVK::CompareFunc(info.depth_stencil.stencil_compare_op),
+    };
 
     const vk::PipelineDepthStencilStateCreateInfo depth_info = {
         .depthTestEnable = static_cast<u32>(info.depth_stencil.depth_test_enable.Value()),
@@ -566,7 +575,8 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .depthBoundsTestEnable = false,
         .stencilTestEnable = static_cast<u32>(info.depth_stencil.stencil_test_enable.Value()),
         .front = stencil_op_state,
-        .back = stencil_op_state};
+        .back = stencil_op_state,
+    };
 
     const vk::GraphicsPipelineCreateInfo pipeline_info = {
         .stageCount = shader_count,
@@ -580,8 +590,8 @@ vk::Pipeline PipelineCache::BuildPipeline(const PipelineInfo& info) {
         .pColorBlendState = &color_blending,
         .pDynamicState = &dynamic_info,
         .layout = desc_manager.GetPipelineLayout(),
-        .renderPass =
-            renderpass_cache.GetRenderpass(info.color_attachment, info.depth_attachment, false)};
+        .renderPass = renderpass_cache.GetRenderpass(info.color_attachment, info.depth_attachment, false),
+    };
 
     if (const auto result = device.createGraphicsPipeline(pipeline_cache, pipeline_info);
         result.result == vk::Result::eSuccess) {

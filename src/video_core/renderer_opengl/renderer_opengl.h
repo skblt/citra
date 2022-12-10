@@ -9,8 +9,11 @@
 #include "video_core/renderer_base.h"
 #include "video_core/renderer_opengl/frame_dumper_opengl.h"
 #include "video_core/renderer_opengl/gl_driver.h"
-#include "video_core/renderer_opengl/gl_resource_manager.h"
-#include "video_core/renderer_opengl/gl_state.h"
+#include "video_core/renderer_opengl/gl_rasterizer.h"
+
+namespace Core {
+class TelemetrySession;
+}
 
 namespace Layout {
 struct FramebufferLayout;
@@ -45,7 +48,7 @@ struct TextureInfo {
 /// Structure used for storing information about the display target for each 3DS screen
 struct ScreenInfo {
     GLuint display_texture;
-    Common::Rectangle<float> display_texcoords;
+    Common::Rectangle<f32> display_texcoords;
     TextureInfo texture;
 };
 
@@ -59,19 +62,16 @@ class RasterizerOpenGL;
 
 class RendererOpenGL : public RendererBase {
 public:
-    explicit RendererOpenGL(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window);
+    explicit RendererOpenGL(Core::System& system, Frontend::EmuWindow& window,
+                            Frontend::EmuWindow* secondary_window);
     ~RendererOpenGL() override;
 
-    VideoCore::ResultStatus Init() override;
-    VideoCore::RasterizerInterface* Rasterizer() override;
-    void ShutDown() override;
+    [[nodiscard]] VideoCore::RasterizerInterface* Rasterizer() override {
+        return &rasterizer;
+    }
+
     void SwapBuffers() override;
-
-    /// Draws the latest frame from texture mailbox to the currently bound draw framebuffer in this
-    /// context
     void TryPresent(int timeout_ms, bool is_secondary) override;
-
-    /// Prepares for video dumping (e.g. create necessary buffers, etc)
     void PrepareVideoDumping() override;
     void CleanupVideoDumping() override;
     void Sync() override;
@@ -103,11 +103,14 @@ private:
     void LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture);
 
 private:
+    Core::System& system;
+    Core::TelemetrySession& telemetry_session;
+
     Driver driver;
     OpenGLState state;
-    std::unique_ptr<RasterizerOpenGL> rasterizer;
+    FrameDumperOpenGL frame_dumper;
+    RasterizerOpenGL rasterizer;
 
-    // OpenGL object IDs
     OGLVertexArray vertex_array;
     OGLBuffer vertex_buffer;
     OGLProgram shader;
@@ -130,8 +133,6 @@ private:
     // Shader attribute input indices
     GLuint attrib_position;
     GLuint attrib_tex_coord;
-
-    FrameDumperOpenGL frame_dumper;
 };
 
 } // namespace OpenGL

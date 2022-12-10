@@ -125,7 +125,7 @@ public:
     explicit OpenGLSharedContext(QSurface* surface) : surface(surface) {
         QSurfaceFormat format;
 
-        format.setVersion(4, 4);
+        format.setVersion(4, 5);
         format.setProfile(QSurfaceFormat::CoreProfile);
 
         if (Settings::values.renderer_debug) {
@@ -281,8 +281,8 @@ private:
 
 class OpenGLRenderWidget : public RenderWidget {
 public:
-    explicit OpenGLRenderWidget(GRenderWindow* parent, bool is_secondary) :
-        RenderWidget(parent), is_secondary(is_secondary) {
+    explicit OpenGLRenderWidget(GRenderWindow* parent, bool is_secondary)
+        : RenderWidget(parent), is_secondary(is_secondary) {
         windowHandle()->setSurfaceType(QWindow::OpenGLSurface);
     }
 
@@ -341,7 +341,9 @@ static Frontend::EmuWindow::WindowSystemInfo GetWindowSystemInfo(QWindow* window
 #if defined(WIN32)
     wsi.render_surface = window ? reinterpret_cast<void*>(window->winId()) : nullptr;
 #elif defined(__APPLE__)
-    wsi.render_surface = window ? AppleSurfaceHelper::GetSurfaceLayer(reinterpret_cast<void*>(window->winId())) : nullptr;
+    wsi.render_surface =
+        window ? AppleSurfaceHelper::GetSurfaceLayer(reinterpret_cast<void*>(window->winId()))
+               : nullptr;
 #else
     QPlatformNativeInterface* pni = QGuiApplication::platformNativeInterface();
     wsi.display_connection = pni->nativeResourceForWindow("display", window);

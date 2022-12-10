@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <span>
+#include <boost/container/small_vector.hpp>
 #include "common/assert.h"
 #include "core/frontend/emu_window.h"
 #include "core/settings.h"
@@ -15,11 +16,9 @@ namespace Vulkan {
 
 vk::DynamicLoader Instance::dl;
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL DebugHandler(
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-    VkDebugUtilsMessageTypeFlagsEXT type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-    void* user_data) {
+static VKAPI_ATTR VkBool32 VKAPI_CALL
+DebugHandler(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
+             const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data) {
 
     switch (callback_data->messageIdNumber) {
     case 0x609a13b: // Vertex attribute at location not consumed by shader
@@ -44,8 +43,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugHandler(
         level = Log::Level::Info;
     }
 
-    LOG_GENERIC(Log::Class::Render_Vulkan, level, "{}: {}",
-                callback_data->pMessageIdName, callback_data->pMessage);
+    LOG_GENERIC(Log::Class::Render_Vulkan, level, "{}: {}", callback_data->pMessageIdName,
+                callback_data->pMessage);
 
     return VK_FALSE;
 }
@@ -78,17 +77,15 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
 }
 
 [[nodiscard]] vk::DebugUtilsMessengerCreateInfoEXT MakeDebugUtilsMessengerInfo() {
-    return {
-        .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-                            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
-        .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding |
-                        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
-        .pfnUserCallback = DebugHandler
-    };
+    return {.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo |
+                               vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
+                               vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+                               vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
+            .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+                           vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+                           vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding |
+                           vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
+            .pfnUserCallback = DebugHandler};
 }
 
 std::vector<std::string> GetSupportedExtensions(vk::PhysicalDevice physical) {
@@ -101,25 +98,23 @@ std::vector<std::string> GetSupportedExtensions(vk::PhysicalDevice physical) {
     return supported_extensions;
 }
 
-Instance::Instance(bool validation, bool dump_command_buffers) :
-    enable_validation{validation},
-    dump_command_buffers{dump_command_buffers}{
+Instance::Instance(bool validation, bool dump_command_buffers)
+    : enable_validation{validation}, dump_command_buffers{dump_command_buffers} {
     // Fetch instance independant function pointers
-    auto vkGetInstanceProcAddr =
+    const PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
         dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
-    // Enable the instance extensions the platform requires
-    auto extensions = GetInstanceExtensions(Frontend::WindowSystemType::Headless, false);
+    std::vector<const char*> extensions =
+        GetInstanceExtensions(Frontend::WindowSystemType::Headless, false);
 
-    // Use required platform-specific flags
-    auto flags = GetInstanceFlags();
-
-    const vk::ApplicationInfo application_info = {.pApplicationName = "Citra",
-                                                  .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-                                                  .pEngineName = "Citra Vulkan",
-                                                  .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-                                                  .apiVersion = VK_API_VERSION_1_0};
+    const vk::ApplicationInfo application_info = {
+        .pApplicationName = "Citra",
+        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+        .pEngineName = "Citra Vulkan",
+        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+        .apiVersion = VK_API_VERSION_1_0,
+    };
 
     u32 layer_count = 0;
     std::array<const char*, 2> layers;
@@ -132,17 +127,13 @@ Instance::Instance(bool validation, bool dump_command_buffers) :
     }
 
     const vk::StructureChain instance_chain = {
-        vk::InstanceCreateInfo{
-            .flags = flags,
-            .pApplicationInfo = &application_info,
-            .enabledLayerCount = layer_count,
-            .ppEnabledLayerNames = layers.data(),
-            .enabledExtensionCount =
-                static_cast<u32>(extensions.size()),
-            .ppEnabledExtensionNames = extensions.data()
-        },
-        MakeDebugUtilsMessengerInfo()
-    };
+        vk::InstanceCreateInfo{.flags = GetInstanceFlags(),
+                               .pApplicationInfo = &application_info,
+                               .enabledLayerCount = layer_count,
+                               .ppEnabledLayerNames = layers.data(),
+                               .enabledExtensionCount = static_cast<u32>(extensions.size()),
+                               .ppEnabledExtensionNames = extensions.data()},
+        MakeDebugUtilsMessengerInfo()};
 
     instance = vk::createInstance(instance_chain.get());
 
@@ -157,21 +148,17 @@ Instance::Instance(bool validation, bool dump_command_buffers) :
     physical_devices = instance.enumeratePhysicalDevices();
 }
 
-Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) :
-    enable_validation{Settings::values.renderer_debug},
-    dump_command_buffers{Settings::values.dump_command_buffers} {
+Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
+    : enable_validation{Settings::values.renderer_debug},
+      dump_command_buffers{Settings::values.dump_command_buffers} {
     auto window_info = window.GetWindowInfo();
 
     // Fetch instance independant function pointers
-    auto vkGetInstanceProcAddr =
+    const PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
         dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
-    // Enable the instance extensions the backend uses
-    auto extensions = GetInstanceExtensions(window_info.type, true);
-
-    // Use required platform-specific flags
-    auto flags = GetInstanceFlags();
+    std::vector<const char*> extensions = GetInstanceExtensions(window_info.type, true);
 
     // We require a Vulkan 1.1 driver
     const u32 available_version = vk::enumerateInstanceVersion();
@@ -180,11 +167,13 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) :
         return;
     }
 
-    const vk::ApplicationInfo application_info = {.pApplicationName = "Citra",
-                                                  .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-                                                  .pEngineName = "Citra Vulkan",
-                                                  .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-                                                  .apiVersion = available_version};
+    const vk::ApplicationInfo application_info = {
+        .pApplicationName = "Citra",
+        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+        .pEngineName = "Citra Vulkan",
+        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+        .apiVersion = available_version,
+    };
 
     u32 layer_count = 0;
     std::array<const char*, 2> layers;
@@ -197,22 +186,19 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) :
     }
 
     const vk::StructureChain instance_chain = {
-        vk::InstanceCreateInfo{
-            .flags = flags,
-            .pApplicationInfo = &application_info,
-            .enabledLayerCount = layer_count,
-            .ppEnabledLayerNames = layers.data(),
-            .enabledExtensionCount =
-                static_cast<u32>(extensions.size()),
-            .ppEnabledExtensionNames = extensions.data()
-        },
-        MakeDebugUtilsMessengerInfo()
-    };
+        vk::InstanceCreateInfo{.flags = GetInstanceFlags(),
+                               .pApplicationInfo = &application_info,
+                               .enabledLayerCount = layer_count,
+                               .ppEnabledLayerNames = layers.data(),
+                               .enabledExtensionCount = static_cast<u32>(extensions.size()),
+                               .ppEnabledExtensionNames = extensions.data()},
+        MakeDebugUtilsMessengerInfo()};
 
     try {
         instance = vk::createInstance(instance_chain.get());
     } catch (vk::LayerNotPresentError& err) {
-        LOG_CRITICAL(Render_Vulkan, "Validation requested but layer is not available {}", err.what());
+        LOG_CRITICAL(Render_Vulkan, "Validation requested but layer is not available {}",
+                     err.what());
         UNREACHABLE();
     }
 
@@ -241,6 +227,7 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index) :
 
     CreateDevice();
     CreateFormatTable();
+    CollectTelemetryParameters();
 }
 
 Instance::~Instance() {
@@ -363,16 +350,14 @@ bool Instance::CreateDevice() {
         return false;
     }
 
-    // Helper lambda for adding extensions
     std::array<const char*, 10> enabled_extensions;
     u32 enabled_extension_count = 0;
 
     auto AddExtension = [&](std::string_view extension) -> bool {
-        auto result =
-            std::find_if(available_extensions.begin(), available_extensions.end(),
-                         [&](const std::string& name) { return name == extension; });
+        const auto it = std::find_if(available_extensions.begin(), available_extensions.end(),
+                                     [&](const std::string& name) { return name == extension; });
 
-        if (result != available_extensions.end()) {
+        if (it != available_extensions.end()) {
             LOG_INFO(Render_Vulkan, "Enabling extension: {}", extension);
             enabled_extensions[enabled_extension_count++] = extension.data();
             return true;
@@ -388,9 +373,10 @@ bool Instance::CreateDevice() {
     extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
     custom_border_color = AddExtension(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
+    shader_stencil_export = AddExtension(VK_EXT_SHADER_STENCIL_EXPORT_EXTENSION_NAME);
 
-    // Search queue families for graphics and present queues
-    auto family_properties = physical_device.getQueueFamilyProperties();
+    const std::vector<vk::QueueFamilyProperties> family_properties =
+        physical_device.getQueueFamilyProperties();
     if (family_properties.empty()) {
         LOG_CRITICAL(Render_Vulkan, "Physical device reported no queues.");
         return false;
@@ -459,7 +445,6 @@ bool Instance::CreateDevice() {
         feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
         feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>()};
 
-    // Create logical device
     try {
         device = physical_device.createDevice(device_chain.get());
     } catch (vk::ExtensionNotPresentError& err) {
@@ -469,7 +454,6 @@ bool Instance::CreateDevice() {
 
     VULKAN_HPP_DEFAULT_DISPATCHER.init(device);
 
-    // Grab the graphics and present queues.
     graphics_queue = device.getQueue(graphics_queue_family_index, 0);
     present_queue = device.getQueue(present_queue_family_index, 0);
 
@@ -496,10 +480,10 @@ void Instance::CreateAllocator() {
 
 void Instance::CollectTelemetryParameters() {
     const vk::StructureChain property_chain =
-            physical_device.getProperties2<vk::PhysicalDeviceProperties2,
-                                           vk::PhysicalDeviceDriverProperties>();
+        physical_device
+            .getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>();
     const vk::PhysicalDeviceDriverProperties driver =
-            property_chain.get<vk::PhysicalDeviceDriverProperties>();
+        property_chain.get<vk::PhysicalDeviceDriverProperties>();
 
     driver_id = driver.driverID;
     vendor_name = driver.driverName.data();

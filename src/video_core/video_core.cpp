@@ -41,7 +41,7 @@ Memory::MemorySystem* g_memory;
 
 /// Initialize the video core
 ResultStatus Init(Frontend::EmuWindow& emu_window, Frontend::EmuWindow* secondary_window,
-                  Memory::MemorySystem& memory) {
+                  Core::System& system, Memory::MemorySystem& memory) {
     g_memory = &memory;
     Pica::Init();
 
@@ -50,31 +50,23 @@ ResultStatus Init(Frontend::EmuWindow& emu_window, Frontend::EmuWindow* secondar
     case Settings::GraphicsAPI::OpenGL:
     case Settings::GraphicsAPI::OpenGLES:
         OpenGL::GLES = Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES;
-        g_renderer = std::make_unique<OpenGL::RendererOpenGL>(emu_window, secondary_window);
+        g_renderer = std::make_unique<OpenGL::RendererOpenGL>(system, emu_window, secondary_window);
         break;
     case Settings::GraphicsAPI::Vulkan:
-        g_renderer = std::make_unique<Vulkan::RendererVulkan>(emu_window, secondary_window);
+        g_renderer = std::make_unique<Vulkan::RendererVulkan>(system, emu_window, secondary_window);
         break;
     default:
         LOG_CRITICAL(Render, "Invalid graphics API enum value {}", graphics_api);
         UNREACHABLE();
     }
 
-    ResultStatus result = g_renderer->Init();
-    if (result != ResultStatus::Success) {
-        LOG_ERROR(Render, "Video core initialization failed");
-    } else {
-        LOG_INFO(Render, "Video core initialization OK");
-    }
-
-    return result;
+    LOG_INFO(Render, "Video core initialization OK");
+    return ResultStatus::Success;
 }
 
 /// Shutdown the video core
 void Shutdown() {
     Pica::Shutdown();
-
-    g_renderer->ShutDown();
     g_renderer.reset();
 
     LOG_DEBUG(Render, "shutdown OK");

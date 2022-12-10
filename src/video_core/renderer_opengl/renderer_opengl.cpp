@@ -23,6 +23,9 @@
 #include "video_core/renderer_opengl/renderer_opengl.h"
 #include "video_core/video_core.h"
 
+MICROPROFILE_DEFINE(OpenGL_RenderFrame, "OpenGL", "Render Frame", MP_RGB(128, 128, 64));
+MICROPROFILE_DEFINE(OpenGL_WaitPresent, "OpenGL", "Wait For Present", MP_RGB(128, 128, 128));
+
 namespace OpenGL {
 
 // If the size of this is too small, it ends up creating a soft cap on FPS as the renderer will have
@@ -352,48 +355,28 @@ static std::array<GLfloat, 3 * 2> MakeOrthographicMatrix(const float width, cons
     return matrix;
 }
 
-RendererOpenGL::RendererOpenGL(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window)
-    : RendererBase{window, secondary_window}, driver{Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES,
-                                                     Settings::values.renderer_debug},
-      frame_dumper(Core::System::GetInstance().VideoDumper(), window) {
+[[nodiscard]] bool IsOpenGLES() {
+    return Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES;
+}
+
+RendererOpenGL::RendererOpenGL(Core::System& system, Frontend::EmuWindow& window,
+                               Frontend::EmuWindow* secondary_window)
+    : RendererBase{window, secondary_window}, system{system},
+      telemetry_session{system.TelemetrySession()}, driver{IsOpenGLES(),
+                                                           Settings::values.renderer_debug},
+      frame_dumper{system.VideoDumper(), window}, rasterizer{system, render_window, driver} {
+
     window.mailbox = std::make_unique<OGLTextureMailbox>();
     if (secondary_window) {
         secondary_window->mailbox = std::make_unique<OGLTextureMailbox>();
     }
     frame_dumper.mailbox = std::make_unique<OGLVideoDumpingMailbox>();
+
+    InitOpenGLObjects();
 }
 
 RendererOpenGL::~RendererOpenGL() = default;
 
-/// Initialize the renderer
-VideoCore::ResultStatus RendererOpenGL::Init() {
-    const Vendor vendor = driver.GetVendor();
-    switch (vendor) {
-    case Vendor::Generic:
-        return VideoCore::ResultStatus::ErrorGenericDrivers;
-    case Vendor::Unknown:
-        return VideoCore::ResultStatus::ErrorRendererInit;
-    default:
-        break;
-    }
-
-    InitOpenGLObjects();
-    rasterizer = std::make_unique<RasterizerOpenGL>(render_window, driver);
-
-    return VideoCore::ResultStatus::Success;
-}
-
-VideoCore::RasterizerInterface* RendererOpenGL::Rasterizer() {
-    return rasterizer.get();
-}
-
-/// Shutdown the renderer
-void RendererOpenGL::ShutDown() {}
-
-MICROPROFILE_DEFINE(OpenGL_RenderFrame, "OpenGL", "Render Frame", MP_RGB(128, 128, 64));
-MICROPROFILE_DEFINE(OpenGL_WaitPresent, "OpenGL", "Wait For Present", MP_RGB(128, 128, 128));
-
-/// Swap buffers (render frame)
 void RendererOpenGL::SwapBuffers() {
     // Maintain the rasterizer's state as a priority
     OpenGLState prev_state = OpenGLState::GetCurState();
@@ -424,9 +407,7 @@ void RendererOpenGL::SwapBuffers() {
 
     m_current_frame++;
 
-    Core::System& system = Core::System::GetInstance();
     system.perf_stats->EndSystemFrame();
-
     render_window.PollEvents();
 
     system.frame_limiter.DoFrameLimiting(system.CoreTiming().GetGlobalTimeUs());
@@ -584,8 +565,8 @@ void RendererOpenGL::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
     // only allows rows to have a memory alignement of 4.
     ASSERT(pixel_stride % 4 == 0);
 
-    if (!rasterizer->AccelerateDisplay(framebuffer, framebuffer_addr,
-                                       static_cast<u32>(pixel_stride), screen_info)) {
+    if (!rasterizer.AccelerateDisplay(framebuffer, framebuffer_addr, static_cast<u32>(pixel_stride),
+                                      screen_info)) {
         // Reset the screen info's display texture to its own permanent texture
         screen_info.display_texture = screen_info.texture.resource.handle;
         screen_info.display_texcoords = Common::Rectangle<float>(0.f, 0.f, 1.f, 1.f);
@@ -616,10 +597,6 @@ void RendererOpenGL::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
     }
 }
 
-/**
- * Fills active OpenGL texture with the given RGB color. Since the color is solid, the texture can
- * be 1x1 but will stretch across whatever it's rendered on.
- */
 void RendererOpenGL::LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color_b,
                                                 const TextureInfo& texture) {
     state.texture_units[0].texture_2d = texture.resource.handle;
@@ -635,9 +612,6 @@ void RendererOpenGL::LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color
     state.Apply();
 }
 
-/**
- * Initializes the OpenGL state and creates persistent objects.
- */
 void RendererOpenGL::InitOpenGLObjects() {
     glClearColor(Settings::values.bg_red, Settings::values.bg_green, Settings::values.bg_blue,
                  0.0f);
@@ -834,10 +808,6 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
     state.Apply();
 }
 
-/**
- * Draws a single texture to the emulator window, rotating the texture to correct for the 3DS's LCD
- * rotation.
- */
 void RendererOpenGL::DrawSingleScreenRotated(const ScreenInfo& screen_info, float x, float y,
                                              float w, float h) {
     const auto& texcoords = screen_info.display_texcoords;
@@ -899,10 +869,6 @@ void RendererOpenGL::DrawSingleScreen(const ScreenInfo& screen_info, float x, fl
     state.Apply();
 }
 
-/**
- * Draws a single texture to the emulator window, rotating the texture to correct for the 3DS's LCD
- * rotation.
- */
 void RendererOpenGL::DrawSingleScreenStereoRotated(const ScreenInfo& screen_info_l,
                                                    const ScreenInfo& screen_info_r, float x,
                                                    float y, float w, float h) {
@@ -973,9 +939,6 @@ void RendererOpenGL::DrawSingleScreenStereo(const ScreenInfo& screen_info_l,
     state.Apply();
 }
 
-/**
- * Draws the emulated screens to the emulator window.
- */
 void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout, bool flipped) {
     if (VideoCore::g_renderer_bg_color_update_requested.exchange(false)) {
         // Update background color before drawing
@@ -1185,7 +1148,6 @@ void RendererOpenGL::TryPresent(int timeout_ms, bool is_secondary) {
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 }
 
-/// Updates the framerate
 void RendererOpenGL::UpdateFramerate() {}
 
 void RendererOpenGL::PrepareVideoDumping() {
@@ -1208,7 +1170,7 @@ void RendererOpenGL::CleanupVideoDumping() {
 }
 
 void RendererOpenGL::Sync() {
-    rasterizer->SyncEntireState();
+    rasterizer.SyncEntireState();
 }
 
 } // namespace OpenGL

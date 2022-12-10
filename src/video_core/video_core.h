@@ -16,6 +16,10 @@ class EmuWindow;
 
 class RendererBase;
 
+namespace Core {
+class System;
+}
+
 namespace Memory {
 class MemorySystem;
 }
@@ -51,7 +55,7 @@ enum class ResultStatus { Success, ErrorRendererInit, ErrorGenericDrivers };
 
 /// Initialize the video core
 ResultStatus Init(Frontend::EmuWindow& emu_window, Frontend::EmuWindow* secondary_window,
-                  Memory::MemorySystem& memory);
+                  Core::System& system, Memory::MemorySystem& memory);
 
 /// Shutdown the video core
 void Shutdown();

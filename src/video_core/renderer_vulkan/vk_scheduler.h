@@ -9,9 +9,10 @@
 #include <thread>
 #include <utility>
 #include <queue>
+#include "common/logging/log.h"
 #include "common/alignment.h"
-#include "common/common_types.h"
 #include "common/common_funcs.h"
+#include "common/common_types.h"
 #include "video_core/renderer_vulkan/vk_master_semaphore.h"
 #include "video_core/renderer_vulkan/vk_resource_pool.h"
 
@@ -105,7 +106,8 @@ private:
     public:
         virtual ~Command() = default;
 
-        virtual void Execute(vk::CommandBuffer render_cmdbuf, vk::CommandBuffer upload_cmdbuf) const = 0;
+        virtual void Execute(vk::CommandBuffer render_cmdbuf,
+                             vk::CommandBuffer upload_cmdbuf) const = 0;
 
         Command* GetNext() const {
             return next;
@@ -128,7 +130,8 @@ private:
         TypedCommand(TypedCommand&&) = delete;
         TypedCommand& operator=(TypedCommand&&) = delete;
 
-        void Execute(vk::CommandBuffer render_cmdbuf, vk::CommandBuffer upload_cmdbuf) const override {
+        void Execute(vk::CommandBuffer render_cmdbuf,
+                     vk::CommandBuffer upload_cmdbuf) const override {
             command(render_cmdbuf, upload_cmdbuf);
         }
 

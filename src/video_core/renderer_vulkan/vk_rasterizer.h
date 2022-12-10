@@ -10,6 +10,10 @@
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/vk_texture_runtime.h"
 
+namespace Memory {
+class MemorySystem;
+}
+
 namespace Frontend {
 class EmuWindow;
 }
@@ -23,61 +27,14 @@ class Scheduler;
 class RenderpassCache;
 class DescriptorManager;
 
-struct SamplerInfo {
-    using TextureConfig = Pica::TexturingRegs::TextureConfig;
-    TextureConfig::TextureFilter mag_filter;
-    TextureConfig::TextureFilter min_filter;
-    TextureConfig::TextureFilter mip_filter;
-    TextureConfig::WrapMode wrap_s;
-    TextureConfig::WrapMode wrap_t;
-    u32 border_color = 0;
-    float lod_min = 0;
-    float lod_max = 0;
-    float lod_bias = 0;
-
-    // TODO(wwylele): remove this once mipmap for cube is implemented
-    bool supress_mipmap_for_cube = false;
-
-    auto operator<=>(const SamplerInfo&) const noexcept = default;
-};
-
-struct FramebufferInfo {
-    vk::ImageView color;
-    vk::ImageView depth;
-    vk::RenderPass renderpass;
-    u32 width = 1;
-    u32 height = 1;
-
-    auto operator<=>(const FramebufferInfo&) const noexcept = default;
-};
-
-} // namespace Vulkan
-
-namespace std {
-template <>
-struct hash<Vulkan::SamplerInfo> {
-    std::size_t operator()(const Vulkan::SamplerInfo& info) const noexcept {
-        return Common::ComputeHash64(&info, sizeof(Vulkan::SamplerInfo));
-    }
-};
-
-template <>
-struct hash<Vulkan::FramebufferInfo> {
-    std::size_t operator()(const Vulkan::FramebufferInfo& info) const noexcept {
-        return Common::ComputeHash64(&info, sizeof(Vulkan::FramebufferInfo));
-    }
-};
-} // namespace std
-
-namespace Vulkan {
-
 class RasterizerVulkan : public VideoCore::RasterizerAccelerated {
     friend class RendererVulkan;
 
 public:
-    explicit RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instance& instance,
-                              Scheduler& scheduler, DescriptorManager& desc_manager,
-                              TextureRuntime& runtime, RenderpassCache& renderpass_cache);
+    explicit RasterizerVulkan(Core::System& system, Frontend::EmuWindow& emu_window,
+                              const Instance& instance, Scheduler& scheduler,
+                              DescriptorManager& desc_manager, TextureRuntime& runtime,
+                              RenderpassCache& renderpass_cache);
     ~RasterizerVulkan() override;
 
     void LoadDiskResources(const std::atomic_bool& stop_loading,
@@ -169,16 +126,10 @@ private:
     bool SetupGeometryShader();
 
     /// Setup texture units for drawing
-    void SetupTextureUnits(Surface* const color_surface);
+    void SetupTextureUnits();
 
     /// Creates the vertex layout struct used for software shader pipelines
     void MakeSoftwareVertexLayout();
-
-    /// Creates a new sampler object
-    vk::Sampler CreateSampler(const SamplerInfo& info);
-
-    /// Creates a new Vulkan framebuffer object
-    vk::Framebuffer CreateFramebuffer(const FramebufferInfo& info);
 
 private:
     const Instance& instance;
@@ -192,24 +143,16 @@ private:
     VertexLayout software_layout;
     std::array<u64, 16> binding_offsets{};
     std::array<bool, 16> enable_attributes{};
-    vk::Sampler default_sampler;
-    Surface null_surface;
-    Surface null_storage_surface;
 
-    std::array<SamplerInfo, 3> texture_samplers;
-    SamplerInfo texture_cube_sampler;
-    std::unordered_map<SamplerInfo, vk::Sampler> samplers;
-    std::unordered_map<FramebufferInfo, vk::Framebuffer> framebuffers;
-
+    std::size_t uniform_buffer_alignment;
+    std::size_t uniform_size_aligned_vs;
+    std::size_t uniform_size_aligned_fs;
     StreamBuffer vertex_buffer;
     StreamBuffer uniform_buffer;
     StreamBuffer index_buffer;
     StreamBuffer texture_buffer;
     StreamBuffer texture_lf_buffer;
     PipelineInfo pipeline_info;
-    std::size_t uniform_buffer_alignment;
-    std::size_t uniform_size_aligned_vs;
-    std::size_t uniform_size_aligned_fs;
 };
 
 } // namespace Vulkan

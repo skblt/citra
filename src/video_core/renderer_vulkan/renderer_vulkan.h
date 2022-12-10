@@ -10,12 +10,12 @@
 #include "common/math_util.h"
 #include "core/hw/gpu.h"
 #include "video_core/renderer_base.h"
-#include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_descriptor_manager.h"
-#include "video_core/renderer_vulkan/vk_renderpass_cache.h"
-#include "video_core/renderer_vulkan/vk_swapchain.h"
+#include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
+#include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_swapchain.h"
 
 namespace Core {
 class TelemetrySession;
@@ -29,7 +29,7 @@ namespace Vulkan {
 
 /// Structure used for storing information about the textures for each 3DS screen
 struct TextureInfo {
-    ImageAlloc alloc;
+    std::unique_ptr<Allocation> alloc;
     u32 width;
     u32 height;
     GPU::Regs::PixelFormat format;
@@ -37,10 +37,10 @@ struct TextureInfo {
 
 /// Structure used for storing information about the display target for each 3DS screen
 struct ScreenInfo {
-    ImageAlloc* display_texture = nullptr;
-    Common::Rectangle<float> display_texcoords;
+    Common::Rectangle<f32> display_texcoords;
     TextureInfo texture;
     vk::Sampler sampler;
+    vk::ImageView image_view;
 };
 
 // Uniform data used for presenting the 3DS screens
@@ -67,12 +67,14 @@ class RasterizerVulkan;
 
 class RendererVulkan : public RendererBase {
 public:
-    explicit RendererVulkan(Frontend::EmuWindow& window, Frontend::EmuWindow* secondary_window);
+    explicit RendererVulkan(Core::System& system, Frontend::EmuWindow& window,
+                            Frontend::EmuWindow* secondary_window);
     ~RendererVulkan() override;
 
-    VideoCore::ResultStatus Init() override;
-    VideoCore::RasterizerInterface* Rasterizer() override;
-    void ShutDown() override;
+    [[nodiscard]] VideoCore::RasterizerInterface* Rasterizer() override {
+        return &rasterizer;
+    }
+
     void SwapBuffers() override;
     void TryPresent(int timeout_ms, bool is_secondary) override {}
     void PrepareVideoDumping() override {}
@@ -88,6 +90,7 @@ private:
     void BuildPipelines();
     void ConfigureFramebufferTexture(TextureInfo& texture,
                                      const GPU::Regs::FramebufferConfig& framebuffer);
+    void LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture);
     void ConfigureRenderPipeline();
     void PrepareRendertarget();
     void BeginRendering();
@@ -109,6 +112,7 @@ private:
     void Report() const;
 
 private:
+    Core::System& system;
     Core::TelemetrySession& telemetry_session;
 
     Instance instance;

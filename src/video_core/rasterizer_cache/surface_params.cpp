@@ -3,92 +3,9 @@
 // Refer to the license.txt file included.
 
 #include "common/alignment.h"
-#include "video_core/rasterizer_cache/rasterizer_cache.h"
 #include "video_core/rasterizer_cache/surface_params.h"
 
 namespace VideoCore {
-
-SurfaceParams SurfaceParams::FromInterval(SurfaceInterval interval) const {
-    SurfaceParams params = *this;
-    const u32 tiled_size = is_tiled ? 8 : 1;
-    const u32 stride_tiled_bytes = BytesInPixels(stride * tiled_size);
-
-    PAddr aligned_start =
-        addr + Common::AlignDown(boost::icl::first(interval) - addr, stride_tiled_bytes);
-    PAddr aligned_end =
-        addr + Common::AlignUp(boost::icl::last_next(interval) - addr, stride_tiled_bytes);
-
-    if (aligned_end - aligned_start > stride_tiled_bytes) {
-        params.addr = aligned_start;
-        params.height = (aligned_end - aligned_start) / BytesInPixels(stride);
-    } else {
-        // 1 row
-        ASSERT(aligned_end - aligned_start == stride_tiled_bytes);
-        const u32 tiled_alignment = BytesInPixels(is_tiled ? 8 * 8 : 1);
-
-        aligned_start =
-            addr + Common::AlignDown(boost::icl::first(interval) - addr, tiled_alignment);
-        aligned_end =
-            addr + Common::AlignUp(boost::icl::last_next(interval) - addr, tiled_alignment);
-
-        params.addr = aligned_start;
-        params.width = PixelsInBytes(aligned_end - aligned_start) / tiled_size;
-        params.stride = params.width;
-        params.height = tiled_size;
-    }
-
-    params.UpdateParams();
-    return params;
-}
-
-SurfaceInterval SurfaceParams::GetSubRectInterval(Common::Rectangle<u32> unscaled_rect) const {
-    if (unscaled_rect.GetHeight() == 0 || unscaled_rect.GetWidth() == 0) {
-        return {};
-    }
-
-    if (is_tiled) {
-        unscaled_rect.left = Common::AlignDown(unscaled_rect.left, 8) * 8;
-        unscaled_rect.bottom = Common::AlignDown(unscaled_rect.bottom, 8) / 8;
-        unscaled_rect.right = Common::AlignUp(unscaled_rect.right, 8) * 8;
-        unscaled_rect.top = Common::AlignUp(unscaled_rect.top, 8) / 8;
-    }
-
-    const u32 stride_tiled = !is_tiled ? stride : stride * 8;
-
-    const u32 pixel_offset =
-        stride_tiled * (!is_tiled ? unscaled_rect.bottom : (height / 8) - unscaled_rect.top) +
-        unscaled_rect.left;
-
-    const u32 pixels = (unscaled_rect.GetHeight() - 1) * stride_tiled + unscaled_rect.GetWidth();
-
-    return {addr + BytesInPixels(pixel_offset), addr + BytesInPixels(pixel_offset + pixels)};
-}
-
-Common::Rectangle<u32> SurfaceParams::GetSubRect(const SurfaceParams& sub_surface) const {
-    const u32 begin_pixel_index = PixelsInBytes(sub_surface.addr - addr);
-
-    if (is_tiled) {
-        const int x0 = (begin_pixel_index % (stride * 8)) / 8;
-        const int y0 = (begin_pixel_index / (stride * 8)) * 8;
-        // Top to bottom
-        return Common::Rectangle<u32>(x0, height - y0, x0 + sub_surface.width,
-                                      height - (y0 + sub_surface.height));
-    }
-
-    const int x0 = begin_pixel_index % stride;
-    const int y0 = begin_pixel_index / stride;
-    // Bottom to top
-    return Common::Rectangle<u32>(x0, y0 + sub_surface.height, x0 + sub_surface.width, y0);
-}
-
-Common::Rectangle<u32> SurfaceParams::GetScaledSubRect(const SurfaceParams& sub_surface) const {
-    auto rect = GetSubRect(sub_surface);
-    rect.left = rect.left * res_scale;
-    rect.right = rect.right * res_scale;
-    rect.top = rect.top * res_scale;
-    rect.bottom = rect.bottom * res_scale;
-    return rect;
-}
 
 bool SurfaceParams::ExactMatch(const SurfaceParams& other_surface) const {
     return std::tie(other_surface.addr, other_surface.width, other_surface.height,
@@ -130,6 +47,93 @@ bool SurfaceParams::CanTexCopy(const SurfaceParams& texcopy_params) const {
     }
 
     return FromInterval(texcopy_params.GetInterval()).GetInterval() == texcopy_params.GetInterval();
+}
+
+void SurfaceParams::UpdateParams() {
+    if (stride == 0) {
+        stride = width;
+    }
+
+    type = GetFormatType(pixel_format);
+    size = !is_tiled ? BytesInPixels(stride * (height - 1) + width)
+                     : BytesInPixels(stride * 8 * (height / 8 - 1) + width * 8);
+    end = addr + size;
+}
+
+Rect2D SurfaceParams::GetSubRect(const SurfaceParams& sub_surface) const {
+    const u32 begin_pixel_index = PixelsInBytes(sub_surface.addr - addr);
+
+    if (is_tiled) {
+        const u32 x0 = (begin_pixel_index % (stride * 8)) / 8;
+        const u32 y0 = (begin_pixel_index / (stride * 8)) * 8;
+        // Top to bottom
+        return Rect2D(x0, height - y0, x0 + sub_surface.width,
+                      height - (y0 + sub_surface.height));
+    }
+
+    const u32 x0 = begin_pixel_index % stride;
+    const u32 y0 = begin_pixel_index / stride;
+    // Bottom to top
+    return Rect2D(x0, y0 + sub_surface.height, x0 + sub_surface.width, y0);
+}
+
+Rect2D SurfaceParams::GetScaledSubRect(const SurfaceParams& sub_surface) const {
+    const Rect2D rect = GetSubRect(sub_surface);
+    return rect * res_scale;
+}
+
+SurfaceParams SurfaceParams::FromInterval(SurfaceInterval interval) const {
+    SurfaceParams params = *this;
+    const u32 tiled_size = is_tiled ? 8 : 1;
+    const u32 stride_tiled_bytes = BytesInPixels(stride * tiled_size);
+
+    PAddr aligned_start =
+        addr + Common::AlignDown(boost::icl::first(interval) - addr, stride_tiled_bytes);
+    PAddr aligned_end =
+        addr + Common::AlignUp(boost::icl::last_next(interval) - addr, stride_tiled_bytes);
+
+    if (aligned_end - aligned_start > stride_tiled_bytes) {
+        params.addr = aligned_start;
+        params.height = (aligned_end - aligned_start) / BytesInPixels(stride);
+    } else {
+        // 1 row
+        ASSERT(aligned_end - aligned_start == stride_tiled_bytes);
+        const u32 tiled_alignment = BytesInPixels(is_tiled ? 8 * 8 : 1);
+
+        aligned_start =
+            addr + Common::AlignDown(boost::icl::first(interval) - addr, tiled_alignment);
+        aligned_end =
+            addr + Common::AlignUp(boost::icl::last_next(interval) - addr, tiled_alignment);
+
+        params.addr = aligned_start;
+        params.width = PixelsInBytes(aligned_end - aligned_start) / tiled_size;
+        params.stride = params.width;
+        params.height = tiled_size;
+    }
+
+    params.UpdateParams();
+    return params;
+}
+
+SurfaceInterval SurfaceParams::GetSubRectInterval(Rect2D unscaled_rect) const {
+    if (unscaled_rect.GetHeight() == 0 || unscaled_rect.GetWidth() == 0) [[unlikely]] {
+        return {};
+    }
+
+    if (is_tiled) {
+        unscaled_rect.left = Common::AlignDown(unscaled_rect.left, 8) * 8;
+        unscaled_rect.bottom = Common::AlignDown(unscaled_rect.bottom, 8) / 8;
+        unscaled_rect.right = Common::AlignUp(unscaled_rect.right, 8) * 8;
+        unscaled_rect.top = Common::AlignUp(unscaled_rect.top, 8) / 8;
+    }
+
+    const u32 stride_tiled = !is_tiled ? stride : stride * 8;
+    const u32 pixels = (unscaled_rect.GetHeight() - 1) * stride_tiled + unscaled_rect.GetWidth();
+    const u32 pixel_offset =
+        stride_tiled * (!is_tiled ? unscaled_rect.bottom : (height / 8) - unscaled_rect.top) +
+        unscaled_rect.left;
+
+    return {addr + BytesInPixels(pixel_offset), addr + BytesInPixels(pixel_offset + pixels)};
 }
 
 } // namespace VideoCore

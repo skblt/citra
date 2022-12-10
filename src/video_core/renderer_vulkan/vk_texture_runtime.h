@@ -12,7 +12,6 @@
 #include "video_core/renderer_vulkan/vk_blit_helper.h"
 #include "video_core/renderer_vulkan/vk_format_reinterpreter.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
-#include "video_core/renderer_vulkan/vk_layout_tracker.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 
 namespace Vulkan {
@@ -24,61 +23,11 @@ struct StagingData {
     std::size_t buffer_offset{0};
 };
 
-struct ImageAlloc {
-    ImageAlloc() = default;
-
-    ImageAlloc(const ImageAlloc&) = delete;
-    ImageAlloc& operator=(const ImageAlloc&) = delete;
-
-    ImageAlloc(ImageAlloc&&) = default;
-    ImageAlloc& operator=(ImageAlloc&&) = default;
-
-    vk::Image image;
-    vk::ImageView image_view;
-    vk::ImageView base_view;
-    vk::ImageView depth_view;
-    vk::ImageView stencil_view;
-    vk::ImageView storage_view;
-    VmaAllocation allocation;
-    vk::ImageUsageFlags usage;
-    vk::Format format;
-    vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
-    u32 levels = 1;
-    u32 layers = 1;
-    LayoutTracker tracker;
-};
-
-struct HostTextureTag {
-    vk::Format format = vk::Format::eUndefined;
-    VideoCore::PixelFormat pixel_format = VideoCore::PixelFormat::Invalid;
-    VideoCore::TextureType type = VideoCore::TextureType::Texture2D;
-    u32 width = 1;
-    u32 height = 1;
-
-    auto operator<=>(const HostTextureTag&) const noexcept = default;
-
-    const u64 Hash() const {
-        return Common::ComputeHash64(this, sizeof(HostTextureTag));
-    }
-};
-
-} // namespace Vulkan
-
-namespace std {
-template <>
-struct hash<Vulkan::HostTextureTag> {
-    std::size_t operator()(const Vulkan::HostTextureTag& tag) const noexcept {
-        return tag.Hash();
-    }
-};
-} // namespace std
-
-namespace Vulkan {
-
 class Instance;
 class RenderpassCache;
 class DescriptorManager;
 class Surface;
+class Framebuffer;
 
 /**
  * Provides texture manipulation functions to the rasterizer cache
@@ -92,43 +41,45 @@ public:
                    RenderpassCache& renderpass_cache, DescriptorManager& desc_manager);
     ~TextureRuntime();
 
-    /// Causes a GPU command flush
-    void Finish();
+    /// Returns the vulkan instance
+    [[nodiscard]] const Instance& GetInstance() const noexcept {
+        return instance;
+    }
 
-    /// Takes back ownership of the allocation for recycling
-    void Recycle(const HostTextureTag tag, ImageAlloc&& alloc);
+    /// Returns the vulkan scheduler
+    [[nodiscard]] Scheduler& GetScheduler() const noexcept {
+        return scheduler;
+    }
+
+    /// Returns the vulkan renderpass cache
+    [[nodiscard]] RenderpassCache& GetRenderpassCache() const noexcept {
+        return renderpass_cache;
+    }
 
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
     [[nodiscard]] StagingData FindStaging(u32 size, bool upload);
 
-    /// Allocates a vulkan image possibly resusing an existing one
-    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat format,
-                                      VideoCore::TextureType type);
+    /// Returns the vulkan format associated with the provided pixel format
+    vk::Format NativeFormat(VideoCore::PixelFormat pixel_format) const;
 
-    /// Allocates a vulkan image
-    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, VideoCore::PixelFormat pixel_format,
-                                      VideoCore::TextureType type, vk::Format format,
-                                      vk::ImageUsageFlags usage);
+    /// Causes a GPU command flush
+    void Finish();
 
     /// Performs required format convertions on the staging data
     void FormatConvert(const Surface& surface, bool upload, std::span<std::byte> source,
                        std::span<std::byte> dest);
 
-    /// Transitions the mip level range of the surface to new_layout
-    void Transition(ImageAlloc& alloc, vk::ImageLayout new_layout, u32 level, u32 level_count);
+    /// Fills a partial texture rect using a clear renderpass
+    bool FramebufferClear(Framebuffer& framebuffer, const VideoCore::TextureClear& clear);
 
     /// Fills the rectangle of the texture with the clear value provided
-    bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
-                      VideoCore::ClearValue value);
+    bool SurfaceClear(Surface& surface, const VideoCore::TextureClear& clear);
 
     /// Copies a rectangle of src_tex to another rectange of dst_rect
-    bool CopyTextures(Surface& source, Surface& dest, const VideoCore::TextureCopy& copy);
+    bool SurfaceCopy(Surface& source, Surface& dest, const VideoCore::TextureCopy& copy);
 
     /// Blits a rectangle of src_tex to another rectange of dst_rect
-    bool BlitTextures(Surface& surface, Surface& dest, const VideoCore::TextureBlit& blit);
-
-    /// Generates mipmaps for all the available levels of the texture
-    void GenerateMipmaps(Surface& surface, u32 max_level);
+    bool SurfaceBlit(Surface& surface, Surface& dest, const VideoCore::TextureBlit& blit);
 
     /// Flushes staging buffers
     void FlushBuffers();
@@ -140,18 +91,7 @@ public:
     /// Returns true if the provided pixel format needs convertion
     [[nodiscard]] bool NeedsConvertion(VideoCore::PixelFormat format) const;
 
-private:
-    /// Returns the current Vulkan instance
-    const Instance& GetInstance() const {
-        return instance;
-    }
-
-    /// Returns the current Vulkan scheduler
-    Scheduler& GetScheduler() const {
-        return scheduler;
-    }
-
-private:
+public:
     const Instance& instance;
     Scheduler& scheduler;
     RenderpassCache& renderpass_cache;
@@ -160,23 +100,85 @@ private:
     StreamBuffer upload_buffer;
     StreamBuffer download_buffer;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
-    std::unordered_multimap<HostTextureTag, ImageAlloc> texture_recycler;
-    std::unordered_map<vk::ImageView, vk::Framebuffer> clear_framebuffers;
 };
 
-class Surface : public VideoCore::SurfaceBase<Surface> {
+struct Allocation {
+    Allocation() = default;
+    Allocation(TextureRuntime& runtime);
+    Allocation(TextureRuntime& runtime, const VideoCore::SurfaceParams& params);
+    ~Allocation();
+
+    Allocation(const Allocation&) noexcept = delete;
+    Allocation& operator=(const Allocation&) noexcept = delete;
+
+    Allocation(Allocation&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Allocation));
+        o.device = VK_NULL_HANDLE;
+    }
+    Allocation& operator=(Allocation&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Allocation));
+        o.device = VK_NULL_HANDLE;
+        return *this;
+    }
+
+    vk::Device device;
+    VmaAllocator allocator;
+    std::array<vk::Image, 2> images;
+    std::array<VmaAllocation, 2> allocations;
+    vk::ImageView image_view;
+    vk::ImageView depth_view;
+    vk::ImageView stencil_view;
+    vk::ImageView storage_view;
+    vk::Format format;
+    vk::ImageAspectFlags aspect;
+};
+
+class Surface : public VideoCore::SurfaceBase {
     friend class TextureRuntime;
-    friend class RasterizerVulkan;
 
 public:
-    Surface(TextureRuntime& runtime);
-    Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime);
-    Surface(const VideoCore::SurfaceParams& params, vk::Format format, vk::ImageUsageFlags usage,
-            TextureRuntime& runtime);
+    Surface(VideoCore::SurfaceParams params);
+    Surface(TextureRuntime& runtime, Allocation&& alloc, VideoCore::SurfaceParams params);
     ~Surface() override;
 
-    /// Transitions the mip level range of the surface to new_layout
-    void Transition(vk::ImageLayout new_layout, u32 level, u32 level_count);
+    Surface(const Surface&) noexcept = delete;
+    Surface& operator=(const Surface&) noexcept = delete;
+
+    Surface(Surface&&) noexcept = default;
+    Surface& operator=(Surface&&) noexcept = default;
+
+    [[nodiscard]] Allocation&& Release() noexcept {
+        return std::move(alloc);
+    }
+
+    [[nodiscard]] vk::Image Handle(bool unscaled = false) const noexcept {
+        return alloc.images[unscaled];
+    }
+
+    [[nodiscard]] vk::ImageView ImageView() const noexcept {
+        return alloc.image_view;
+    }
+
+    [[nodiscard]] vk::ImageView DepthView() const noexcept {
+        return alloc.depth_view;
+    }
+
+    [[nodiscard]] vk::ImageView StencilView() const noexcept {
+        return alloc.stencil_view;
+    }
+
+    [[nodiscard]] vk::ImageView StorageView() const noexcept {
+        ASSERT(alloc.storage_view);
+        return alloc.storage_view;
+    }
+
+    [[nodiscard]] vk::Format InternalFormat() const noexcept {
+        return alloc.format;
+    }
+
+    [[nodiscard]] vk::Format NativeFormat() const noexcept {
+        return traits.native;
+    }
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture
     void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
@@ -185,69 +187,111 @@ public:
     void Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging);
 
     /// Returns the bpp of the internal surface format
-    u32 GetInternalBytesPerPixel() const;
-
-    /// Returns an image view used to sample the surface from a shader
-    vk::ImageView GetImageView() const {
-        return alloc.image_view;
-    }
-
-    /// Returns an image view used to create a framebuffer
-    vk::ImageView GetFramebufferView() {
-        return alloc.base_view;
-    }
-
-    /// Returns the depth only image view of the surface, null otherwise
-    vk::ImageView GetDepthView() const {
-        return alloc.depth_view;
-    }
-
-    /// Returns the stencil only image view of the surface, null otherwise
-    vk::ImageView GetStencilView() const {
-        return alloc.stencil_view;
-    }
-
-    /// Returns the R32 image view used for atomic load/store
-    vk::ImageView GetStorageView() const {
-        if (!alloc.storage_view) {
-            LOG_CRITICAL(Render_Vulkan,
-                         "Surface with pixel format {} and internal format {} "
-                         "does not provide requested storage view!",
-                         VideoCore::PixelFormatAsString(pixel_format), vk::to_string(alloc.format));
-            UNREACHABLE();
-        }
-        return alloc.storage_view;
-    }
-
-    /// Returns the internal format of the allocated texture
-    vk::Format GetInternalFormat() const {
-        return alloc.format;
-    }
+    u32 InternalBytesPerPixel() const;
 
 private:
-    /// Uploads pixel data to scaled texture
-    void ScaledUpload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
-
-    /// Downloads scaled image by downscaling the requested rectangle
-    void ScaledDownload(const VideoCore::BufferTextureCopy& download, const StagingData& stagings);
-
-    /// Downloads scaled depth stencil data
-    void DepthStencilDownload(const VideoCore::BufferTextureCopy& download,
-                              const StagingData& staging);
+    /// Performs blit between the scaled/unscaled images
+    void BlitScale(const VideoCore::TextureBlit& blit, bool up_scale);
 
 private:
-    TextureRuntime& runtime;
-    const Instance& instance;
-    Scheduler& scheduler;
-
-public:
-    ImageAlloc alloc;
+    Scheduler* scheduler{};
+    TextureRuntime* runtime{};
+    Allocation alloc;
     FormatTraits traits;
 };
 
+class Framebuffer {
+public:
+    explicit Framebuffer(TextureRuntime& runtime, Surface* color_surface, Surface* depth_surface,
+                         VideoCore::RenderTargets key);
+    ~Framebuffer();
+
+    Framebuffer(const Framebuffer&) = delete;
+    Framebuffer& operator=(const Framebuffer&) = delete;
+
+    Framebuffer(Framebuffer&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Framebuffer));
+        o.framebuffer = VK_NULL_HANDLE;
+    }
+    Framebuffer& operator=(Framebuffer&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Framebuffer));
+        o.framebuffer = VK_NULL_HANDLE;
+        return *this;
+    }
+
+    [[nodiscard]] vk::Framebuffer Handle() const noexcept {
+        return framebuffer;
+    }
+
+    [[nodiscard]] vk::ImageView ColorView() const noexcept {
+        return color_view;
+    }
+
+    [[nodiscard]] vk::ImageView DepthView() const noexcept {
+        return depth_view;
+    }
+
+    [[nodiscard]] VideoCore::Rect2D RenderArea() const noexcept {
+        return render_area;
+    }
+
+    [[nodiscard]] vk::RenderPass RenderPass(vk::AttachmentLoadOp load_op) const noexcept {
+        return renderpass[static_cast<u32>(load_op)];
+    }
+
+    void SetRenderArea(VideoCore::Rect2D draw_rect) noexcept {
+        render_area = draw_rect;
+    }
+
+    /// Begins a renderpass with the stored framebuffer as render target
+    void BeginRenderPass();
+
+private:
+    RenderpassCache* renderpass_cache{};
+    vk::Device device;
+    std::array<vk::RenderPass, 2> renderpass;
+    vk::ImageView color_view{};
+    vk::ImageView depth_view{};
+    vk::Framebuffer framebuffer;
+    VideoCore::Rect2D render_area;
+};
+
+class Sampler {
+public:
+    Sampler(TextureRuntime& runtime, VideoCore::SamplerParams params);
+    ~Sampler();
+
+    Sampler(const Sampler&) = delete;
+    Sampler& operator=(const Sampler&) = delete;
+
+    Sampler(Sampler&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Sampler));
+        o.sampler = VK_NULL_HANDLE;
+    }
+    Sampler& operator=(Sampler&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Sampler));
+        o.sampler = VK_NULL_HANDLE;
+        return *this;
+    }
+
+    [[nodiscard]] vk::Sampler Handle() const noexcept {
+        return sampler;
+    }
+
+private:
+    vk::Device device;
+    vk::Sampler sampler;
+};
+
 struct Traits {
-    using RuntimeType = TextureRuntime;
-    using SurfaceType = Surface;
+    static constexpr bool FRAMEBUFFER_BLITS = false;
+
+    using Runtime = Vulkan::TextureRuntime;
+    using Surface = Vulkan::Surface;
+    using Framebuffer = Vulkan::Framebuffer;
+    using Allocation = Vulkan::Allocation;
+    using Sampler = Vulkan::Sampler;
+    using Format = vk::Format;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;

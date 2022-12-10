@@ -4,8 +4,8 @@
 
 #include <limits>
 #include "core/memory.h"
-#include "video_core/rasterizer_accelerated.h"
 #include "video_core/pica_state.h"
+#include "video_core/rasterizer_accelerated.h"
 #include "video_core/video_core.h"
 
 namespace VideoCore {
@@ -50,7 +50,7 @@ RasterizerAccelerated::HardwareVertex::HardwareVertex(const Pica::Shader::Output
     }
 }
 
-RasterizerAccelerated::RasterizerAccelerated() {
+RasterizerAccelerated::RasterizerAccelerated(Memory::MemorySystem& memory) : memory{memory} {
     uniform_block_data.lighting_lut_dirty.fill(true);
 }
 
@@ -119,8 +119,7 @@ void RasterizerAccelerated::UpdatePagesCachedCount(PAddr addr, u32 size, int del
 
             uncache_bytes += Memory::CITRA_PAGE_SIZE;
         } else if (uncache_bytes > 0) {
-            VideoCore::g_memory->RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes,
-                                                            false);
+            memory.RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes, false);
             uncache_bytes = 0;
         }
 
@@ -131,18 +130,18 @@ void RasterizerAccelerated::UpdatePagesCachedCount(PAddr addr, u32 size, int del
 
             cache_bytes += Memory::CITRA_PAGE_SIZE;
         } else if (cache_bytes > 0) {
-            VideoCore::g_memory->RasterizerMarkRegionCached(cache_start_addr, cache_bytes, true);
+            memory.RasterizerMarkRegionCached(cache_start_addr, cache_bytes, true);
 
             cache_bytes = 0;
         }
     }
 
     if (uncache_bytes > 0) {
-        VideoCore::g_memory->RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes, false);
+        memory.RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes, false);
     }
 
     if (cache_bytes > 0) {
-        VideoCore::g_memory->RasterizerMarkRegionCached(cache_start_addr, cache_bytes, true);
+        memory.RasterizerMarkRegionCached(cache_start_addr, cache_bytes, true);
     }
 }
 
@@ -166,14 +165,13 @@ void RasterizerAccelerated::ClearAll(bool flush) {
 
             uncache_bytes += Memory::CITRA_PAGE_SIZE;
         } else if (uncache_bytes > 0) {
-            VideoCore::g_memory->RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes,
-                                                            false);
+            memory.RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes, false);
             uncache_bytes = 0;
         }
     }
 
     if (uncache_bytes > 0) {
-        VideoCore::g_memory->RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes, false);
+        memory.RasterizerMarkRegionCached(uncache_start_addr, uncache_bytes, false);
     }
 
     cached_pages = {};
@@ -188,7 +186,7 @@ RasterizerAccelerated::VertexArrayInfo RasterizerAccelerated::AnalyzeVertexArray
     if (is_indexed) {
         const auto& index_info = regs.pipeline.index_array;
         const PAddr address = vertex_attributes.GetPhysicalBaseAddress() + index_info.offset;
-        const u8* index_address_8 = VideoCore::g_memory->GetPhysicalPointer(address);
+        const u8* index_address_8 = memory.GetPhysicalPointer(address);
         const u16* index_address_16 = reinterpret_cast<const u16*>(index_address_8);
         const bool index_u16 = index_info.format != 0;
 
@@ -711,16 +709,15 @@ void RasterizerAccelerated::SyncAlphaTest() {
 }
 
 void RasterizerAccelerated::SyncCombinerColor() {
-    auto combiner_color =
-        ColorRGBA8(Pica::g_state.regs.texturing.tev_combiner_buffer_color.raw);
+    auto combiner_color = ColorRGBA8(Pica::g_state.regs.texturing.tev_combiner_buffer_color.raw);
     if (combiner_color != uniform_block_data.data.tev_combiner_buffer_color) {
         uniform_block_data.data.tev_combiner_buffer_color = combiner_color;
         uniform_block_data.dirty = true;
     }
 }
 
-void RasterizerAccelerated::SyncTevConstColor(std::size_t stage_index,
-                                         const Pica::TexturingRegs::TevStageConfig& tev_stage) {
+void RasterizerAccelerated::SyncTevConstColor(
+    std::size_t stage_index, const Pica::TexturingRegs::TevStageConfig& tev_stage) {
     const auto const_color = ColorRGBA8(tev_stage.const_color);
 
     if (const_color == uniform_block_data.data.const_color[stage_index]) {
@@ -785,7 +782,8 @@ void RasterizerAccelerated::SyncLightPosition(int light_index) {
 
 void RasterizerAccelerated::SyncLightSpotDirection(int light_index) {
     const auto& light = Pica::g_state.regs.lighting.light[light_index];
-    const auto spot_direction = Common::Vec3f{light.spot_x / 2047.0f, light.spot_y / 2047.0f, light.spot_z / 2047.0f};
+    const auto spot_direction =
+        Common::Vec3f{light.spot_x / 2047.0f, light.spot_y / 2047.0f, light.spot_z / 2047.0f};
 
     if (spot_direction != uniform_block_data.data.light_src[light_index].spot_direction) {
         uniform_block_data.data.light_src[light_index].spot_direction = spot_direction;

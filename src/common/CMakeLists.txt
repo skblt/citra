@@ -61,6 +61,7 @@ add_library(common STATIC
     atomic_ops.h
     detached_tasks.cpp
     detached_tasks.h
+    bit_cast.h
     bit_field.h
     bit_set.h
     cityhash.cpp

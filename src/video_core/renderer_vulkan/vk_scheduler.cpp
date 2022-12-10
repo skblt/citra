@@ -5,13 +5,14 @@
 #include <utility>
 #include "common/microprofile.h"
 #include "core/settings.h"
-#include "video_core/renderer_vulkan/vk_scheduler.h"
-#include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
+#include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_scheduler.h"
 
 namespace Vulkan {
 
-void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer render_cmdbuf, vk::CommandBuffer upload_cmdbuf) {
+void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer render_cmdbuf,
+                                         vk::CommandBuffer upload_cmdbuf) {
     auto command = first;
     while (command != nullptr) {
         auto next = command->GetNext();
@@ -25,9 +26,10 @@ void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer render_cmdbuf, vk::Co
     last = nullptr;
 }
 
-Scheduler::Scheduler(const Instance& instance, RenderpassCache& renderpass_cache, RendererVulkan& renderer)
-    : instance{instance}, renderpass_cache{renderpass_cache}, renderer{renderer}, master_semaphore{instance},
-      command_pool{instance, master_semaphore}, stop_requested{false},
+Scheduler::Scheduler(const Instance& instance, RenderpassCache& renderpass_cache,
+                     RendererVulkan& renderer)
+    : instance{instance}, renderpass_cache{renderpass_cache}, renderer{renderer},
+      master_semaphore{instance}, command_pool{instance, master_semaphore}, stop_requested{false},
       use_worker_thread{Settings::values.async_command_recording} {
     AllocateWorkerCommandBuffers();
     if (use_worker_thread) {
@@ -120,8 +122,7 @@ void Scheduler::WorkerThread() {
 
 void Scheduler::AllocateWorkerCommandBuffers() {
     const vk::CommandBufferBeginInfo begin_info = {
-        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
-    };
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
 
     upload_cmdbuf = command_pool.Commit();
     upload_cmdbuf.begin(begin_info);
@@ -137,8 +138,8 @@ void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wa
     state = StateFlags::AllDirty;
 
     renderpass_cache.ExitRenderpass();
-    Record([signal_semaphore, wait_semaphore, signal_value, this]
-           (vk::CommandBuffer render_cmdbuf, vk::CommandBuffer upload_cmdbuf) {
+    Record([signal_semaphore, wait_semaphore, signal_value, this](vk::CommandBuffer render_cmdbuf,
+                                                                  vk::CommandBuffer upload_cmdbuf) {
         MICROPROFILE_SCOPE(Vulkan_Submit);
         upload_cmdbuf.end();
         render_cmdbuf.end();

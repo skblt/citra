@@ -42,24 +42,9 @@ public:
         return is_gles;
     }
 
-    /// Returns true if the implementation supports ARB_buffer_storage
-    bool HasArbBufferStorage() const {
-        return arb_buffer_storage;
-    }
-
-    /// Returns true if the implementation supports EXT_buffer_storage
-    bool HasExtBufferStorage() const {
-        return ext_buffer_storage;
-    }
-
     /// Returns true if the implementation supports EXT_clip_cull_distance
     bool HasExtClipCullDistance() const {
         return ext_clip_cull_distance;
-    }
-
-    /// Returns true if the implementation supports ARB_direct_state_access
-    bool HasArbDirectStateAccess() const {
-        return arb_direct_state_access;
     }
 
 private:
@@ -73,10 +58,7 @@ private:
     DriverBug bugs{};
 
     bool is_gles{};
-    bool ext_buffer_storage{};
-    bool arb_buffer_storage{};
     bool ext_clip_cull_distance{};
-    bool arb_direct_state_access{};
 
     std::string_view gl_version{};
     std::string_view gpu_vendor{};
