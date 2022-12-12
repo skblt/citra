@@ -58,6 +58,8 @@ CMAKE_DEPENDENT_OPTION(ENABLE_FDK "Use FDK AAC decoder" OFF "NOT ENABLE_FFMPEG_A
 
 option(CITRA_CHECK_SUBMODULES "Check if submodules are present" ON)
 
+CMAKE_DEPENDENT_OPTION(CITRA_USE_FASTER_LD "Check if a faster linker is available" ON "NOT WIN32" OFF)
+
 option(CITRA_TESTS "Compile tests" ON)
 
 if (CITRA_USE_PRECOMPILED_HEADERS)
@@ -403,6 +405,21 @@ get_timestamp(BUILD_DATE)
 
 if (NOT USE_SYSTEM_BOOST)
     add_definitions( -DBOOST_ALL_NO_LIB )
+endif()
+
+if (CITRA_USE_FASTER_LD AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # We will assume that if the compiler is GCC, it will attempt to use ld.bfd by default.
+    # Try to pick a faster linker.
+    find_program(LLD lld)
+    find_program(MOLD mold)
+
+    if (MOLD AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "12.1")
+        message(NOTICE "Selecting mold as linker")
+        add_link_options("-fuse-ld=mold")
+    elseif (LLD)
+        message(NOTICE "Selecting lld as linker")
+        add_link_options("-fuse-ld=lld")
+    endif()
 endif()
 
 enable_testing()
