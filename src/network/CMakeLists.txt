@@ -20,7 +20,7 @@ create_target_directory_groups(network)
 
 if (ENABLE_WEB_SERVICE)
     target_compile_definitions(network PRIVATE -DENABLE_WEB_SERVICE -DCPPHTTPLIB_OPENSSL_SUPPORT)
-    target_link_libraries(network PRIVATE web_service httplib)
+    target_link_libraries(network PRIVATE web_service httplib::httplib)
     if (ANDROID)
         target_link_libraries(network PRIVATE ifaddrs)
     endif()

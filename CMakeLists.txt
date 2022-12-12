@@ -222,7 +222,6 @@ if (USE_DISCORD_PRESENCE)
 endif()
 
 if (ENABLE_WEB_SERVICE)
-    find_package(OpenSSL 1.1)
     find_package(cpp-jwt 1.4)
     find_package(httplib 0.10.3)
 endif()
