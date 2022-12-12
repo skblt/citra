@@ -54,6 +54,8 @@ CMAKE_DEPENDENT_OPTION(ENABLE_FDK "Use FDK AAC decoder" OFF "NOT ENABLE_FFMPEG_A
 
 option(CITRA_CHECK_SUBMODULES "Check if submodules are present" ON)
 
+option(CITRA_TESTS "Compile tests" ON)
+
 if (CITRA_USE_PRECOMPILED_HEADERS)
     if (MSVC AND CCACHE)
         # buildcache does not properly cache PCH files, leading to compilation errors.
