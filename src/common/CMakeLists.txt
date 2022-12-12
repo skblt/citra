@@ -141,7 +141,7 @@ target_link_libraries(common PRIVATE libzstd_static)
 set_target_properties(common PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})
 
 if ("x86_64" IN_LIST ARCHITECTURE)
-    target_link_libraries(common PRIVATE xbyak)
+    target_link_libraries(common PRIVATE xbyak::xbyak)
 endif()
 
 if (CITRA_USE_PRECOMPILED_HEADERS)

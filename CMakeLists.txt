@@ -5,9 +5,13 @@ cmake_minimum_required(VERSION 3.15)
 cmake_policy(SET CMP0092 NEW)
 # Enforce new LTO setting
 cmake_policy(SET CMP0069 NEW)
+# Dynarmic has cmake_minimum_required(3.12) and we may want to override
+# some of its variables, which is only possible in 3.13+
+cmake_policy(SET CMP0077 NEW)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/cmake-modules")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/find-modules")
 include(DownloadExternals)
 include(CMakeDependentOption)
 
@@ -20,7 +24,7 @@ endif()
 option(ENABLE_LTO "Enable link time optimization" OFF)
 
 option(ENABLE_SDL2 "Enable the SDL2 frontend" ON)
-option(USE_SYSTEM_SDL2 "Use the system SDL2 lib (instead of the bundled one)" OFF)
+option(CITRA_USE_SYSTEM_SDL2 "Use the system SDL2 lib (instead of the bundled one)" OFF)
 
 # Set bundled qt as dependent options.
 option(ENABLE_QT "Enable the Qt frontend" ON)
@@ -196,6 +200,34 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin/$<CONFIG>)
 # Prefer the -pthread flag on Linux.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
+
+find_package(enet 1.3)
+find_package(fmt 9 CONFIG)
+find_package(inih)
+find_package(nlohmann_json 3.8)
+find_package(zstd 1.5)
+
+if (ARCHITECTURE_x86 OR ARCHITECTURE_x86_64)
+    find_package(xbyak 6)
+endif()
+
+if (ENABLE_CUBEB)
+    find_package(cubeb)
+endif()
+
+if (USE_DISCORD_PRESENCE)
+    find_package(DiscordRPC)
+endif()
+
+if (ENABLE_WEB_SERVICE)
+    find_package(OpenSSL 1.1)
+    find_package(cpp-jwt 1.4)
+    find_package(httplib 0.11)
+endif()
+
+if (CITRA_TESTS)
+    find_package(Catch2 3.1.0)
+endif()
 
 if (ENABLE_QT)
     if (CITRA_USE_BUNDLED_QT)
@@ -395,7 +427,7 @@ else()
 endif()
 
 # SDL2
-if (ENABLE_SDL2 AND USE_SYSTEM_SDL2)
+if (ENABLE_SDL2 AND CITRA_USE_SYSTEM_SDL2)
     find_package(SDL2 REQUIRED)
     add_library(SDL2 INTERFACE)
     target_link_libraries(SDL2 INTERFACE "${SDL2_LIBRARY}")
@@ -405,7 +437,6 @@ endif()
 
 add_subdirectory(src)
 add_subdirectory(dist/installer)
-
 
 # Set citra-qt project or citra project as default StartUp Project in Visual Studio depending on whether QT is enabled or not
 if(ENABLE_QT)

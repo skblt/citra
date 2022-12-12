@@ -297,7 +297,7 @@ if (USE_DISCORD_PRESENCE)
         discord_impl.cpp
         discord_impl.h
     )
-    target_link_libraries(citra-qt PRIVATE discord-rpc)
+    target_link_libraries(citra-qt PRIVATE DiscordRPC::discord-rpc)
     target_compile_definitions(citra-qt PRIVATE -DUSE_DISCORD_PRESENCE)
 endif()
 

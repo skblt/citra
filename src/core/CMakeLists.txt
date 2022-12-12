@@ -482,7 +482,7 @@ set_target_properties(core PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO}
 
 if (ENABLE_WEB_SERVICE)
     target_compile_definitions(core PRIVATE -DENABLE_WEB_SERVICE -DCPPHTTPLIB_OPENSSL_SUPPORT)
-    target_link_libraries(core PRIVATE web_service ${OPENSSL_LIBS} httplib)
+    target_link_libraries(core PRIVATE web_service ${OPENSSL_LIBS} httplib::httplib)
     if (ANDROID)
         target_link_libraries(core PRIVATE ifaddrs)
     endif()
@@ -499,7 +499,7 @@ if ("x86_64" IN_LIST ARCHITECTURE OR "arm64" IN_LIST ARCHITECTURE)
         arm/dynarmic/arm_tick_counts.cpp
         arm/dynarmic/arm_tick_counts.h
     )
-    target_link_libraries(core PRIVATE dynarmic)
+    target_link_libraries(core PRIVATE dynarmic::dynarmic)
 endif()
 
 if (ENABLE_FFMPEG_VIDEO_DUMPER)

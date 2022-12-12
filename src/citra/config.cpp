@@ -7,7 +7,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <SDL.h>
-#include <inih/cpp/INIReader.h>
+#include <INIReader.h>
 #include "citra/config.h"
 #include "citra/default_ini.h"
 #include "common/file_util.h"

@@ -87,7 +87,7 @@ if(ENABLE_SDL2)
 endif()
 
 if(ENABLE_CUBEB)
-    target_link_libraries(audio_core PRIVATE cubeb)
+    target_link_libraries(audio_core PRIVATE cubeb::cubeb)
     target_compile_definitions(audio_core PUBLIC HAVE_CUBEB)
 endif()
 
