@@ -150,3 +150,4 @@ check_include_files(sys/timerfd.h USBI_TIMERFD_AVAILABLE)
 
 
 configure_file(config.h.in config.h)
+add_library(libusb::usb ALIAS usb)

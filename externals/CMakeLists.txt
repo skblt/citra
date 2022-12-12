@@ -107,6 +107,10 @@ target_include_directories(SoundTouch INTERFACE ./soundtouch/include)
 # Teakra
 add_subdirectory(teakra EXCLUDE_FROM_ALL)
 
+if (NOT TARGET libusb::usb)
+    add_subdirectory(libusb EXCLUDE_FROM_ALL)
+endif()
+
 # SDL2
 if (ENABLE_SDL2 AND NOT CITRA_USE_SYSTEM_SDL2)
     add_subdirectory(sdl2)
