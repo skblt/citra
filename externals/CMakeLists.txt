@@ -35,24 +35,26 @@ if (CITRA_TESTS AND NOT TARGET Catch2::Catch2)
 endif()
 
 # Crypto++
-set(CRYPTOPP_BUILD_DOCUMENTATION OFF)
-set(CRYPTOPP_BUILD_TESTING OFF)
-set(CRYPTOPP_INSTALL OFF)
-set(CRYPTOPP_SOURCES "${CMAKE_SOURCE_DIR}/externals/cryptopp")
-add_subdirectory(cryptopp-cmake)
+if (NOT TARGET cryptopp::cryptopp)
+    set(CRYPTOPP_BUILD_DOCUMENTATION OFF)
+    set(CRYPTOPP_BUILD_TESTING OFF)
+    set(CRYPTOPP_INSTALL OFF)
+    set(CRYPTOPP_SOURCES "${CMAKE_SOURCE_DIR}/externals/cryptopp")
+    add_subdirectory(cryptopp-cmake)
 
-# HACK: The logic to set up the base include directory for CryptoPP does not work with Android SDK CMake 3.22.1.
-# Until there is a fixed version available, this code will detect and add in the proper include if it does not exist.
-if(ANDROID)
-    message(STATUS "Applying CryptoPP include fix.")
-    get_target_property(CRYPTOPP_INCLUDES cryptopp INTERFACE_INCLUDE_DIRECTORIES)
-    foreach(CRYPTOPP_INCLUDE ${CRYPTOPP_INCLUDES})
-        if("${CRYPTOPP_INCLUDE}" MATCHES "\\$<BUILD_INTERFACE:(.*)/cryptopp>")
-            message(STATUS "Fixed include path: ${CMAKE_MATCH_1}")
-            target_include_directories(cryptopp PUBLIC $<BUILD_INTERFACE:${CMAKE_MATCH_1}>)
-            break()
-        endif()
-    endforeach()
+    # HACK: The logic to set up the base include directory for CryptoPP does not work with Android SDK CMake 3.22.1.
+    # Until there is a fixed version available, this code will detect and add in the proper include if it does not exist.
+    if(ANDROID)
+        message(STATUS "Applying CryptoPP include fix.")
+        get_target_property(CRYPTOPP_INCLUDES cryptopp INTERFACE_INCLUDE_DIRECTORIES)
+        foreach(CRYPTOPP_INCLUDE ${CRYPTOPP_INCLUDES})
+            if("${CRYPTOPP_INCLUDE}" MATCHES "\\$<BUILD_INTERFACE:(.*)/cryptopp>")
+                message(STATUS "Fixed include path: ${CMAKE_MATCH_1}")
+                target_include_directories(cryptopp PUBLIC $<BUILD_INTERFACE:${CMAKE_MATCH_1}>)
+                break()
+            endif()
+        endforeach()
+    endif()
 endif()
 
 # fmt and Xbyak need to be added before dynarmic
