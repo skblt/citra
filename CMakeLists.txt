@@ -52,6 +52,8 @@ option(USE_SYSTEM_BOOST "Use the system Boost libs (instead of the bundled ones)
 
 CMAKE_DEPENDENT_OPTION(ENABLE_FDK "Use FDK AAC decoder" OFF "NOT ENABLE_FFMPEG_AUDIO_DECODER;NOT ENABLE_MF" OFF)
 
+option(CITRA_CHECK_SUBMODULES "Check if submodules are present" ON)
+
 if (CITRA_USE_PRECOMPILED_HEADERS)
     if (MSVC AND CCACHE)
         # buildcache does not properly cache PCH files, leading to compilation errors.
@@ -113,7 +115,10 @@ function(check_submodules_present)
         endif()
     endforeach()
 endfunction()
-check_submodules_present()
+
+if(EXISTS ${PROJECT_SOURCE_DIR}/.gitmodules AND CITRA_CHECK_SUBMODULES)
+    check_submodules_present()
+endif()
 
 configure_file(${PROJECT_SOURCE_DIR}/dist/compatibility_list/compatibility_list.qrc
                ${PROJECT_BINARY_DIR}/dist/compatibility_list/compatibility_list.qrc
