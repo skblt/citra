@@ -3,7 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <vector>
-#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch.hpp>
 #include "core/core_timing.h"
 #include "core/hle/kernel/errors.h"
 #include "core/hle/kernel/memory.h"
