@@ -29,6 +29,7 @@ endif()
 
 # Catch2
 if (CITRA_TESTS AND NOT TARGET Catch2::Catch2)
+    message(STATUS "Using bundled catch2")
     set(CATCH_INSTALL_DOCS OFF)
     set(CATCH_INSTALL_EXTRAS OFF)
     set(CATCH_BUILD_STATIC_LIBRARY ON)
@@ -37,6 +38,7 @@ endif()
 
 # Crypto++
 if (NOT TARGET cryptopp::cryptopp)
+    message(STATUS "Using bundled cryptopp")
     set(CRYPTOPP_BUILD_DOCUMENTATION OFF)
     set(CRYPTOPP_BUILD_TESTING OFF)
     set(CRYPTOPP_INSTALL OFF)
@@ -61,12 +63,14 @@ endif()
 # fmt and Xbyak need to be added before dynarmic
 # libfmt
 if (NOT TARGET fmt::fmt)
+    message(STATUS "Using bundled fmt")
     option(FMT_INSTALL "" ON)
     add_subdirectory(fmt)
 endif()
 
 # Xbyak
 if ("x86_64" IN_LIST ARCHITECTURE AND NOT TARGET xbyak::xbyak)
+    message(STATUS "Using bundled xbyak")
     add_subdirectory(xbyak EXCLUDE_FROM_ALL)
 endif()
 
@@ -88,6 +92,7 @@ add_subdirectory(glad)
 
 # inih
 if (NOT TARGET inih::INIReader)
+    message(STATUS "Using bundled inih")
     add_subdirectory(inih)
 endif()
 
@@ -111,16 +116,19 @@ target_include_directories(SoundTouch INTERFACE ./soundtouch/include)
 add_subdirectory(teakra EXCLUDE_FROM_ALL)
 
 if (NOT TARGET libusb::usb)
+    message(STATUS "Using bundled libusb")
     add_subdirectory(libusb EXCLUDE_FROM_ALL)
 endif()
 
 # SDL2
 if (ENABLE_SDL2 AND NOT CITRA_USE_SYSTEM_SDL2)
+    message(STATUS "Using bundled sdl2")
     add_subdirectory(sdl2)
 endif()
 
 # Zstandard
 if (NOT TARGET zstd::zstd)
+    message(STATUS "Using bundled zstd")
     set(ZSTD_LEGACY_SUPPORT OFF)
     set(ZSTD_BUILD_PROGRAMS OFF)
     set(ZSTD_BUILD_SHARED OFF)
@@ -131,6 +139,7 @@ endif()
 
 # ENet
 if (NOT TARGET enet::enet)
+    message(STATUS "Using bundled enet")
     add_subdirectory(enet EXCLUDE_FROM_ALL)
     target_include_directories(enet INTERFACE ./enet/include)
     add_library(enet::enet ALIAS enet)
@@ -171,7 +180,7 @@ if (ENABLE_WEB_SERVICE)
     endif()
 
     if (NOT TARGET httplib::httplib)
-        # httplib
+        message(STATUS "Using bundled httplib")
         add_library(httplib INTERFACE)
         target_include_directories(httplib INTERFACE ./httplib)
         target_compile_definitions(httplib INTERFACE -DCPPHTTPLIB_OPENSSL_SUPPORT)
@@ -185,6 +194,7 @@ endif()
 
 # JSON
 if (ENABLE_WEB_SERVICE AND NOT TARGET nlohmann_json::nlohmann_json)
+    message(STATUS "Using bundled json")
     add_library(nlohmann_json INTERFACE)
     target_include_directories(nlohmann_json INTERFACE ./json)
     add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
@@ -192,6 +202,7 @@ endif()
 
 # cpp-jwt
 if (ENABLE_WEB_SERVICE AND NOT TARGET cpp-jwt::cpp-jwt)
+    message(STATUS "Using bundled cpp-jwt")
     add_library(cpp-jwt INTERFACE)
     target_include_directories(cpp-jwt INTERFACE ./cpp-jwt/include)
     target_compile_definitions(cpp-jwt INTERFACE CPP_JWT_USE_VENDORED_NLOHMANN_JSON)
