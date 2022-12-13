@@ -31,6 +31,7 @@ endif()
 if (CITRA_TESTS AND NOT TARGET Catch2::Catch2)
     set(CATCH_INSTALL_DOCS OFF)
     set(CATCH_INSTALL_EXTRAS OFF)
+    set(CATCH_BUILD_STATIC_LIBRARY ON)
     add_subdirectory(catch2 EXCLUDE_FROM_ALL)
 endif()
 

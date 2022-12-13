@@ -137,7 +137,7 @@ add_library(common STATIC
 create_target_directory_groups(common)
 
 target_link_libraries(common PUBLIC fmt::fmt microprofile Boost::boost Boost::serialization)
-target_link_libraries(common PRIVATE libzstd_static)
+target_link_libraries(common PRIVATE zstd::zstd)
 set_target_properties(common PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})
 
 if ("x86_64" IN_LIST ARCHITECTURE)
