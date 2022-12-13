@@ -119,11 +119,14 @@ if (ENABLE_SDL2 AND NOT CITRA_USE_SYSTEM_SDL2)
 endif()
 
 # Zstandard
-set(ZSTD_LEGACY_SUPPORT OFF)
-set(ZSTD_BUILD_PROGRAMS OFF)
-set(ZSTD_BUILD_SHARED OFF)
-add_subdirectory(zstd/build/cmake EXCLUDE_FROM_ALL)
-target_include_directories(libzstd_static INTERFACE $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/externals/zstd/lib>)
+if (NOT TARGET zstd::zstd)
+    set(ZSTD_LEGACY_SUPPORT OFF)
+    set(ZSTD_BUILD_PROGRAMS OFF)
+    set(ZSTD_BUILD_SHARED OFF)
+    add_subdirectory(zstd/build/cmake EXCLUDE_FROM_ALL)
+    target_include_directories(libzstd_static INTERFACE $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/externals/zstd/lib>)
+    add_library(zstd::zstd ALIAS libzstd_static)
+endif()
 
 # ENet
 if (NOT TARGET enet::enet)
@@ -143,6 +146,7 @@ endif()
 if (USE_DISCORD_PRESENCE AND NOT TARGET DiscordRPC::discord-rpc)
     add_subdirectory(discord-rpc EXCLUDE_FROM_ALL)
     target_include_directories(discord-rpc INTERFACE ./discord-rpc/include)
+    add_library(DiscordRPC::discord-rpc ALIAS discord-rpc)
 endif()
 
 if (ENABLE_WEB_SERVICE)
