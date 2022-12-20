@@ -927,6 +927,7 @@ void MemorySystem::CopyBlock(const Kernel::Process& dest_process,
                              const Kernel::Process& src_process, VAddr dest_addr, VAddr src_addr,
                              std::size_t size) {
     auto& page_table = *src_process.vm_manager.page_table;
+    std::array<u8, CITRA_PAGE_SIZE> copy_buffer{};
     std::size_t remaining_size = size;
     std::size_t page_index = src_addr >> CITRA_PAGE_BITS;
     std::size_t page_offset = src_addr & CITRA_PAGE_MASK;
@@ -954,9 +955,8 @@ void MemorySystem::CopyBlock(const Kernel::Process& dest_process,
         case PageType::Special: {
             MMIORegionPointer handler = impl->GetMMIOHandler(page_table, current_vaddr);
             DEBUG_ASSERT(handler);
-            std::vector<u8> buffer(copy_amount);
-            handler->ReadBlock(current_vaddr, buffer.data(), buffer.size());
-            WriteBlock(dest_process, dest_addr, buffer.data(), buffer.size());
+            handler->ReadBlock(current_vaddr, copy_buffer.data(), copy_buffer.size());
+            WriteBlock(dest_process, dest_addr, copy_buffer.data(), copy_buffer.size());
             break;
         }
         case PageType::RasterizerCachedMemory: {
