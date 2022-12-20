@@ -29,7 +29,6 @@ constexpr static VideoCore::SurfaceParams NULL_PARAMS = {
     .width = 1,
     .height = 1,
     .stride = 1,
-    .levels = 1,
     .texture_type = VideoCore::TextureType::Texture2D,
     .pixel_format = VideoCore::PixelFormat::RGBA8,
     .type = VideoCore::SurfaceType::Color,

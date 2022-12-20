@@ -113,8 +113,15 @@ struct Allocation {
     Allocation(const Allocation&) noexcept = delete;
     Allocation& operator=(const Allocation&) noexcept = delete;
 
-    Allocation(Allocation&&) noexcept = default;
-    Allocation& operator=(Allocation&&) noexcept = default;
+    Allocation(Allocation&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Allocation));
+        o.handles.fill(0);
+    }
+    Allocation& operator=(Allocation&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Allocation));
+        o.handles.fill(0);
+        return *this;
+    }
 
     std::array<GLuint, 2> handles{};
     FormatTuple tuple;
@@ -136,8 +143,8 @@ public:
         return std::move(alloc);
     }
 
-    [[nodiscard]] GLuint Handle(bool scaled = true) const noexcept {
-        return alloc.handles[scaled];
+    [[nodiscard]] GLuint Handle(bool unscaled = false) const noexcept {
+        return alloc.handles[unscaled];
     }
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture
@@ -152,11 +159,11 @@ public:
     }
 
 private:
-    /// Uploads pixel data to scaled texture
-    void ScaledUpload(const VideoCore::BufferTextureCopy& upload);
+    /// Performs blit between the scaled/unscaled images
+    void BlitScale(const VideoCore::TextureBlit& blit, bool up_scale);
 
-    /// Downloads scaled image by downscaling the requested rectangle
-    void ScaledDownload(const VideoCore::BufferTextureCopy& download);
+    /// Configures and binds the appropriate runtime rescale framebuffer
+    void BindFramebuffer(GLuint handle, GLenum target, GLsizei level);
 
 private:
     const Driver* driver{};
@@ -167,19 +174,15 @@ private:
 class Framebuffer {
 public:
     Framebuffer(TextureRuntime&, Surface* color, Surface* depth, VideoCore::RenderTargets);
-    Framebuffer(GLuint acquired_framebuffer, GLbitfield mask);
     ~Framebuffer();
 
     Framebuffer(const Framebuffer&) = delete;
     Framebuffer& operator=(const Framebuffer&) = delete;
 
-    Framebuffer(Framebuffer&&) = default;
+    Framebuffer(Framebuffer&& o) = default;
     Framebuffer& operator=(Framebuffer&&) = default;
 
     [[nodiscard]] GLuint Handle() const noexcept {
-        if (acquired_framebuffer) {
-            return acquired_framebuffer;
-        }
         return framebuffer.handle;
     }
 
@@ -195,19 +198,15 @@ public:
         render_area = draw_rect;
     }
 
-    /// Binds the framebuffer as render target
-    void Bind() {}
-
 private:
-    OGLFramebuffer framebuffer;
-    GLuint acquired_framebuffer;
-    GLbitfield buffer_mask;
-    VideoCore::Rect2D render_area;
+    OGLFramebuffer framebuffer{};
+    GLbitfield buffer_mask{};
+    VideoCore::Rect2D render_area{};
 };
 
 class Sampler {
 public:
-    Sampler(TextureRuntime&, VideoCore::SamplerParams params);
+    Sampler(TextureRuntime& runtime, VideoCore::SamplerParams params);
     ~Sampler();
 
     Sampler(const Sampler&) = delete;

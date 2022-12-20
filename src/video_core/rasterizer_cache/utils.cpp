@@ -62,6 +62,17 @@ ClearValue MakeClearValue(const SurfaceBase& fill_surface, PixelFormat format, S
     return result;
 }
 
+u32 MipLevels(u32 width, u32 height, u32 max_level) {
+    u32 lod = 1;
+    while (width > 8 && height > 8)  {
+        lod++;
+        width >>= 1;
+        height >>= 1;
+    }
+
+    return std::min(lod, max_level + 1);
+}
+
 void SwizzleTexture(const SurfaceParams& swizzle_info, PAddr start_addr, PAddr end_addr,
                     std::span<std::byte> source_linear, std::span<std::byte> dest_tiled,
                     bool convert) {

@@ -473,14 +473,10 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
     const u16 res_scale = VideoCore::GetResolutionScaleFactor();
 
     // Bind the framebuffer surfaces
-    //state.draw.draw_framebuffer = framebuffer.handle;
-    //state.Apply();
+    state.draw.draw_framebuffer = framebuffer.Handle();
+    state.Apply();
 
     /*if (shadow_rendering) {
-        if (color_surface == nullptr) {
-            return true;
-        }
-
         glFramebufferParameteri(GL_DRAW_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_WIDTH,
                                 color_surface->width * color_surface->res_scale);
         glFramebufferParameteri(GL_DRAW_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_HEIGHT,
@@ -489,27 +485,6 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
                                0);
         state.image_shadow_buffer = color_surface->Handle();
-    } else {
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                               color_surface != nullptr ? color_surface->Handle() : 0, 0);
-        if (depth_surface != nullptr) {
-            if (has_stencil) {
-                // attach both depth and stencil
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                                       GL_TEXTURE_2D, depth_surface->Handle(), 0);
-            } else {
-                // attach depth
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
-                                       depth_surface->Handle(), 0);
-                // clear stencil attachment
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
-                                       0);
-            }
-        } else {
-            // clear both depth and stencil attachment
-            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D,
-                                   0, 0);
-        }
     }*/
 
     // Sync the viewport

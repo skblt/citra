@@ -115,7 +115,7 @@ public:
     Surface& GetTextureCube(const TextureCubeConfig& config);
 
     /// Get the color and depth surfaces based on the framebuffer configuration
-    std::pair<Framebuffer&, Rect2D> GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb);
+    FramebufferRect_Tuple GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb);
 
     /// Get a surface that matches a "texture copy" display transfer config
     SurfaceRect_Tuple GetTexCopySurface(const SurfaceParams& params);
@@ -153,15 +153,14 @@ private:
     /// Get the best surface match (and its match type) for the given flags
     template <MatchType find_flags>
     SurfaceId FindMatch(const SurfaceParams& params, ScaleMatch match_scale_type,
-                        std::optional<SurfaceInterval> validate_interval = std::nullopt,
-                        bool relaxed_format = false);
+                        std::optional<SurfaceInterval> validate_interval = std::nullopt);
 
     /// Find or create a framebuffer with the given render target parameters
     FramebufferId GetFramebufferId(SurfaceId color_id, SurfaceId depth_id, const RenderTargets& key);
 
     /// Create a render target from a given image and image view parameters
-    [[nodiscard]] Framebuffer& FramebufferFromSurface(SurfaceId surface0_id,
-                                                      SurfaceId surface1_id = SurfaceId{});
+    FramebufferId RenderTargetFromSurface(SurfaceId surface0_id,
+                                          SurfaceId surface1_id = SurfaceId{});
 
     void DuplicateSurface(Surface& src_surface, Surface& dest_surface);
 
@@ -197,6 +196,9 @@ private:
     /// Remove surface from the cache
     void UnregisterSurface(SurfaceId surface_id);
 
+    /// Unregisters all surfaces from the cache
+    void UnregisterAll();
+
 private:
     VideoCore::RasterizerAccelerated& rasterizer;
     Memory::MemorySystem& memory;
@@ -204,8 +206,6 @@ private:
     SurfaceMap dirty_regions;
     u16 resolution_scale_factor;
     std::vector<std::function<void()>> download_queue;
-
-    RenderTargets render_targets;
 
     std::unordered_map<RenderTargets, FramebufferId> framebuffers;
     std::unordered_map<u64, std::vector<SurfaceId>, Common::IdentityHash<u64>> page_table;
@@ -256,10 +256,6 @@ RasterizerCache<T>::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer
                                   .stride = 1,
                                   .pixel_format = PixelFormat::RGBA8,
                               }));
-    void(slot_framebuffers.insert(runtime, &slot_surfaces[NULL_SURFACE_ID], nullptr,
-                                  RenderTargets{
-                                      .size = {1, 1}
-                                  }));
     void(slot_samplers.insert(runtime, SamplerParams{
                                            .mag_filter = TextureConfig::TextureFilter::Linear,
                                            .min_filter = TextureConfig::TextureFilter::Linear,
@@ -506,8 +502,7 @@ void RasterizerCache<T>::ForEachSurfaceInRegion(PAddr addr, size_t size, Func&& 
 template <class T>
 template <MatchType find_flags>
 auto RasterizerCache<T>::FindMatch(const SurfaceParams& params, ScaleMatch match_scale_type,
-                                   std::optional<SurfaceInterval> validate_interval,
-                                   bool relaxed_format) -> SurfaceId {
+                                   std::optional<SurfaceInterval> validate_interval) -> SurfaceId {
     SurfaceId match_surface{};
     bool match_valid = false;
     u32 match_scale = 0;
@@ -564,8 +559,7 @@ auto RasterizerCache<T>::FindMatch(const SurfaceParams& params, ScaleMatch match
         };
 
         IsMatch_Helper(std::integral_constant<MatchType, MatchType::Exact>{}, [&] {
-            return std::make_pair(surface.ExactMatch(params, relaxed_format),
-                                  surface.GetInterval());
+            return std::make_pair(surface.ExactMatch(params), surface.GetInterval());
         });
         IsMatch_Helper(std::integral_constant<MatchType, MatchType::SubRect>{}, [&] {
             return std::make_pair(surface.CanSubRect(params), surface.GetInterval());
@@ -607,10 +601,10 @@ FramebufferId RasterizerCache<T>::GetFramebufferId(SurfaceId color_id, SurfaceId
 }
 
 template <class T>
-auto RasterizerCache<T>::FramebufferFromSurface(SurfaceId surface0_id, SurfaceId surface1_id) -> Framebuffer& {
+auto RasterizerCache<T>::RenderTargetFromSurface(SurfaceId surface0_id, SurfaceId surface1_id) -> FramebufferId {
     if (!surface0_id && !surface1_id) [[unlikely]] {
         LOG_ERROR(HW_GPU, "Attempting to create framebuffer without a valid surface");
-        return slot_framebuffers[NULL_FRAMEBUFFER_ID];
+        return FramebufferId{};
     }
 
     SurfaceId color_surface_id{};
@@ -648,7 +642,7 @@ auto RasterizerCache<T>::FramebufferFromSurface(SurfaceId surface0_id, SurfaceId
                       .depth_buffer_id = depth_id,
                       .size = {surface->GetScaledWidth(), surface->GetScaledHeight()},
                 });
-    return slot_framebuffers[framebuffer_id];
+    return framebuffer_id;
 }
 
 template <class T>
@@ -668,8 +662,10 @@ bool RasterizerCache<T>::BlitSurfaces(SurfaceId src_id, Rect2D src_rect, Surface
 
     // OpenGL uses framebuffers for blit operations while vulkan does not
     if constexpr (FRAMEBUFFER_BLITS) {
-        const Framebuffer& src_framebuffer = FramebufferFromSurface(src_id);
-        const Framebuffer& dst_framebuffer = FramebufferFromSurface(dst_id);
+        const FramebufferId src_fbo_id = RenderTargetFromSurface(src_id);
+        const FramebufferId dst_fbo_id = RenderTargetFromSurface(dst_id);
+        Framebuffer& src_framebuffer = slot_framebuffers[src_fbo_id];
+        Framebuffer& dst_framebuffer = slot_framebuffers[dst_fbo_id];
         return runtime.FramebufferBlit(src_framebuffer, dst_framebuffer, texture_blit);
     } else {
         return runtime.SurfaceBlit(src_surface, dst_surface, texture_blit);
@@ -702,7 +698,8 @@ void RasterizerCache<T>::CopySurface(SurfaceId src_id, SurfaceId dst_id,
         // For all other cases like OpenGLES and partial vulkan clears, create
         // a framebuffer and use it as the clear target.
         if (!runtime.SurfaceClear(dst_surface, texture_clear)) {
-            Framebuffer& dst_framebuffer = FramebufferFromSurface(dst_id);
+            const FramebufferId dst_fbo_id = RenderTargetFromSurface(dst_id);
+            Framebuffer& dst_framebuffer = slot_framebuffers[dst_fbo_id];
             runtime.FramebufferClear(dst_framebuffer, texture_clear);
         }
         return;
@@ -872,7 +869,7 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
     params.addr = info.physical_address;
     params.width = info.width;
     params.height = info.height;
-    params.levels = 1;
+    //params.lod = MipLevels(info.width, info.height, max_level);
     params.is_tiled = true;
     params.pixel_format = VideoCore::PixelFormatFromTextureFormat(info.format);
     params.UpdateParams();
@@ -902,27 +899,17 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> Surf
 
 template <class T>
 auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb)
-    -> std::pair<Framebuffer&, Rect2D> {
+    -> FramebufferRect_Tuple {
     const auto& regs = Pica::g_state.regs;
     const auto& config = regs.framebuffer.framebuffer;
 
     // Update resolution_scale_factor and reset cache if changed
     const bool resolution_scale_changed =
         resolution_scale_factor != VideoCore::GetResolutionScaleFactor();
-    const bool texture_filter_changed =
-        /*VideoCore::g_texture_filter_update_requested.exchange(false) &&
-        texture_filterer->Reset(Settings::values.texture_filter_name,
-                                VideoCore::GetResolutionScaleFactor())*/
-        false;
 
-    if (resolution_scale_changed || texture_filter_changed) [[unlikely]] {
+    if (resolution_scale_changed) [[unlikely]] {
         resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
-        FlushAll();
-        /*while (!surface_cache.empty()) {
-            UnregisterSurface(*surface_cache.begin()->second.begin());
-        }*/
-
-        // texture_cube_cache.clear();
+        UnregisterAll();
     }
 
     const s32 framebuffer_width = config.GetWidth();
@@ -939,8 +926,8 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
     SurfaceParams color_params;
     color_params.is_tiled = true;
     color_params.res_scale = resolution_scale_factor;
-    color_params.width = config.GetWidth();
-    color_params.height = config.GetHeight();
+    color_params.width = framebuffer_width;
+    color_params.height = framebuffer_height;
     SurfaceParams depth_params = color_params;
 
     color_params.addr = config.GetColorBufferPhysicalAddress();
@@ -1030,10 +1017,11 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
         InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval), depth_surface_id);
     }
 
-    Framebuffer& framebuffer = FramebufferFromSurface(color_surface_id, depth_surface_id);
+    const FramebufferId fbo_id = RenderTargetFromSurface(color_surface_id, depth_surface_id);
+    Framebuffer& framebuffer = slot_framebuffers[fbo_id];
     framebuffer.SetRenderArea(draw_rect);
 
-    return std::make_pair(std::ref(framebuffer), fb_rect);
+    return std::make_tuple(std::ref(framebuffer), fb_rect);
 }
 
 template <class T>
@@ -1332,15 +1320,14 @@ void RasterizerCache<T>::FlushRegion(PAddr addr, u32 size, SurfaceId flush_surfa
     const SurfaceInterval flush_interval(addr, addr + size);
     SurfaceRegions flushed_intervals;
 
-    for (auto& pair : RangeFromInterval(dirty_regions, flush_interval)) {
+    for (const auto& [region, surface_id] : RangeFromInterval(dirty_regions, flush_interval)) {
         // Small sizes imply that this most likely comes from the cpu, flush the entire region
         // the point is to avoid thousands of small writes every frame if the cpu decides to
         // access that region, anything higher than 8 you're guaranteed it comes from a service
-        const auto interval = size <= 8 ? pair.first : pair.first & flush_interval;
-        SurfaceId surface_id = pair.second;
-
-        if (flush_surface_id && surface_id != flush_surface_id)
+        const SurfaceInterval interval = size <= 8 ? region : region & flush_interval;
+        if (flush_surface_id && surface_id != flush_surface_id) {
             continue;
+        }
 
         // Sanity check, this surface is the last one that marked this region dirty
         Surface& surface = slot_surfaces[surface_id];
@@ -1415,24 +1402,25 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, SurfaceId region
         }
     });
 
-    if (region_owner_id)
+    if (region_owner_id) {
         dirty_regions.set({invalid_interval, region_owner_id});
-    else
+    } else {
         dirty_regions.erase(invalid_interval);
+    }
 
     for (const SurfaceId remove_surface_id : remove_surfaces) {
-        /*if (&slot_surfaces[remove_surface_id] == region_owner) {
-            SurfaceId expanded_surface_id = FindMatch<MatchType::SubRect>(
-                        *region_owner, ScaleMatch::Ignore);
-            ASSERT(expanded_surface_id);
+        if (remove_surface_id == region_owner_id) {
+            const SurfaceParams params = slot_surfaces[region_owner_id];
+            SurfaceId expanded_surface_id = FindMatch<MatchType::SubRect>(params, ScaleMatch::Ignore);
 
-            SurfaceId
-            if ((region_owner->invalid_regions - expanded_surface.invalid_regions).empty()) {
+            Surface& region_owner = slot_surfaces[region_owner_id];
+            Surface& expanded_surface = slot_surfaces[expanded_surface_id];
+            if ((region_owner.invalid_regions - expanded_surface.invalid_regions).empty()) {
                 DuplicateSurface(region_owner, expanded_surface);
             } else {
                 continue;
             }
-        }*/
+        }
         UnregisterSurface(remove_surface_id);
     }
 
@@ -1514,7 +1502,7 @@ void RasterizerCache<T>::UnregisterSurface(SurfaceId surface_id) {
             return;
         }
         std::vector<SurfaceId>& surface_ids = page_it->second;
-        const auto vector_it = std::ranges::find(surface_ids, surface_id);
+        const auto vector_it = std::find(surface_ids.begin(), surface_ids.end(), surface_id);
         if (vector_it == surface_ids.end()) {
             ASSERT_MSG(false, "Unregistering unregistered surface in page=0x{:x}",
                        page << CITRA_PAGEBITS);
@@ -1524,6 +1512,16 @@ void RasterizerCache<T>::UnregisterSurface(SurfaceId surface_id) {
     });
 
     slot_surfaces.erase(surface_id);
+}
+
+template <class T>
+void RasterizerCache<T>::UnregisterAll() {
+    FlushAll();
+    for (const auto& [page, ids] : page_table) {
+        while (!ids.empty()) {
+            UnregisterSurface(ids.back());
+        }
+    }
 }
 
 } // namespace VideoCore

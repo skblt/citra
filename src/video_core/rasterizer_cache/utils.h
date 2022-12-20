@@ -16,6 +16,8 @@ class SurfaceBase;
 [[nodiscard]] ClearValue MakeClearValue(const SurfaceBase& fill_surface, PixelFormat format,
                                         SurfaceType type, PAddr copy_addr);
 
+u32 MipLevels(u32 width, u32 height, u32 max_level);
+
 void UnswizzleTexture(const SurfaceParams& unswizzle_info, PAddr start_addr, PAddr end_addr,
                       std::span<std::byte> source_tiled, std::span<std::byte> dest_linear,
                       bool convert = false);

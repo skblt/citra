@@ -57,6 +57,7 @@ void SurfaceParams::UpdateParams() {
     type = GetFormatType(pixel_format);
     size = !is_tiled ? BytesInPixels(stride * (height - 1) + width)
                      : BytesInPixels(stride * 8 * (height / 8 - 1) + width * 8);
+
     end = addr + size;
 }
 

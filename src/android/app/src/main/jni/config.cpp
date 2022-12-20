@@ -114,7 +114,8 @@ void Config::ReadValues() {
         sdl2_config->GetString("Premium", "texture_filter_name", "none");
 
     // Renderer
-    Settings::values.use_gles = sdl2_config->GetBoolean("Renderer", "use_gles", true);
+    Settings::values.graphics_api = static_cast<Settings::GraphicsAPI>(
+        sdl2_config->GetInteger("Renderer", "graphics_api", 0));
     Settings::values.use_hw_renderer = sdl2_config->GetBoolean("Renderer", "use_hw_renderer", true);
     Settings::values.use_hw_shader = sdl2_config->GetBoolean("Renderer", "use_hw_shader", true);
     Settings::values.shaders_accurate_mul =

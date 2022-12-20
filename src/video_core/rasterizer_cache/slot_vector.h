@@ -28,7 +28,7 @@ struct SlotId {
 };
 
 template <class T>
-requires std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>
+//requires std::is_nothrow_move_assignable_v<T> && std::is_nothrow_move_constructible_v<T>
 class SlotVector {
 public:
     class Iterator {
@@ -124,7 +124,8 @@ public:
     }
 
     [[nodiscard]] Iterator begin() noexcept {
-        const auto it = std::ranges::find_if(stored_bitset, [](u64 value) { return value != 0; });
+        //const auto it = std::ranges::find_if(stored_bitset, [](u64 value) { return value != 0; });
+        const auto it = std::find_if(stored_bitset.begin(), stored_bitset.end(), [](u64 value) { return value != 0; });
         if (it == stored_bitset.end()) {
             return end();
         }
