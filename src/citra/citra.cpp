@@ -22,6 +22,7 @@
 #include "common/logging/log.h"
 #include "common/scm_rev.h"
 #include "common/scope_exit.h"
+#include "common/settings.h"
 #include "common/string_util.h"
 #include "core/core.h"
 #include "core/dumping/backend.h"
@@ -34,7 +35,7 @@
 #include "core/hle/service/cfg/cfg.h"
 #include "core/loader/loader.h"
 #include "core/movie.h"
-#include "core/settings.h"
+#include "input_common/main.h"
 #include "network/network.h"
 #include "video_core/renderer_base.h"
 
@@ -173,7 +174,7 @@ static void OnStatusMessageReceived(const Network::StatusMessageEntry& msg) {
 
 static void InitializeLogging() {
     Log::Filter log_filter(Log::Level::Debug);
-    log_filter.ParseFilterString(Settings::values.log_filter);
+    log_filter.ParseFilterString(Settings::values.log_filter.GetValue());
     Log::SetGlobalFilter(log_filter);
 
     Log::AddBackend(std::make_unique<Log::ColorConsoleBackend>());
@@ -191,8 +192,8 @@ int main(int argc, char** argv) {
     Common::DetachedTasks detached_tasks;
     Config config;
     int option_index = 0;
-    bool use_gdbstub = Settings::values.use_gdbstub;
-    u32 gdb_port = static_cast<u32>(Settings::values.gdbstub_port);
+    bool use_gdbstub = Settings::values.use_gdbstub.GetValue();
+    u32 gdb_port = static_cast<u32>(Settings::values.gdbstub_port.GetValue());
     std::string movie_record;
     std::string movie_record_author;
     std::string movie_play;
@@ -359,11 +360,23 @@ int main(int argc, char** argv) {
     // Register generic image interface
     Core::System::GetInstance().RegisterImageInterface(std::make_shared<LodePNGImageInterface>());
 
-    std::unique_ptr<EmuWindow_SDL2> emu_window{std::make_unique<EmuWindow_SDL2>(fullscreen)};
-    Frontend::ScopeAcquireContext scope(*emu_window);
-    Core::System& system = Core::System::GetInstance();
+    EmuWindow_SDL2::InitializeSDL2();
 
-    const Core::System::ResultStatus load_result{system.Load(*emu_window, filepath)};
+    const auto emu_window{std::make_unique<EmuWindow_SDL2>(fullscreen, false)};
+    const bool use_secondary_window{Settings::values.layout_option.GetValue() ==
+                                    Settings::LayoutOption::SeparateWindows};
+    const auto secondary_window =
+        use_secondary_window ? std::make_unique<EmuWindow_SDL2>(false, true) : nullptr;
+
+    Frontend::ScopeAcquireContext scope(*emu_window);
+
+    LOG_INFO(Frontend, "Citra Version: {} | {}-{}", Common::g_build_fullname, Common::g_scm_branch,
+             Common::g_scm_desc);
+    Settings::LogSettings();
+
+    Core::System& system = Core::System::GetInstance();
+    const Core::System::ResultStatus load_result{
+        system.Load(*emu_window, filepath, secondary_window.get())};
 
     switch (load_result) {
     case Core::System::ResultStatus::ErrorGetLoader:
@@ -431,7 +444,12 @@ int main(int argc, char** argv) {
         system.VideoDumper().StartDumping(dump_video, layout);
     }
 
-    std::thread render_thread([&emu_window] { emu_window->Present(); });
+    std::thread main_render_thread([&emu_window] { emu_window->Present(); });
+    std::thread secondary_render_thread([&secondary_window] {
+        if (secondary_window) {
+            secondary_window->Present();
+        }
+    });
 
     std::atomic_bool stop_run;
     system.Renderer().Rasterizer()->LoadDiskResources(
@@ -440,7 +458,11 @@ int main(int argc, char** argv) {
                       total);
         });
 
-    while (emu_window->IsOpen()) {
+    const auto secondary_is_open = [&secondary_window] {
+        // if the secondary window isn't created, it shouldn't affect the main loop
+        return secondary_window ? secondary_window->IsOpen() : true;
+    };
+    while (emu_window->IsOpen() && secondary_is_open()) {
         const auto result = system.RunLoop();
 
         switch (result) {
@@ -454,12 +476,20 @@ int main(int argc, char** argv) {
             break;
         }
     }
-    render_thread.join();
+    emu_window->RequestClose();
+    if (secondary_window) {
+        secondary_window->RequestClose();
+    }
+    main_render_thread.join();
+    secondary_render_thread.join();
 
     Core::Movie::GetInstance().Shutdown();
     if (system.VideoDumper().IsDumping()) {
         system.VideoDumper().StopDumping();
     }
+
+    Network::Shutdown();
+    InputCommon::Shutdown();
 
     system.Shutdown();
 

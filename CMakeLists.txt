@@ -42,6 +42,8 @@ CMAKE_DEPENDENT_OPTION(CITRA_USE_BUNDLED_FFMPEG "Download bundled FFmpeg binarie
 
 option(USE_DISCORD_PRESENCE "Enables Discord Rich Presence" OFF)
 
+option(CITRA_USE_PRECOMPILED_HEADERS "Use precompiled headers" ON)
+
 CMAKE_DEPENDENT_OPTION(ENABLE_MF "Use Media Foundation decoder (preferred over FFmpeg)" ON "WIN32" OFF)
 
 CMAKE_DEPENDENT_OPTION(COMPILE_WITH_DWARF "Add DWARF debugging information" ON "MINGW" OFF)
@@ -49,6 +51,23 @@ CMAKE_DEPENDENT_OPTION(COMPILE_WITH_DWARF "Add DWARF debugging information" ON "
 option(USE_SYSTEM_BOOST "Use the system Boost libs (instead of the bundled ones)" OFF)
 
 CMAKE_DEPENDENT_OPTION(ENABLE_FDK "Use FDK AAC decoder" OFF "NOT ENABLE_FFMPEG_AUDIO_DECODER;NOT ENABLE_MF" OFF)
+
+if (CITRA_USE_PRECOMPILED_HEADERS)
+    if (MSVC AND CCACHE)
+        # buildcache does not properly cache PCH files, leading to compilation errors.
+        # See https://github.com/mbitsnbites/buildcache/discussions/230
+        message(WARNING "Buildcache does not properly support Precompiled Headers. Disabling PCH")
+        set(CITRA_USE_PRECOMPILED_HEADERS OFF)
+    endif()
+    if(APPLE)
+        message(WARNING "Precompiled Headers currently do not work on Apple. Disabling PCH")
+        set(CITRA_USE_PRECOMPILED_HEADERS OFF)
+    endif()
+endif()
+if (CITRA_USE_PRECOMPILED_HEADERS)
+    message(STATUS "Using Precompiled Headers.")
+    set(CMAKE_PCH_INSTANTIATE_TEMPLATES ON)
+endif()
 
 if(NOT EXISTS ${PROJECT_SOURCE_DIR}/.git/hooks/pre-commit)
     message(STATUS "Copying pre-commit hook")
@@ -296,13 +315,15 @@ if (CLANG_FORMAT)
     set(SRCS ${PROJECT_SOURCE_DIR}/src)
     set(CCOMMENT "Running clang format against all the .h and .cpp files in src/")
     if (WIN32)
-        add_custom_target(clang-format
-            COMMAND powershell.exe -Command "Get-ChildItem '${SRCS}/*' -Include *.cpp,*.h,*.mm -Recurse | Foreach {&'${CLANG_FORMAT}' -i $_.fullname}"
-            COMMENT ${CCOMMENT})
-    elseif(MINGW)
-        add_custom_target(clang-format
-            COMMAND find `cygpath -u ${SRCS}` -iname *.h -o -iname *.cpp -o -iname *.mm | xargs `cygpath -u ${CLANG_FORMAT}` -i
-            COMMENT ${CCOMMENT})
+        if(MINGW)
+            add_custom_target(clang-format
+                COMMAND find `cygpath -u ${SRCS}` -iname *.h -o -iname *.cpp -o -iname *.mm | xargs `cygpath -u ${CLANG_FORMAT}` -i
+                COMMENT ${CCOMMENT})
+        else()
+            add_custom_target(clang-format
+                COMMAND powershell.exe -Command "Get-ChildItem '${SRCS}/*' -Include *.cpp,*.h,*.mm -Recurse | Foreach {&'${CLANG_FORMAT}' -i $_.fullname}"
+                COMMENT ${CCOMMENT})
+    endif()
     else()
         add_custom_target(clang-format
             COMMAND find ${SRCS} -iname *.h -o -iname *.cpp -o -iname *.mm | xargs ${CLANG_FORMAT} -i

@@ -80,6 +80,9 @@ add_library(core STATIC
     file_sys/patch.h
     file_sys/path_parser.cpp
     file_sys/path_parser.h
+    file_sys/plugin_3gx.cpp
+    file_sys/plugin_3gx.h
+    file_sys/plugin_3gx_bootloader.h
     file_sys/romfs_reader.cpp
     file_sys/romfs_reader.h
     file_sys/savedata_archive.cpp
@@ -365,6 +368,8 @@ add_library(core STATIC
     hle/service/nwm/uds_connection.h
     hle/service/nwm/uds_data.cpp
     hle/service/nwm/uds_data.h
+    hle/service/plgldr/plgldr.cpp
+    hle/service/plgldr/plgldr.h
     hle/service/pm/pm.cpp
     hle/service/pm/pm.h
     hle/service/pm/pm_app.cpp
@@ -444,6 +449,7 @@ add_library(core STATIC
     movie.h
     perf_stats.cpp
     perf_stats.h
+    precompiled_headers.h
     rpc/packet.cpp
     rpc/packet.h
     rpc/rpc_server.cpp
@@ -454,8 +460,6 @@ add_library(core STATIC
     rpc/udp_server.h
     savestate.cpp
     savestate.h
-    settings.cpp
-    settings.h
     telemetry_session.cpp
     telemetry_session.h
     tracer/citrace.h
@@ -492,10 +496,16 @@ if (ARCHITECTURE_x86_64 OR ARCHITECTURE_arm64)
         arm/dynarmic/arm_dynarmic_cp15.h
         arm/dynarmic/arm_exclusive_monitor.cpp
         arm/dynarmic/arm_exclusive_monitor.h
+        arm/dynarmic/arm_tick_counts.cpp
+        arm/dynarmic/arm_tick_counts.h
     )
     target_link_libraries(core PRIVATE dynarmic)
 endif()
 
 if (ENABLE_FFMPEG_VIDEO_DUMPER)
     target_link_libraries(core PUBLIC FFmpeg::avcodec FFmpeg::avformat FFmpeg::swscale FFmpeg::swresample FFmpeg::avutil)
+endif()
+
+if (CITRA_USE_PRECOMPILED_HEADERS)
+    target_precompile_headers(core PRIVATE precompiled_headers.h)
 endif()

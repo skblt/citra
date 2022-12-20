@@ -5,7 +5,7 @@
 #include <memory>
 #include "common/archives.h"
 #include "common/logging/log.h"
-#include "core/settings.h"
+#include "common/settings.h"
 #include "video_core/pica.h"
 #include "video_core/pica_state.h"
 #include "video_core/renderer_base.h"
@@ -39,13 +39,14 @@ Layout::FramebufferLayout g_screenshot_framebuffer_layout;
 Memory::MemorySystem* g_memory;
 
 /// Initialize the video core
-ResultStatus Init(Frontend::EmuWindow& emu_window, Memory::MemorySystem& memory) {
+ResultStatus Init(Frontend::EmuWindow& emu_window, Frontend::EmuWindow* secondary_window,
+                  Memory::MemorySystem& memory) {
     g_memory = &memory;
     Pica::Init();
 
-    OpenGL::GLES = Settings::values.use_gles;
+    OpenGL::GLES = Settings::values.use_gles.GetValue();
 
-    g_renderer = std::make_unique<OpenGL::RendererOpenGL>(emu_window);
+    g_renderer = std::make_unique<OpenGL::RendererOpenGL>(emu_window, secondary_window);
     ResultStatus result = g_renderer->Init();
 
     if (result != ResultStatus::Success) {
@@ -81,8 +82,8 @@ void RequestScreenshot(void* data, std::function<void()> callback,
 
 u16 GetResolutionScaleFactor() {
     if (g_hw_renderer_enabled) {
-        return Settings::values.resolution_factor
-                   ? Settings::values.resolution_factor
+        return Settings::values.resolution_factor.GetValue()
+                   ? Settings::values.resolution_factor.GetValue()
                    : g_renderer->GetRenderWindow().GetFramebufferLayout().GetScalingRatio();
     } else {
         // Software renderer always render at native resolution

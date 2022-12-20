@@ -183,6 +183,8 @@ private slots:
     void OnGameListOpenDirectory(const QString& directory);
     void OnGameListAddDirectory();
     void OnGameListShowList(bool show);
+    void OnGameListOpenPerGameProperties(const QString& file);
+    void OnConfigurePerGame();
     void OnMenuLoadFile();
     void OnMenuInstallCIA();
     void OnUpdateProgress(std::size_t written, std::size_t total);
@@ -197,10 +199,14 @@ private slots:
     void OnDisplayTitleBars(bool);
     void InitializeHotkeys();
     void ToggleFullscreen();
+    void ToggleSecondaryFullscreen();
     void ChangeScreenLayout();
+    void UpdateSecondaryWindowVisibility();
     void ToggleScreenLayout();
     void OnSwapScreens();
     void OnRotateScreens();
+    void TriggerSwapScreens();
+    void TriggerRotateScreens();
     void OnCheats();
     void ShowFullscreen();
     void HideFullscreen();
@@ -234,10 +240,12 @@ private:
     void InstallCIA(QStringList filepaths);
     void HideMouseCursor();
     void ShowMouseCursor();
+    void OpenPerGameConfiguration(u64 title_id, const QString& file_name);
 
     std::unique_ptr<Ui::MainWindow> ui;
 
     GRenderWindow* render_window;
+    GRenderWindow* secondary_window;
 
     GameListPlaceholder* game_list_placeholder;
     LoadingScreen* loading_screen;
