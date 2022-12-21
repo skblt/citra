@@ -9,7 +9,6 @@
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
 #include "video_core/renderer_opengl/gl_stream_buffer.h"
-#include "video_core/renderer_opengl/texture_downloader_es.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
 
 namespace OpenGL {
@@ -47,11 +46,6 @@ public:
     /// Returns the OpenGL driver class
     const Driver& GetDriver() const {
         return driver;
-    }
-
-    /// Returns the class that handles texture downloads for OpenGL ES
-    const TextureDownloaderES& GetDownloaderES() const {
-        return downloader_es;
     }
 
     /// Returns the class that handles texture filtering
@@ -97,7 +91,6 @@ private:
 private:
     Driver& driver;
     TextureFilterer filterer;
-    TextureDownloaderES downloader_es;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
     OGLStreamBuffer upload_buffer, download_buffer;
     std::array<OGLFramebuffer, 3> rescale_draw_fbos;

@@ -26,6 +26,7 @@ add_library(video_core STATIC
     renderer_base.cpp
     renderer_base.h
     rasterizer_cache/morton_swizzle.h
+    rasterizer_cache/pixel_format.cpp
     rasterizer_cache/pixel_format.h
     rasterizer_cache/rasterizer_cache.cpp
     rasterizer_cache/rasterizer_cache.h
@@ -71,8 +72,6 @@ add_library(video_core STATIC
     renderer_opengl/post_processing_opengl.h
     renderer_opengl/renderer_opengl.cpp
     renderer_opengl/renderer_opengl.h
-    renderer_opengl/texture_downloader_es.cpp
-    renderer_opengl/texture_downloader_es.h
     renderer_opengl/texture_filters/anime4k/anime4k_ultrafast.cpp
     renderer_opengl/texture_filters/anime4k/anime4k_ultrafast.h
     renderer_opengl/texture_filters/bicubic/bicubic.cpp
@@ -159,9 +158,6 @@ add_library(video_core STATIC
 )
 
 set(SHADER_FILES
-    renderer_opengl/depth_to_color.frag
-    renderer_opengl/depth_to_color.vert
-    renderer_opengl/ds_to_color.frag
     renderer_opengl/texture_filters/anime4k/refine.frag
     renderer_opengl/texture_filters/anime4k/x_gradient.frag
     renderer_opengl/texture_filters/anime4k/y_gradient.frag

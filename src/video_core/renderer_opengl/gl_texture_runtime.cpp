@@ -94,7 +94,7 @@ static constexpr std::array COLOR_TUPLES_OES = {
 TextureRuntime::TextureRuntime(Driver& driver)
     : driver{driver}, filterer{Settings::values.texture_filter_name,
                                VideoCore::GetResolutionScaleFactor()},
-      downloader_es{false}, upload_buffer{GL_PIXEL_UNPACK_BUFFER, UPLOAD_BUFFER_SIZE},
+      upload_buffer{GL_PIXEL_UNPACK_BUFFER, UPLOAD_BUFFER_SIZE},
       download_buffer{GL_PIXEL_PACK_BUFFER, DOWNLOAD_BUFFER_SIZE, true} {
 
     for (std::size_t i = 0; i < rescale_draw_fbos.size(); ++i) {

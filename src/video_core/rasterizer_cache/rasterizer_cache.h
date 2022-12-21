@@ -707,6 +707,7 @@ void RasterizerCache<T>::CopySurface(SurfaceId src_id, SurfaceId dst_id,
 
     if (src_surface.CanSubRect(subrect_params)) {
         const Rect2D src_rect = src_surface.GetScaledSubRect(subrect_params);
+        LOG_INFO(HW_GPU, "Can copy {}", src_rect.GetWidth() == dst_rect.GetWidth());
         BlitSurfaces(src_id, src_rect, dst_id, dst_rect);
         return;
     }
@@ -1448,7 +1449,7 @@ auto RasterizerCache<T>::CreateSurface(SurfaceParams& params) -> SurfaceId {
     }
 
     Allocation& alloc = slot_allocations[alloc_id];
-    const SurfaceId surface_id = slot_surfaces.insert(runtime, std::move(alloc), params);
+    SurfaceId surface_id = slot_surfaces.insert(runtime, std::move(alloc), params);
     Surface& surface = slot_surfaces[surface_id];
 
     surface.alloc_id = alloc_id;
