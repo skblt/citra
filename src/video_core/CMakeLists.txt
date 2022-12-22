@@ -1,3 +1,5 @@
+add_subdirectory(host_shaders)
+
 add_library(video_core STATIC
     command_processor.cpp
     command_processor.h
@@ -157,33 +159,6 @@ add_library(video_core STATIC
     video_core.h
 )
 
-set(SHADER_FILES
-    renderer_opengl/texture_filters/anime4k/refine.frag
-    renderer_opengl/texture_filters/anime4k/x_gradient.frag
-    renderer_opengl/texture_filters/anime4k/y_gradient.frag
-    renderer_opengl/texture_filters/bicubic/bicubic.frag
-    renderer_opengl/texture_filters/nearest_neighbor/nearest_neighbor.frag
-    renderer_opengl/texture_filters/scale_force/scale_force.frag
-    renderer_opengl/texture_filters/tex_coord.vert
-    renderer_opengl/texture_filters/xbrz/xbrz_freescale.frag
-    renderer_opengl/texture_filters/xbrz/xbrz_freescale.vert
-)
-
-include(${CMAKE_CURRENT_SOURCE_DIR}/generate_shaders.cmake)
-
-foreach(shader_file ${SHADER_FILES})
-    get_filename_component(shader_file_name ${shader_file} NAME)
-    GetShaderHeaderFile(${shader_file_name})
-    list(APPEND SHADER_HEADERS ${shader_header_file})
-endforeach()
-
-add_custom_target(shaders
-    BYPRODUCTS ${SHADER_HEADERS}
-    COMMAND "${CMAKE_COMMAND}" -P ${CMAKE_CURRENT_SOURCE_DIR}/generate_shaders.cmake
-    SOURCES ${SHADER_FILES}
-)
-add_dependencies(video_core shaders)
-
 target_include_directories(video_core PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 if(ARCHITECTURE_x86_64)
@@ -199,15 +174,18 @@ endif()
 
 create_target_directory_groups(video_core)
 
+# Ignore nullability warnings generated from VMA
 if (NOT MSVC)
-    # Ignore nullability warnings generated from VMA
     target_compile_options(vma INTERFACE -Wno-unused-variable -Wno-nullability-completeness)
 endif()
 
 target_link_libraries(video_core PUBLIC common core)
-target_link_libraries(video_core PRIVATE nihstro-headers Boost::serialization glm::glm)
-target_link_libraries(video_core PRIVATE vulkan-headers vma sirit SPIRV glslang glad)
 set_target_properties(video_core PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})
+
+add_dependencies(video_core host_shaders)
+target_include_directories(video_core PRIVATE ${HOST_SHADERS_INCLUDE})
+target_link_libraries(video_core PRIVATE vulkan-headers vma sirit SPIRV glslang glad)
+target_link_libraries(video_core PRIVATE nihstro-headers Boost::serialization glm::glm)
 
 if (ARCHITECTURE_x86_64)
     target_link_libraries(video_core PUBLIC xbyak)
