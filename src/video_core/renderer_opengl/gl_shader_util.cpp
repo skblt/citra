@@ -4,17 +4,14 @@
 
 #include <array>
 #include <string>
-#include <vector>
-#include <glad/glad.h>
 #include "common/assert.h"
 #include "common/logging/log.h"
+#include "core/settings.h"
 #include "video_core/renderer_opengl/gl_shader_util.h"
-#include "video_core/renderer_opengl/gl_vars.h"
 
 namespace OpenGL {
 
-GLuint LoadShader(const char* source, GLenum type) {
-    const std::string version = GLES ? R"(#version 320 es
+constexpr const char* ES_VERSION = R"(#version 320 es
 #define CITRA_GLES
 
 #if defined(GL_ANDROID_extension_pack_es31a)
@@ -24,90 +21,84 @@ GLuint LoadShader(const char* source, GLenum type) {
 #if defined(GL_EXT_clip_cull_distance)
 #extension GL_EXT_clip_cull_distance : enable
 #endif
-)"
-                                     : "#version 430 core\n";
+)";
 
-    const char* debug_type;
-    switch (type) {
-    case GL_VERTEX_SHADER:
-        debug_type = "vertex";
-        break;
-    case GL_GEOMETRY_SHADER:
-        debug_type = "geometry";
-        break;
-    case GL_FRAGMENT_SHADER:
-        debug_type = "fragment";
-        break;
-    case GL_COMPUTE_SHADER:
-        debug_type = "compute";
-        break;
-    default:
-        UNREACHABLE();
+static void LogShader(GLuint shader, std::string_view code = {}) {
+    GLint shader_status{};
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &shader_status);
+    if (shader_status == GL_FALSE) {
+        LOG_ERROR(Render_OpenGL, "Failed to build shader");
     }
-
-    std::array<const char*, 2> src_arr{version.data(), source};
-    GLuint shader_id = glCreateShader(type);
-    glShaderSource(shader_id, static_cast<GLsizei>(src_arr.size()), src_arr.data(), nullptr);
-    LOG_DEBUG(Render_OpenGL, "Compiling {} shader...", debug_type);
-    glCompileShader(shader_id);
-
-    GLint result = GL_FALSE;
-    GLint info_log_length;
-    glGetShaderiv(shader_id, GL_COMPILE_STATUS, &result);
-    glGetShaderiv(shader_id, GL_INFO_LOG_LENGTH, &info_log_length);
-
-    if (info_log_length > 1) {
-        std::vector<char> shader_error(info_log_length);
-        glGetShaderInfoLog(shader_id, info_log_length, nullptr, &shader_error[0]);
-        if (result == GL_TRUE) {
-            LOG_DEBUG(Render_OpenGL, "{}", &shader_error[0]);
-        } else {
-            LOG_ERROR(Render_OpenGL, "Error compiling {} shader:\n{}", debug_type,
-                      &shader_error[0]);
-            LOG_ERROR(Render_OpenGL, "Shader source code:\n{}{}", src_arr[0], src_arr[1]);
+    GLint log_length{};
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_length);
+    if (log_length == 0) {
+        return;
+    }
+    std::string log(log_length, 0);
+    glGetShaderInfoLog(shader, log_length, nullptr, log.data());
+    if (shader_status == GL_FALSE) {
+        LOG_ERROR(Render_OpenGL, "{}", log);
+        if (!code.empty()) {
+            LOG_INFO(Render_OpenGL, "\n{}", code);
         }
+    } else {
+        LOG_WARNING(Render_OpenGL, "{}", log);
     }
+}
+
+GLuint LoadShader(std::string_view source, GLenum type) {
+    const bool is_gles = Settings::values.graphics_api == Settings::GraphicsAPI::OpenGLES;
+    std::string code = is_gles ? ES_VERSION : "#version 430 core\n";
+    code += source;
+
+    const GLuint shader_id = glCreateShader(type);
+    const GLsizei length = static_cast<GLsizei>(code.size());
+    const GLchar* const code_ptr = code.data();
+
+    glShaderSource(shader_id, 1, &code_ptr, &length);
+    glCompileShader(shader_id);
+    if (Settings::values.renderer_debug) {
+        LogShader(shader_id, code);
+    }
+
     return shader_id;
 }
 
-GLuint LoadProgram(bool separable_program, const std::vector<GLuint>& shaders) {
-    // Link the program
-    LOG_DEBUG(Render_OpenGL, "Linking program...");
+GLuint LoadProgram(bool separable, std::span<const GLuint> shaders) {
+    const GLuint program_id = glCreateProgram();
 
-    GLuint program_id = glCreateProgram();
-
-    for (GLuint shader : shaders) {
+    for (const GLuint shader : shaders) {
         if (shader != 0) {
             glAttachShader(program_id, shader);
         }
     }
 
-    if (separable_program) {
+    if (separable) {
         glProgramParameteri(program_id, GL_PROGRAM_SEPARABLE, GL_TRUE);
     }
 
     glProgramParameteri(program_id, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE);
     glLinkProgram(program_id);
 
-    // Check the program
-    GLint result = GL_FALSE;
-    GLint info_log_length;
-    glGetProgramiv(program_id, GL_LINK_STATUS, &result);
-    glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &info_log_length);
+    GLint link_status{};
+    glGetProgramiv(program_id, GL_LINK_STATUS, &link_status);
 
-    if (info_log_length > 1) {
-        std::vector<char> program_error(info_log_length);
-        glGetProgramInfoLog(program_id, info_log_length, nullptr, &program_error[0]);
-        if (result == GL_TRUE) {
-            LOG_DEBUG(Render_OpenGL, "{}", &program_error[0]);
-        } else {
-            LOG_ERROR(Render_OpenGL, "Error linking shader:\n{}", &program_error[0]);
-        }
+    GLint log_length{};
+    glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &log_length);
+    if (log_length == 0) {
+        return program_id;
+    }
+    std::string log(log_length, 0);
+    glGetProgramInfoLog(program_id, log_length, nullptr, log.data());
+    if (link_status == GL_FALSE) {
+        LOG_ERROR(Render_OpenGL, "{}", log);
+    } else {
+        LOG_WARNING(Render_OpenGL, "{}", log);
     }
 
-    ASSERT_MSG(result == GL_TRUE, "Shader not linked");
+    ASSERT_MSG(link_status == GL_TRUE, "Shader not linked");
 
-    for (GLuint shader : shaders) {
+    for (const GLuint shader : shaders) {
         if (shader != 0) {
             glDetachShader(program_id, shader);
         }

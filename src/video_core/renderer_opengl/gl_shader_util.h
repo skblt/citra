@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <vector>
-#include <glad/glad.h>
+#include <span>
+#include "video_core/renderer_opengl/gl_resource_manager.h"
 
 namespace OpenGL {
 
@@ -29,14 +29,14 @@ precision mediump uimage2D;
  * @param source String of the GLSL shader program
  * @param type Type of the shader (GL_VERTEX_SHADER, GL_GEOMETRY_SHADER or GL_FRAGMENT_SHADER)
  */
-GLuint LoadShader(const char* source, GLenum type);
+GLuint LoadShader(std::string_view source, GLenum type);
 
 /**
  * Utility function to create and link an OpenGL GLSL shader program
- * @param separable_program whether to create a separable program
+ * @param separable whether to create a separable program
  * @param shaders ID of shaders to attach to the program
  * @returns Handle of the newly created OpenGL program object
  */
-GLuint LoadProgram(bool separable_program, const std::vector<GLuint>& shaders);
+GLuint LoadProgram(bool separable, std::span<const GLuint> shaders);
 
 } // namespace OpenGL

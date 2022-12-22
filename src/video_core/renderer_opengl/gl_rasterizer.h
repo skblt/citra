@@ -131,8 +131,6 @@ private:
     OGLVertexArray sw_vao; // VAO for software shader draw
     OGLVertexArray hw_vao; // VAO for hardware shader / accelerate draw
     std::array<bool, 16> hw_vao_enabled_attributes{};
-    Surface& null_surface;
-    Sampler& null_sampler;
 
     OGLStreamBuffer vertex_buffer;
     OGLStreamBuffer uniform_buffer;

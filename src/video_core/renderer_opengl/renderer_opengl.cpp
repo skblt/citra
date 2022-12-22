@@ -18,7 +18,6 @@
 #include "video_core/renderer_opengl/gl_rasterizer.h"
 #include "video_core/renderer_opengl/gl_shader_util.h"
 #include "video_core/renderer_opengl/gl_state.h"
-#include "video_core/renderer_opengl/gl_vars.h"
 #include "video_core/renderer_opengl/post_processing_opengl.h"
 #include "video_core/renderer_opengl/renderer_opengl.h"
 #include "video_core/video_core.h"
@@ -677,7 +676,7 @@ void RendererOpenGL::ReloadSampler() {
 void RendererOpenGL::ReloadShader() {
     // Link shaders and get variable locations
     std::string shader_data;
-    if (GLES) {
+    if (driver.IsOpenGLES()) {
         shader_data += fragment_shader_precision_OES;
     }
     if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
@@ -749,7 +748,8 @@ void RendererOpenGL::ReloadShader() {
 
 void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
                                                  const GPU::Regs::FramebufferConfig& framebuffer) {
-    GPU::Regs::PixelFormat format = framebuffer.color_format;
+    const GPU::Regs::PixelFormat format = framebuffer.color_format;
+    const bool is_gles = driver.IsOpenGLES();
     GLint internal_format{};
 
     texture.format = format;
@@ -760,7 +760,7 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
     case GPU::Regs::PixelFormat::RGBA8:
         internal_format = GL_RGBA;
         texture.gl_format = GL_RGBA;
-        texture.gl_type = GLES ? GL_UNSIGNED_BYTE : GL_UNSIGNED_INT_8_8_8_8;
+        texture.gl_type = is_gles ? GL_UNSIGNED_BYTE : GL_UNSIGNED_INT_8_8_8_8;
         break;
 
     case GPU::Regs::PixelFormat::RGB8:
@@ -771,7 +771,7 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
         internal_format = GL_RGB;
 
         // GLES Dosen't support BGR , Use RGB instead
-        texture.gl_format = GLES ? GL_RGB : GL_BGR;
+        texture.gl_format = is_gles ? GL_RGB : GL_BGR;
         texture.gl_type = GL_UNSIGNED_BYTE;
         break;
 

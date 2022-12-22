@@ -33,8 +33,6 @@ RasterizerOpenGL::RasterizerOpenGL(Core::System& system, Frontend::EmuWindow& em
                                                                                          memory,
                                                                                          runtime},
       shader_program_manager{emu_window, driver, !driver.IsOpenGLES()},
-      null_surface{res_cache.GetSurface(VideoCore::NULL_SURFACE_ID)},
-      null_sampler{res_cache.GetSampler(VideoCore::NULL_SAMPLER_ID)},
       vertex_buffer{GL_ARRAY_BUFFER, VERTEX_BUFFER_SIZE}, uniform_buffer{GL_UNIFORM_BUFFER,
                                                                          UNIFORM_BUFFER_SIZE},
       index_buffer{GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE}, texture_buffer{GL_TEXTURE_BUFFER,
@@ -306,8 +304,7 @@ void RasterizerOpenGL::SetupTextureUnits() {
             state.texture_units[unit].texture_2d = surface.Handle();
             state.texture_units[unit].sampler = sampler.Handle();
         } else {
-            state.texture_units[unit].texture_2d = null_surface.Handle();
-            state.texture_units[unit].sampler = null_sampler.Handle();
+            state.texture_units[unit].texture_2d = 0;
         }
     }
 }
