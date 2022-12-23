@@ -130,6 +130,8 @@ add_library(video_core STATIC
     renderer_vulkan/vk_swapchain.h
     renderer_vulkan/vk_texture_runtime.cpp
     renderer_vulkan/vk_texture_runtime.h
+    renderer_vulkan/vk_transfer_accelerator.cpp
+    renderer_vulkan/vk_transfer_accelerator.h
     shader/debug_data.h
     shader/shader.cpp
     shader/shader.h

@@ -3,6 +3,20 @@
 # Refer to the license.txt file included.
 
 set(SHADER_FILES
+    conversion_shaders/buffer_to_image/a4_to_r8.comp
+    conversion_shaders/buffer_to_image/a8_to_r8.comp
+    conversion_shaders/buffer_to_image/etc1_to_rgba8.comp
+    conversion_shaders/buffer_to_image/etc1a4_to_rgba8.comp
+    conversion_shaders/buffer_to_image/i4_to_r8.comp
+    conversion_shaders/buffer_to_image/i8_to_r8.comp
+    conversion_shaders/buffer_to_image/ia4_to_rg8.comp
+    conversion_shaders/buffer_to_image/ia8_to_rg8.comp
+    conversion_shaders/buffer_to_image/rg8_to_rg8.comp
+    conversion_shaders/buffer_to_image/rgb565_to_rgba8.comp
+    conversion_shaders/buffer_to_image/rgb5a1_to_rgba8.comp
+    conversion_shaders/buffer_to_image/rgb8_to_rgba8.comp
+    conversion_shaders/buffer_to_image/rgba4_to_rgba8.comp
+    conversion_shaders/buffer_to_image/rgba8_to_rgba8.comp
     texture_filtering/bicubic.frag
     texture_filtering/nearest_neighbor.frag
     texture_filtering/refine.frag
@@ -75,8 +89,9 @@ foreach(FILENAME IN ITEMS ${SHADER_FILES})
     endif()
     # Skip compiling to SPIR-V OpenGL exclusive files
     if (NOT ${FILENAME} MATCHES "opengl.*")
-        string(TOUPPER ${SHADER_NAME}_SPV SPIRV_VARIABLE_NAME)
         set(SPIRV_HEADER_FILE ${SHADER_DIR}/${SHADER_NAME}_spv.h)
+        get_filename_component(SHADER_NAME ${SHADER_NAME} NAME)
+        string(TOUPPER ${SHADER_NAME}_SPV SPIRV_VARIABLE_NAME)
         add_custom_command(
             OUTPUT
                 ${SPIRV_HEADER_FILE}

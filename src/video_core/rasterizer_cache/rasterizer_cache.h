@@ -617,7 +617,7 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
             ASSERT(new_params.size % aligned_params.BytesInPixels(aligned_params.stride) == 0);
 
             SurfaceId new_surface_id = CreateSurface(new_params);
-            // DuplicateSurface(surface, new_surface_id);
+            DuplicateSurface(surface_id, new_surface_id);
 
             // Delete the expanded surface, this can't be done safely yet
             // because it may still be in use
@@ -848,8 +848,12 @@ auto RasterizerCache<T>::GetTexCopySurface(const SurfaceParams& params) -> Surfa
 }
 
 template <class T>
-void RasterizerCache<T>::DuplicateSurface(Surface& src_surface, Surface& dest_surface) {
-    /*ASSERT(dest_surface.addr <= src_surface.addr && dest_surface.end >= src_surface.end);
+void RasterizerCache<T>::DuplicateSurface(SurfaceId src_surface_id, SurfaceId dest_surface_id) {
+    Surface& src_surface = slot_surfaces[src_surface_id];
+    Surface& dest_surface = slot_surfaces[dest_surface_id];
+
+    const Rect2D src_rect = src_surface.GetScaledRect();
+    const Rect2D dst_rect = dest_surface.GetScaledSubRect(*src_surface);
 
     BlitSurfaces(src_surface, src_surface.GetScaledRect(), dest_surface,
                  dest_surface.GetScaledSubRect(*src_surface));
@@ -866,7 +870,7 @@ void RasterizerCache<T>::DuplicateSurface(Surface& src_surface, Surface& dest_su
 
     for (const auto& interval : regions) {
         dirty_regions.set({interval, dest_surface});
-    }*/
+    }
 }
 
 template <class T>
