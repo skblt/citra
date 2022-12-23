@@ -1,0 +1,24 @@
+//? #version 450
+
+#extension GL_GOOGLE_include_directive : require
+#define tile_size uvec3(4, 8, 1)
+#include "../utils.comp"
+
+layout(binding = 0) readonly buffer src_buffer {
+    uint8_t colors[];
+};
+
+layout(binding = 1, r8ui) uniform writeonly lowp uimage2D dst_image;
+
+void main() {
+    // assumes tiled
+    uint32_t addr = (GetTileIndex() * 64) | MortonInterleave(u8vec2(gl_LocalInvocationID.xy * uvec2(2, 1)));
+    addr >>= 1;
+    uint8_t input_data = colors[addr];
+    ivec2 coord = GetImageCoord() * ivec2(2, 1);
+    uint8_t b = (input_data & uint8_t(0x0F)) | (input_data << 4);
+    uint8_t a = (input_data & uint8_t(0xF0)) | (input_data >> 4);
+    imageStore(dst_image, coord, uvec4(b, 0, 0, 0));
+    coord.x++;
+    imageStore(dst_image, coord, uvec4(a, 0, 0, 0));
+}

@@ -148,10 +148,12 @@ void DescriptorManager::BuildLayouts() {
         update_templates[i] = device.createDescriptorUpdateTemplate(template_info);
     }
 
-    const vk::PipelineLayoutCreateInfo layout_info = {.setLayoutCount = MAX_DESCRIPTOR_SETS,
-                                                      .pSetLayouts = descriptor_set_layouts.data(),
-                                                      .pushConstantRangeCount = 0,
-                                                      .pPushConstantRanges = nullptr};
+    const vk::PipelineLayoutCreateInfo layout_info = {
+        .setLayoutCount = MAX_DESCRIPTOR_SETS,
+        .pSetLayouts = descriptor_set_layouts.data(),
+        .pushConstantRangeCount = 0,
+        .pPushConstantRanges = nullptr,
+    };
 
     pipeline_layout = device.createPipelineLayout(layout_info);
 }

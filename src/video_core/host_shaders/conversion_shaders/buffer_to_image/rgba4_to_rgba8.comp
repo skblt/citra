@@ -1,0 +1,18 @@
+//? #version 450
+
+#extension GL_GOOGLE_include_directive : require
+#include "../utils.comp"
+
+layout(binding = 0) readonly buffer src_buffer {
+    uint16_t colors[];
+};
+
+layout(binding = 1, rgba8ui) uniform writeonly lowp uimage2D dst_image;
+
+void main() {
+    uint16_t input_data = colors[GetAddress()];
+    u8vec4 rgba = u8vec4(u16vec4(input_data) >> ivec4(12, 8, 4, 0));
+    rgba &= uint8_t(0x0F);
+    rgba |= rgba << 4;
+    imageStore(dst_image, GetImageCoord(), uvec4(rgba));
+}

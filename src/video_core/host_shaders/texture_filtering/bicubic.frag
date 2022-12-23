@@ -2,7 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-//? #version 330
+//? #version 430 core
 precision mediump float;
 
 layout(location = 0) in vec2 tex_coord;
