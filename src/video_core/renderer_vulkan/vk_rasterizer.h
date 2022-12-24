@@ -37,6 +37,7 @@ public:
                               RenderpassCache& renderpass_cache);
     ~RasterizerVulkan() override;
 
+    void TickFrame();
     void LoadDiskResources(const std::atomic_bool& stop_loading,
                            const VideoCore::DiskResourceLoadCallback& callback) override;
 

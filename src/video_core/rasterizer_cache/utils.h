@@ -13,8 +13,18 @@ namespace VideoCore {
 class SurfaceParams;
 class SurfaceBase;
 
+std::array<u8, 4> MakeFillBuffer(const SurfaceBase& fill_surface, PAddr copy_addr);
+
 [[nodiscard]] ClearValue MakeClearValue(const SurfaceBase& fill_surface, PixelFormat format,
                                         SurfaceType type, PAddr copy_addr);
+
+std::array<u32, MAX_PICA_LEVELS> CalculateMipLevelOffsets(const SurfaceParams& params);
+
+std::pair<u32, u32> LevelRange(const SurfaceParams& params, SurfaceInterval interval);
+
+SurfaceInterval LevelInterval(const SurfaceParams& params, u32 level);
+
+u32 CalculateSurfaceSize(const SurfaceParams& params);
 
 u32 MipLevels(u32 width, u32 height, u32 max_level);
 

@@ -6,4 +6,13 @@
 
 namespace VideoCore {
 
+MICROPROFILE_DEFINE(RasterizerCache_BlitSurface, "RasterizerCache", "Surface Blit",
+                    MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(RasterizerCache_CopySurface, "RasterizerCache", "Surface Copy",
+                    MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(RasterizerCache_SurfaceLoad, "RasterizerCache", "Surface Load",
+                    MP_RGB(128, 192, 64));
+MICROPROFILE_DEFINE(RasterizerCache_SurfaceFlush, "RasterizerCache", "Surface Flush",
+                    MP_RGB(128, 192, 64));
+
 } // namespace VideoCore

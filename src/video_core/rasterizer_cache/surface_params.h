@@ -4,12 +4,9 @@
 
 #pragma once
 
-#include <boost/icl/interval_set.hpp>
 #include "video_core/rasterizer_cache/types.h"
 
 namespace VideoCore {
-
-using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
 
 class SurfaceParams {
 public:
@@ -87,6 +84,8 @@ public:
     TextureType texture_type = TextureType::Texture2D;
     PixelFormat pixel_format = PixelFormat::Invalid;
     SurfaceType type = SurfaceType::Invalid;
+
+    std::array<u32, MAX_PICA_LEVELS> mipmap_offsets{};
 };
 
 } // namespace VideoCore

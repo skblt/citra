@@ -101,6 +101,10 @@ RasterizerVulkan::~RasterizerVulkan() {
     scheduler.Finish();
 }
 
+void RasterizerVulkan::TickFrame() {
+    res_cache.TickFrame();
+}
+
 void RasterizerVulkan::LoadDiskResources(const std::atomic_bool& stop_loading,
                                          const VideoCore::DiskResourceLoadCallback& callback) {
     pipeline_cache.LoadDiskCache();
@@ -491,6 +495,21 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     const auto [framebuffer, surfaces_rect] =
             res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb);
 
+    const auto& config = regs.framebuffer.framebuffer;
+    pipeline_info.color_attachment =
+            using_color_fb ? VideoCore::PixelFormatFromColorFormat(config.color_format)
+                           : VideoCore::PixelFormat::Invalid;
+    pipeline_info.depth_attachment =
+            using_depth_fb ? VideoCore::PixelFormatFromDepthFormat(config.depth_format)
+                           : VideoCore::PixelFormat::Invalid;
+
+    const RenderpassState renderpass_info = {
+        .renderpass = framebuffer.RenderPass(vk::AttachmentLoadOp::eLoad),
+        .framebuffer = framebuffer.Handle(),
+        .render_area = framebuffer.RenderArea(),
+        .clear = {},
+    };
+
     const u16 res_scale = VideoCore::GetResolutionScaleFactor();
     if (uniform_block_data.data.framebuffer_scale != res_scale) {
         uniform_block_data.data.framebuffer_scale = res_scale;
@@ -550,19 +569,11 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     // Viewport can have negative offsets or larger dimensions than our framebuffer sub-rect.
     // Enable scissor test to prevent drawing outside of the framebuffer region
-    const VideoCore::Rect2D draw_rect = framebuffer.RenderArea();
-    pipeline_cache.SetScissor(draw_rect.left, draw_rect.bottom, draw_rect.GetWidth(),
-                              draw_rect.GetHeight());
+    const vk::Rect2D render_area = framebuffer.RenderArea();
+    pipeline_cache.SetScissor(render_area.offset.x, render_area.offset.y,
+                              render_area.extent.width, render_area.extent.height);
 
-    const auto& config = regs.framebuffer.framebuffer;
-    pipeline_info.color_attachment =
-            using_color_fb ? VideoCore::PixelFormatFromColorFormat(config.color_format)
-                           : VideoCore::PixelFormat::Invalid;
-    pipeline_info.depth_attachment =
-            using_depth_fb ? VideoCore::PixelFormatFromDepthFormat(config.depth_format)
-                           : VideoCore::PixelFormat::Invalid;
-
-    framebuffer.BeginRenderPass();
+    renderpass_cache.EnterRenderpass(renderpass_info);
 
     // Draw the vertex batch
     bool succeeded = true;

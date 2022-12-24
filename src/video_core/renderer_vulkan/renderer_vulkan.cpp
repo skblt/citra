@@ -887,6 +887,7 @@ void RendererVulkan::SwapBuffers() {
     system.perf_stats->EndSystemFrame();
 
     render_window.PollEvents();
+    rasterizer.TickFrame();
 
     system.frame_limiter.DoFrameLimiting(system.CoreTiming().GetGlobalTimeUs());
     system.perf_stats->BeginSystemFrame();

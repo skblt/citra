@@ -89,10 +89,10 @@ PipelineCache::PipelineCache(const Instance& instance, Scheduler& scheduler,
 }
 
 PipelineCache::~PipelineCache() {
-    vk::Device device = instance.GetDevice();
-
+    scheduler.Finish();
     SaveDiskCache();
 
+    vk::Device device = instance.GetDevice();
     device.destroyPipelineCache(pipeline_cache);
     device.destroyShaderModule(trivial_vertex_shader);
 
@@ -124,9 +124,15 @@ void PipelineCache::LoadDiskCache() {
         return;
     }
 
+    const u32 vendor_id = instance.GetVendorID();
+    const u32 device_id = instance.GetDeviceID();
     const std::string cache_file_path = fmt::format("{}{:x}{:x}.bin", GetPipelineCacheDir(),
-                                                    instance.GetVendorID(), instance.GetDeviceID());
-    vk::PipelineCacheCreateInfo cache_info = {.initialDataSize = 0, .pInitialData = nullptr};
+                                                    vendor_id, device_id);
+
+    vk::PipelineCacheCreateInfo cache_info = {
+        .initialDataSize = 0,
+        .pInitialData = nullptr,
+    };
 
     std::vector<u8> cache_data;
     FileUtil::IOFile cache_file{cache_file_path, "r"};
@@ -156,8 +162,11 @@ void PipelineCache::SaveDiskCache() {
         return;
     }
 
+    const u32 vendor_id = instance.GetVendorID();
+    const u32 device_id = instance.GetDeviceID();
     const std::string cache_file_path = fmt::format("{}{:x}{:x}.bin", GetPipelineCacheDir(),
-                                                    instance.GetVendorID(), instance.GetDeviceID());
+                                                    vendor_id, device_id);
+
     FileUtil::IOFile cache_file{cache_file_path, "wb"};
     if (!cache_file.IsOpen()) {
         LOG_INFO(Render_Vulkan, "Unable to open pipeline cache for writing");
@@ -165,7 +174,7 @@ void PipelineCache::SaveDiskCache() {
     }
 
     vk::Device device = instance.GetDevice();
-    auto cache_data = device.getPipelineCacheData(pipeline_cache);
+    const std::vector<u8> cache_data = device.getPipelineCacheData(pipeline_cache);
     if (!cache_file.WriteBytes(cache_data.data(), cache_data.size())) {
         LOG_WARNING(Render_Vulkan, "Error during pipeline cache write");
         return;

@@ -4,239 +4,30 @@
 
 #pragma once
 
-#include <algorithm>
-#include <optional>
-#include <unordered_map>
-#include <vector>
-#include <boost/container/flat_set.hpp>
 #include <boost/container/small_vector.hpp>
-#include <boost/icl/interval_map.hpp>
 #include <boost/range/iterator_range.hpp>
 #include "common/alignment.h"
+#include "common/microprofile.h"
 #include "common/logging/log.h"
+#include "common/polyfill_ranges.h"
 #include "video_core/pica_state.h"
+#include "video_core/rasterizer_cache/rasterizer_cache_base.h"
 #include "video_core/rasterizer_accelerated.h"
-#include "video_core/rasterizer_cache/render_targets.h"
 #include "video_core/rasterizer_cache/surface_base.h"
-#include "video_core/rasterizer_cache/surface_params.h"
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/texture/texture_decode.h"
 #include "video_core/video_core.h"
 
 namespace VideoCore {
 
+MICROPROFILE_DECLARE(RasterizerCache_BlitSurface);
+MICROPROFILE_DECLARE(RasterizerCache_CopySurface);
+MICROPROFILE_DECLARE(RasterizerCache_SurfaceLoad);
+MICROPROFILE_DECLARE(RasterizerCache_SurfaceFlush);
+
 inline auto RangeFromInterval(auto& map, SurfaceInterval interval) {
     return boost::make_iterator_range(map.equal_range(interval));
 }
-
-enum class ScaleMatch {
-    Exact,   ///< Only accept same res scale
-    Upscale, ///< Only allow higher or equal scale than params
-    Ignore   ///< Accept every scaled res
-};
-
-enum class MatchType {
-    Exact = 1 << 0,   ///< Surface perfectly matches params
-    SubRect = 1 << 1, ///< Surface encompasses params
-    Copy = 1 << 2,    ///< Surface that can be used as a copy source
-    Expand = 1 << 3,  ///< Surface that can expand params
-    TexCopy = 1 << 4  ///< Surface that will match a display transfer "texture copy" parameters
-};
-
-DECLARE_ENUM_FLAG_OPERATORS(MatchType);
-
-class RasterizerAccelerated;
-
-template <class T>
-class RasterizerCache {
-    /// Address shift for caching surfaces into a hash table
-    static constexpr u64 CITRA_PAGEBITS = 18;
-
-    /// Implement blits as copies between framebuffers
-    static constexpr bool FRAMEBUFFER_BLITS = T::FRAMEBUFFER_BLITS;
-
-    using Runtime = typename T::Runtime;
-    using Surface = typename T::Surface;
-    using Framebuffer = typename T::Framebuffer;
-    using Allocation = typename T::Allocation;
-    using Sampler = typename T::Sampler;
-    using Format = typename T::Format;
-
-    /// Declare rasterizer interval types
-    using SurfaceMap = boost::icl::interval_map<PAddr, SurfaceId, boost::icl::partial_absorber,
-                                                std::less, boost::icl::inplace_plus,
-                                                boost::icl::inter_section, SurfaceInterval>;
-
-    using SurfaceRect_Tuple = std::tuple<SurfaceId, Rect2D>;
-    using FramebufferRect_Tuple = std::tuple<Framebuffer&, Rect2D>;
-
-public:
-    RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer, Memory::MemorySystem& memory,
-                    Runtime& runtime);
-    ~RasterizerCache() = default;
-
-    /// Perform hardware accelerated texture copy according to the provided configuration
-    bool AccelerateTextureCopy(const GPU::Regs::DisplayTransferConfig& config);
-
-    /// Perform hardware accelerated display transfer according to the provided configuration
-    bool AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config);
-
-    /// Perform hardware accelerated memory fill according to the provided configuration
-    bool AccelerateFill(const GPU::Regs::MemoryFillConfig& config);
-
-    /// Returns a reference to the surface assigned to the provided id
-    Surface& GetSurface(SurfaceId surface_id);
-
-    /// Returns a reference to the sampler object matching the provided configuration
-    Sampler& GetSampler(const Pica::TexturingRegs::TextureConfig& config);
-    Sampler& GetSampler(SamplerId sampler_id);
-
-    /// Blit one surface's texture to another
-    bool BlitSurfaces(SurfaceId src_surface_id, Rect2D src_rect, SurfaceId dst_surface_id,
-                      Rect2D dst_rect);
-
-    /// Copy one surface's region to another
-    void CopySurface(SurfaceId src_id, SurfaceId dst_id, SurfaceInterval copy_interval);
-
-    /// Load a texture from 3DS memory to OpenGL and cache it (if not already cached)
-    SurfaceId GetSurface(const SurfaceParams& params, ScaleMatch match_res_scale,
-                         bool load_if_create);
-
-    /// Attempt to find a subrect (resolution scaled) of a surface,
-    /// otherwise loads a texture from 3DS memory and caches it (if not already cached)
-    SurfaceRect_Tuple GetSurfaceSubRect(const SurfaceParams& params, ScaleMatch match_res_scale,
-                                        bool load_if_create);
-
-    /// Get a surface based on the texture configuration
-    Surface& GetTextureSurface(const Pica::TexturingRegs::FullTextureConfig& config);
-    Surface& GetTextureSurface(const Pica::Texture::TextureInfo& info, u32 max_level = 0);
-
-    /// Get a texture cube based on the texture configuration
-    Surface& GetTextureCube(const TextureCubeConfig& config);
-
-    /// Get the color and depth surfaces based on the framebuffer configuration
-    FramebufferRect_Tuple GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb);
-
-    /// Get a surface that matches a "texture copy" display transfer config
-    SurfaceRect_Tuple GetTexCopySurface(const SurfaceParams& params);
-
-    /// Write any cached resources overlapping the region back to memory (if dirty)
-    void FlushRegion(PAddr addr, u32 size, SurfaceId flush_surface_id = SurfaceId{});
-
-    /// Mark region as being invalidated by region_owner (nullptr if 3DS memory)
-    void InvalidateRegion(PAddr addr, u32 size, SurfaceId region_owner_id = SurfaceId{});
-
-    /// Flush all cached resources tracked by this cache manager
-    void FlushAll();
-
-private:
-    /// Iterate over all page indices in a range
-    template <typename Func>
-    void ForEachPage(PAddr addr, size_t size, Func&& func) {
-        static constexpr bool RETURNS_BOOL = std::is_same_v<std::invoke_result<Func, u64>, bool>;
-        const u64 page_end = (addr + size - 1) >> CITRA_PAGEBITS;
-        for (u64 page = addr >> CITRA_PAGEBITS; page <= page_end; ++page) {
-            if constexpr (RETURNS_BOOL) {
-                if (func(page)) {
-                    break;
-                }
-            } else {
-                func(page);
-            }
-        }
-    }
-
-    /// Iterates over all the surfaces in a region calling func
-    template <typename Func>
-    void ForEachSurfaceInRegion(PAddr addr, size_t size, Func&& func);
-
-    /// Get the best surface match (and its match type) for the given flags
-    template <MatchType find_flags>
-    SurfaceId FindMatch(const SurfaceParams& params, ScaleMatch match_scale_type,
-                        std::optional<SurfaceInterval> validate_interval = std::nullopt);
-
-    /// Find or create a framebuffer with the given render target parameters
-    FramebufferId GetFramebufferId(SurfaceId color_id, SurfaceId depth_id, const RenderTargets& key);
-
-    /// Create a render target from a given image and image view parameters
-    FramebufferId RenderTargetFromSurface(SurfaceId surface0_id,
-                                          SurfaceId surface1_id = SurfaceId{});
-
-    void DuplicateSurface(Surface& src_surface, Surface& dest_surface);
-
-    /// Update surface's texture for given region when necessary
-    void ValidateSurface(SurfaceId surface_id, PAddr addr, u32 size);
-
-    /// Copies pixel data in interval from the guest VRAM to the host GPU surface
-    void UploadSurface(Surface& surface, SurfaceInterval interval);
-
-    /// Copies pixel data in interval from the host GPU surface to the guest VRAM
-    void DownloadSurface(Surface& surface, SurfaceInterval interval);
-
-    /// Downloads a fill surface to guest VRAM
-    void DownloadFillSurface(Surface& surface, SurfaceInterval interval);
-
-    /// Returns false if there is a surface in the cache at the interval with the same bit-width,
-    bool NoUnimplementedReinterpretations(Surface& surface, SurfaceParams& params,
-                                          SurfaceInterval interval);
-
-    /// Returns true if a surface with an invalid pixel format exists at the interval
-    bool IntervalHasInvalidPixelFormat(SurfaceParams& params, SurfaceInterval interval);
-
-    /// Attempt to find a reinterpretable surface in the cache and use it to copy for validation
-    bool ValidateByReinterpretation(Surface& surface, SurfaceParams& params,
-                                    SurfaceInterval interval);
-
-    /// Create a new surface
-    SurfaceId CreateSurface(SurfaceParams& params);
-
-    /// Register surface into the cache
-    void RegisterSurface(SurfaceId surface_id);
-
-    /// Remove surface from the cache
-    void UnregisterSurface(SurfaceId surface_id);
-
-    /// Unregisters all surfaces from the cache
-    void UnregisterAll();
-
-private:
-    VideoCore::RasterizerAccelerated& rasterizer;
-    Memory::MemorySystem& memory;
-    Runtime& runtime;
-    SurfaceMap dirty_regions;
-    u16 resolution_scale_factor;
-    std::vector<std::function<void()>> download_queue;
-
-    std::unordered_map<RenderTargets, FramebufferId> framebuffers;
-    std::unordered_map<u64, std::vector<SurfaceId>, Common::IdentityHash<u64>> page_table;
-
-    struct HostTextureTag {
-        Format format{};
-        TextureType type = TextureType::Texture2D;
-        u32 width = 1;
-        u32 height = 1;
-        u32 levels = 1;
-        u32 res_scale = 1;
-
-        auto operator<=>(const HostTextureTag&) const noexcept = default;
-    };
-
-    struct HostTextureTagHash {
-        std::size_t operator()(const HostTextureTag& tag) const {
-            return Common::ComputeHash64(&tag, sizeof(HostTextureTag));
-        }
-    };
-
-    std::unordered_map<HostTextureTag, std::vector<AllocationId>, HostTextureTagHash> allocations;
-    std::unordered_map<SamplerParams, SamplerId> samplers;
-
-    SlotVector<Surface> slot_surfaces;
-    SlotVector<Framebuffer> slot_framebuffers;
-    SlotVector<Allocation> slot_allocations;
-    SlotVector<Sampler> slot_samplers;
-
-    std::vector<SurfaceId> remove_surfaces;
-};
 
 template <class T>
 RasterizerCache<T>::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer,
@@ -263,6 +54,11 @@ RasterizerCache<T>::RasterizerCache(VideoCore::RasterizerAccelerated& rasterizer
                                            .wrap_s = TextureConfig::WrapMode::ClampToBorder,
                                            .wrap_t = TextureConfig::WrapMode::ClampToBorder,
                                        }));
+}
+
+template <class T>
+void RasterizerCache<T>::TickFrame() {
+
 }
 
 template <class T>
@@ -338,7 +134,7 @@ bool RasterizerCache<T>::AccelerateTextureCopy(const GPU::Regs::DisplayTransferC
     }
 
     Surface& dst_surface = slot_surfaces[dst_surface_id];
-    if (dst_surface.type == VideoCore::SurfaceType::Texture ||
+    if (dst_surface.type == SurfaceType::Texture ||
         !BlitSurfaces(src_surface_id, src_rect, dst_surface_id, dst_rect)) {
         return false;
     }
@@ -404,7 +200,6 @@ bool RasterizerCache<T>::AccelerateFill(const GPU::Regs::MemoryFillConfig& confi
     params.end = config.GetEndAddress();
     params.size = params.end - params.addr;
     params.type = SurfaceType::Fill;
-    params.res_scale = std::numeric_limits<u16>::max();
 
     SurfaceId fill_surface_id = slot_surfaces.insert(params);
     Surface& fill_surface = slot_surfaces[fill_surface_id];
@@ -648,6 +443,8 @@ auto RasterizerCache<T>::RenderTargetFromSurface(SurfaceId surface0_id, SurfaceI
 template <class T>
 bool RasterizerCache<T>::BlitSurfaces(SurfaceId src_id, Rect2D src_rect, SurfaceId dst_id,
                                       Rect2D dst_rect) {
+    MICROPROFILE_SCOPE(RasterizerCache_BlitSurface);
+
     Surface& src_surface = slot_surfaces[src_id];
     Surface& dst_surface = slot_surfaces[dst_id];
 
@@ -675,6 +472,8 @@ bool RasterizerCache<T>::BlitSurfaces(SurfaceId src_id, Rect2D src_rect, Surface
 template <class T>
 void RasterizerCache<T>::CopySurface(SurfaceId src_id, SurfaceId dst_id,
                                      SurfaceInterval copy_interval) {
+    MICROPROFILE_SCOPE(RasterizerCache_CopySurface);
+
     Surface& src_surface = slot_surfaces[src_id];
     Surface& dst_surface = slot_surfaces[dst_id];
 
@@ -707,7 +506,6 @@ void RasterizerCache<T>::CopySurface(SurfaceId src_id, SurfaceId dst_id,
 
     if (src_surface.CanSubRect(subrect_params)) {
         const Rect2D src_rect = src_surface.GetScaledSubRect(subrect_params);
-        LOG_INFO(HW_GPU, "Can copy {}", src_rect.GetWidth() == dst_rect.GetWidth());
         BlitSurfaces(src_id, src_rect, dst_id, dst_rect);
         return;
     }
@@ -870,23 +668,21 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
     params.addr = info.physical_address;
     params.width = info.width;
     params.height = info.height;
-    //params.lod = MipLevels(info.width, info.height, max_level);
+    params.levels = MipLevels(info.width, info.height, max_level);
     params.is_tiled = true;
     params.pixel_format = VideoCore::PixelFormatFromTextureFormat(info.format);
     params.UpdateParams();
 
-    if (info.width % 8 != 0 || info.height % 8 != 0) {
-        const auto [src_surface_id, rect] = GetSurfaceSubRect(params, ScaleMatch::Ignore, true);
-        Surface& src_surface = slot_surfaces[src_surface_id];
-        params.res_scale = src_surface.res_scale;
-
-        SurfaceId tmp_surface_id = CreateSurface(params);
-        Surface& tmp_surface = slot_surfaces[tmp_surface_id];
-
-        BlitSurfaces(src_surface_id, rect, tmp_surface_id, tmp_surface.GetScaledRect());
-
-        remove_surfaces.push_back(tmp_surface_id);
-        return tmp_surface;
+    u32 min_width = info.width >> max_level;
+    u32 min_height = info.height >> max_level;
+    if (min_width % 8 != 0 || min_height % 8 != 0) {
+        LOG_CRITICAL(HW_GPU, "Texture size ({}x{}) is not multiple of 8", min_width,
+                     min_height);
+    }
+    if (info.width != (min_width << max_level) || info.height != (min_height << max_level)) {
+        LOG_CRITICAL(Render_OpenGL,
+                     "Texture size ({}x{}) does not support required mipmap level ({})",
+                     params.width, params.height, max_level);
     }
 
     SurfaceId surface_id = GetSurface(params, ScaleMatch::Ignore, true);
@@ -1042,7 +838,6 @@ auto RasterizerCache<T>::GetTexCopySurface(const SurfaceParams& params) -> Surfa
             match_subrect.height *= tiled_size;
         } else {
             match_subrect = match_surface.FromInterval(params.GetInterval());
-            ASSERT(match_subrect.GetInterval() == params.GetInterval());
         }
 
         const Rect2D rect = match_surface.GetScaledSubRect(match_subrect);
@@ -1080,74 +875,81 @@ void RasterizerCache<T>::ValidateSurface(SurfaceId surface_id, PAddr addr, u32 s
         return;
     }
 
-    const SurfaceInterval validate_interval(addr, addr + size);
-
     Surface& surface = slot_surfaces[surface_id];
+    SurfaceInterval validate_interval{addr, addr + size};
+
+    // Sanity check, fill surfaces will always be valid when used
     if (surface.type == SurfaceType::Fill) {
-        // Sanity check, fill surfaces will always be valid when used
         ASSERT(surface.IsRegionValid(validate_interval));
         return;
     }
 
     auto validate_regions = surface.invalid_regions & validate_interval;
+    if (validate_regions.empty()) {
+        return;
+    }
 
-    const auto NotifyValidated = [&](SurfaceInterval interval) {
-        surface.invalid_regions.erase(interval);
-        validate_regions.erase(interval);
-    };
+    const auto [start_level, end_level] = LevelRange(surface, validate_interval);
+    for (u32 level = start_level; level <= end_level; level++) {
+        auto level_regions = validate_regions & LevelInterval(surface, level);
+        while (true) {
+            const auto it = level_regions.begin();
+            if (it == level_regions.end()) {
+                break;
+            }
 
-    while (true) {
-        const auto it = validate_regions.begin();
-        if (it == validate_regions.end()) {
-            break;
-        }
+            // Look for a valid surface to copy from
+            const auto interval = *it & validate_interval;
+            SurfaceParams params = surface.FromInterval(interval);
 
-        // Look for a valid surface to copy from
-        const auto interval = *it & validate_interval;
-        SurfaceParams params = surface.FromInterval(interval);
-
-        SurfaceId copy_surface_id =
-            FindMatch<MatchType::Copy>(params, ScaleMatch::Ignore, interval);
-        if (copy_surface_id) {
-            const Surface& copy_surface = slot_surfaces[copy_surface_id];
-            SurfaceInterval copy_interval = copy_surface.GetCopyableInterval(params);
-            CopySurface(copy_surface_id, surface_id, copy_interval);
-            NotifyValidated(copy_interval);
-            continue;
-        }
-
-        // Try to find surface in cache with different format
-        // that can can be reinterpreted to the requested format.
-        if (ValidateByReinterpretation(surface, params, interval)) {
-            NotifyValidated(interval);
-            continue;
-        }
-        // Could not find a matching reinterpreter, check if we need to implement a
-        // reinterpreter
-        if (NoUnimplementedReinterpretations(surface, params, interval) &&
-            !IntervalHasInvalidPixelFormat(params, interval)) {
-            // No surfaces were found in the cache that had a matching bit-width.
-            // If the region was created entirely on the GPU,
-            // assume it was a developer mistake and skip flushing.
-            if (boost::icl::contains(dirty_regions, interval)) {
-                LOG_DEBUG(HW_GPU, "Region created fully on GPU and reinterpretation is "
-                                  "invalid. Skipping validation");
-                validate_regions.erase(interval);
+            SurfaceId copy_surface_id =
+                FindMatch<MatchType::Copy>(params, ScaleMatch::Ignore, interval);
+            if (copy_surface_id) {
+                const Surface& copy_surface = slot_surfaces[copy_surface_id];
+                SurfaceInterval copy_interval = copy_surface.GetCopyableInterval(params);
+                CopySurface(copy_surface_id, surface_id, copy_interval);
+                level_regions.erase(copy_interval);
                 continue;
             }
-        }
 
-        // Load data from 3DS memory
-        FlushRegion(params.addr, params.size);
-        UploadSurface(surface, interval);
-        NotifyValidated(params.GetInterval());
+            // Try to find surface in cache with different format
+            // that can can be reinterpreted to the requested format.
+            if (ValidateByReinterpretation(surface, params, interval)) {
+                level_regions.erase(interval);
+                continue;
+            }
+
+            // Could not find a matching reinterpreter, check if we need to implement a
+            // reinterpreter
+            if (NoUnimplementedReinterpretations(surface, params, interval) &&
+                !IntervalHasInvalidPixelFormat(params, interval)) {
+                // No surfaces were found in the cache that had a matching bit-width.
+                // If the region was created entirely on the GPU,
+                // assume it was a developer mistake and skip flushing.
+                if (boost::icl::contains(dirty_regions, interval)) {
+                    LOG_DEBUG(HW_GPU, "Region created fully on GPU and reinterpretation is "
+                                      "invalid. Skipping validation");
+                    level_regions.erase(interval);
+                    continue;
+                }
+            }
+
+            // Load data from 3DS memory
+            FlushRegion(params.addr, params.size);
+            UploadSurface(surface, interval);
+            level_regions.erase(params.GetInterval());
+        }
     }
+
+    surface.invalid_regions.erase(validate_interval);
 }
 
 template <class T>
 void RasterizerCache<T>::UploadSurface(Surface& surface, SurfaceInterval interval) {
     const SurfaceParams load_info = surface.FromInterval(interval);
     ASSERT(load_info.addr >= surface.addr && load_info.end <= surface.end);
+
+    MICROPROFILE_SCOPE(RasterizerCache_SurfaceLoad);
 
     const auto staging = runtime.FindStaging(
         load_info.width * load_info.height * surface.InternalBytesPerPixel(), true);
@@ -1168,7 +970,7 @@ void RasterizerCache<T>::UploadSurface(Surface& surface, SurfaceInterval interva
         .buffer_offset = 0,
         .buffer_size = staging.size,
         .texture_rect = surface.GetSubRect(load_info),
-        .texture_level = 0,
+        .texture_level = LevelRange(surface, load_info.GetInterval()).first,
     };
 
     surface.Upload(upload, staging);
@@ -1181,13 +983,15 @@ void RasterizerCache<T>::DownloadSurface(Surface& surface, SurfaceInterval inter
     const u32 flush_end = interval.upper();
     ASSERT(flush_start >= surface.addr && flush_end <= surface.end);
 
+    MICROPROFILE_SCOPE(RasterizerCache_SurfaceFlush);
+
     const auto staging = runtime.FindStaging(
         flush_info.width * flush_info.height * surface.InternalBytesPerPixel(), false);
     const BufferTextureCopy download = {
         .buffer_offset = 0,
         .buffer_size = staging.size,
         .texture_rect = surface.GetSubRect(flush_info),
-        .texture_level = 0,
+        .texture_level = LevelRange(surface, flush_info.GetInterval()).first,
     };
 
     surface.Download(download, staging);
@@ -1276,7 +1080,7 @@ bool RasterizerCache<T>::IntervalHasInvalidPixelFormat(SurfaceParams& params,
                                                        SurfaceInterval interval) {
     bool invalid_format_found = false;
     ForEachSurfaceInRegion(params.addr, params.end, [&](SurfaceId surface_id, Surface& surface) {
-        if (surface.pixel_format == PixelFormat::Invalid && surface.type != SurfaceType::Fill) {
+        if (surface.pixel_format == PixelFormat::Invalid) {
             LOG_DEBUG(HW_GPU, "Surface {:#x} found with invalid pixel format", surface.addr);
             invalid_format_found = true;
             return true;
@@ -1431,9 +1235,10 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, SurfaceId region
 template <class T>
 auto RasterizerCache<T>::CreateSurface(SurfaceParams& params) -> SurfaceId {
     const HostTextureTag tag = {
-        .format = runtime.NativeFormat(params.pixel_format),
+        .format = params.pixel_format,
         .type = params.texture_type,
         .width = params.width,
+        .stride = params.stride,
         .height = params.height,
         .levels = params.levels,
         .res_scale = params.res_scale
@@ -1484,9 +1289,10 @@ void RasterizerCache<T>::UnregisterSurface(SurfaceId surface_id) {
     const AllocationId alloc_id = surface.AllocId();
     if (alloc_id) {
         const HostTextureTag tag = {
-            .format = runtime.NativeFormat(surface.pixel_format),
+            .format = surface.pixel_format,
             .type = surface.texture_type,
             .width = surface.width,
+            .stride = surface.stride,
             .height = surface.height,
             .levels = surface.levels,
             .res_scale = surface.res_scale
@@ -1503,7 +1309,7 @@ void RasterizerCache<T>::UnregisterSurface(SurfaceId surface_id) {
             return;
         }
         std::vector<SurfaceId>& surface_ids = page_it->second;
-        const auto vector_it = std::find(surface_ids.begin(), surface_ids.end(), surface_id);
+        const auto vector_it = std::ranges::find(surface_ids, surface_id);
         if (vector_it == surface_ids.end()) {
             ASSERT_MSG(false, "Unregistering unregistered surface in page=0x{:x}",
                        page << CITRA_PAGEBITS);

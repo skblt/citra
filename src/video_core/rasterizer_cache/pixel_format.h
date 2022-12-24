@@ -44,7 +44,7 @@ enum class SurfaceType : u32 {
     Invalid = 5,
 };
 
-enum class TextureType : u32 {
+enum class TextureType : u8 {
     Texture2D = 0,
     CubeMap = 1,
 };

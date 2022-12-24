@@ -6,8 +6,7 @@
 
 #include <set>
 #include <span>
-#include <vulkan/vulkan_hash.hpp>
-#include "video_core/rasterizer_cache/rasterizer_cache.h"
+#include "video_core/rasterizer_cache/rasterizer_cache_base.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/renderer_vulkan/vk_blit_helper.h"
 #include "video_core/renderer_vulkan/vk_format_reinterpreter.h"
@@ -231,8 +230,12 @@ public:
         return depth_view;
     }
 
-    [[nodiscard]] VideoCore::Rect2D RenderArea() const noexcept {
-        return render_area;
+    [[nodiscard]] vk::Rect2D RenderArea() const noexcept {
+        return {
+            .offset{static_cast<s32>(render_area.left),
+                    static_cast<s32>(render_area.bottom)},
+            .extent = {render_area.GetWidth(), render_area.GetHeight()},
+        };
     }
 
     [[nodiscard]] vk::RenderPass RenderPass(vk::AttachmentLoadOp load_op) const noexcept {
@@ -242,9 +245,6 @@ public:
     void SetRenderArea(VideoCore::Rect2D draw_rect) noexcept {
         render_area = draw_rect;
     }
-
-    /// Begins a renderpass with the stored framebuffer as render target
-    void BeginRenderPass();
 
 private:
     RenderpassCache* renderpass_cache{};

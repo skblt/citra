@@ -627,9 +627,6 @@ Allocation::Allocation(TextureRuntime& runtime, const VideoCore::SurfaceParams& 
         image_info.extent.height = params.height;
         images[1] = MakeImage(allocator, allocations[1], image_info);
     } else {
-        if (params.height == 800) {
-            printf("ff");
-        }
         images[1] = images[0];
     }
 
@@ -1080,8 +1077,7 @@ void Surface::BlitScale(const VideoCore::TextureBlit& blit, bool up_scale) {
 
 Framebuffer::Framebuffer(TextureRuntime& runtime, Surface* color, Surface* depth,
                          VideoCore::RenderTargets key)
-    : renderpass_cache{&runtime.GetRenderpassCache()},
-      device{runtime.GetInstance().GetDevice()} {
+    : renderpass_cache{&runtime.GetRenderpassCache()}, device{runtime.GetInstance().GetDevice()} {
     u32 attachment_count = 0;
     std::array<vk::ImageView, 2> attachments;
 
@@ -1116,22 +1112,6 @@ Framebuffer::Framebuffer(TextureRuntime& runtime, Surface* color, Surface* depth
     };
 
     framebuffer = device.createFramebuffer(framebuffer_info);
-}
-
-void Framebuffer::BeginRenderPass() {
-    const vk::Rect2D rect{
-        .offset{static_cast<s32>(render_area.left), static_cast<s32>(render_area.bottom)},
-        .extent = {render_area.GetWidth(), render_area.GetHeight()},
-    };
-
-    const RenderpassState renderpass_info = {
-        .renderpass = renderpass[0],
-        .framebuffer = framebuffer,
-        .render_area = rect,
-        .clear = {},
-    };
-
-    renderpass_cache->EnterRenderpass(renderpass_info);
 }
 
 Framebuffer::~Framebuffer() {

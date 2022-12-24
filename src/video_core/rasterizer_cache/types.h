@@ -4,14 +4,16 @@
 
 #pragma once
 
+#include <boost/icl/right_open_interval.hpp>
 #include "common/hash.h"
 #include "common/math_util.h"
 #include "common/vector_math.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/rasterizer_cache/slot_vector.h"
-#include "video_core/regs_texturing.h"
 
 namespace VideoCore {
+
+constexpr std::size_t MAX_PICA_LEVELS = 8;
 
 using SurfaceId = SlotId;
 using FramebufferId = SlotId;
@@ -22,8 +24,6 @@ using SamplerId = SlotId;
 constexpr SurfaceId NULL_SURFACE_ID{0};
 /// Fake sampler ID for null samplers
 constexpr SamplerId NULL_SAMPLER_ID{0};
-/// Fake framebuffer ID for null framebuffers
-constexpr FramebufferId NULL_FRAMEBUFFER_ID{0};
 
 using Rect2D = Common::Rectangle<u32>;
 
@@ -99,24 +99,23 @@ struct TextureCubeConfig {
     }
 };
 
-struct SamplerParams {
-    using TextureConfig = Pica::TexturingRegs::TextureConfig;
-    TextureConfig::TextureFilter mag_filter;
-    TextureConfig::TextureFilter min_filter;
-    TextureConfig::TextureFilter mip_filter;
-    TextureConfig::WrapMode wrap_s;
-    TextureConfig::WrapMode wrap_t;
-    u32 border_color = 0;
-    u32 lod_min = 0;
-    u32 lod_max = 0;
-    s32 lod_bias = 0;
+struct HostTextureTag {
+    PixelFormat format = PixelFormat::Invalid;
+    TextureType type = TextureType::Texture2D;
+    u32 width = 1;
+    u32 stride = 1;
+    u32 height = 1;
+    u32 levels = 1;
+    u32 res_scale = 1;
 
-    auto operator<=>(const SamplerParams&) const noexcept = default;
+    auto operator<=>(const HostTextureTag&) const noexcept = default;
 
     const u64 Hash() const {
-        return Common::ComputeHash64(this, sizeof(SamplerParams));
+        return Common::ComputeHash64(this, sizeof(HostTextureTag));
     }
 };
+
+using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
 
 } // namespace VideoCore
 
@@ -128,9 +127,9 @@ struct hash<VideoCore::TextureCubeConfig> {
     }
 };
 template <>
-struct hash<VideoCore::SamplerParams> {
-    std::size_t operator()(const VideoCore::SamplerParams& params) const noexcept {
-        return params.Hash();
+struct hash<VideoCore::HostTextureTag> {
+    std::size_t operator()(const VideoCore::HostTextureTag& tag) const noexcept {
+        return tag.Hash();
     }
 };
 } // namespace std

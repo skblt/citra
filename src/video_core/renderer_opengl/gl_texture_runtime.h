@@ -5,7 +5,7 @@
 #pragma once
 #include <set>
 #include <span>
-#include "video_core/rasterizer_cache/rasterizer_cache.h"
+#include "video_core/rasterizer_cache/rasterizer_cache_base.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
 #include "video_core/renderer_opengl/gl_stream_buffer.h"

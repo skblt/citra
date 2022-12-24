@@ -3,11 +3,13 @@
 // Refer to the license.txt file included.
 
 #include "common/microprofile.h"
+#include "core/settings.h"
 #include "video_core/renderer_opengl/gl_driver.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_texture_runtime.h"
 #include "video_core/renderer_opengl/pica_to_gl.h"
+#include "video_core/video_core.h"
 
 MICROPROFILE_DEFINE(OpenGL_Upload, "OpenGL", "Texture Upload", MP_RGB(128, 192, 64));
 MICROPROFILE_DEFINE(OpenGL_Download, "OpenGL", "Texture Download", MP_RGB(128, 192, 64));

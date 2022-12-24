@@ -95,6 +95,8 @@ add_library(common STATIC
     misc.cpp
     param_package.cpp
     param_package.h
+    polyfill_ranges.h
+    polyfill_thread.h
     quaternion.h
     ring_buffer.h
     scm_rev.cpp
