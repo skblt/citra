@@ -11,8 +11,8 @@
 
 namespace Pica::Shader {
 
-template <typename ShaderType>
-using ShaderCacheResult = std::pair<ShaderType, std::optional<std::string>>;
+template <typename ShaderType, typename ShaderBinary>
+using ShaderCacheResult = std::pair<ShaderType, std::optional<ShaderBinary>>;
 
 template <typename KeyType, typename ShaderType, auto ModuleCompiler, auto CodeGenerator>
 class ShaderCache {
@@ -50,7 +50,8 @@ public:
  * program buffer from the previous shader, which is hashed into the config, resulting several
  * different config values from the same shader program.
  */
-template <typename KeyType, typename ShaderType, auto ModuleCompiler, auto CodeGenerator>
+template <typename KeyType, typename ShaderType, typename ShaderBinary,
+          auto ModuleCompiler, auto CodeGenerator>
 class ShaderDoubleCache {
 public:
     ShaderDoubleCache() = default;
@@ -58,7 +59,7 @@ public:
 
     template <typename... Args>
     auto Get(const KeyType& key, const Pica::Shader::ShaderSetup& setup, Args&&... args)
-        -> ShaderCacheResult<ShaderType> {
+        -> ShaderCacheResult<ShaderType, ShaderBinary> {
         if (auto map_iter = shader_map.find(key); map_iter == shader_map.end()) {
             auto code = CodeGenerator(setup, key);
             if (!code) {
@@ -66,7 +67,7 @@ public:
                 return std::make_pair(ShaderType{}, std::nullopt);
             }
 
-            std::string& program = code.value();
+            const ShaderBinary& program = code.value();
             auto [iter, new_shader] = shader_cache.emplace(program, ShaderType{});
             auto& shader = iter->second;
 
@@ -81,7 +82,7 @@ public:
         }
     }
 
-    void Inject(const KeyType& key, std::string decomp, ShaderType&& program) {
+    void Inject(const KeyType& key, ShaderBinary&& decomp, ShaderType&& program) {
         const auto iter = shader_cache.emplace(std::move(decomp), std::move(program)).first;
 
         auto& cached_shader = iter->second;
@@ -90,7 +91,16 @@ public:
 
 public:
     std::unordered_map<KeyType, ShaderType*> shader_map;
-    std::unordered_map<std::string, ShaderType> shader_cache;
+    std::unordered_map<ShaderBinary, ShaderType> shader_cache;
 };
 
 } // namespace Pica::Shader
+
+namespace std {
+template <>
+struct hash<std::vector<u32>> {
+    std::size_t operator()(const std::vector<u32>& code) const noexcept {
+        return Common::ComputeHash64(code.data(), code.size() * sizeof(u32));
+    }
+};
+} // namespace std

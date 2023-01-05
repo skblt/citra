@@ -1676,10 +1676,11 @@ std::optional<std::string> GenerateVertexShader(const Pica::Shader::ShaderSetup&
     std::string& program_source = program_source_opt->code;
 
     out += R"(
-#define uniforms vs_uniforms
 layout (set = 0, binding = 0, std140) uniform vs_config {
-    pica_uniforms uniforms;
-};
+    bool b[16];
+    uvec4 i[4];
+    vec4 f[96];
+} uniforms;
 
 )";
     if (!config.state.use_geometry_shader) {
@@ -1824,7 +1825,6 @@ layout (set = 0, binding = 0, std140) uniform vs_config {
 
     out += program_source;
 
-    LOG_INFO(Render_Vulkan, "{}", out);
     return out;
 }
 

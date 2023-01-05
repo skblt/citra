@@ -2,11 +2,8 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#include "common/microprofile.h"
 #include "core/core.h"
-#include "video_core/regs.h"
 #include "video_core/renderer_vulkan/vk_shader_gen_spv.h"
-#include "video_core/shader/shader_uniforms.h"
 
 using Pica::FramebufferRegs;
 using Pica::LightingRegs;

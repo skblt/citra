@@ -239,9 +239,17 @@ bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
         config.state.emulated_attrib_locations[location] = is_supported ? 0 : emulated_attrib_loc++;
     }
 
-    auto [handle, result] =
-        programmable_vertex_shaders.Get(config, setup, vk::ShaderStageFlagBits::eVertex,
-                                        instance.GetDevice(), ShaderOptimization::High);
+    vk::ShaderModule handle{};
+    if (Settings::values.spirv_shader_gen.GetValue()) {
+         std::optional<std::vector<u32>> code;
+         std::tie(handle, code) = programmable_vertex_shaders_spv.Get(config, setup,
+                                                                        instance.GetDevice());
+    } else {
+        std::optional<std::string> code;
+        std::tie(handle, code) = programmable_vertex_shaders.Get(config, setup, vk::ShaderStageFlagBits::eVertex,
+                                                                 instance.GetDevice(), ShaderOptimization::High);
+    }
+
     if (!handle) {
         LOG_ERROR(Render_Vulkan, "Failed to retrieve programmable vertex shader");
         return false;

@@ -12,19 +12,19 @@ namespace Vulkan {
 
 using Sirit::Id;
 
-struct VectorIds {
-    /// Returns the type id of the vector with the provided size
-    [[nodiscard]] constexpr Id Get(u32 size) const {
-        return ids[size - 2];
-    }
-
-    std::array<Id, 3> ids;
-};
-
 class FragmentModule : public Sirit::Module {
     static constexpr u32 NUM_TEV_STAGES = 6;
     static constexpr u32 NUM_LIGHTS = 8;
     static constexpr u32 NUM_LIGHTING_SAMPLERS = 24;
+
+    struct VectorIds {
+        /// Returns the type id of the vector with the provided size
+        [[nodiscard]] constexpr Id Get(u32 size) const {
+            return ids[size - 2];
+        }
+
+        std::array<Id, 3> ids;
+    };
 
 public:
     FragmentModule(const PicaFSConfig& config);

@@ -9,6 +9,7 @@
 #include "common/hash.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
 #include "video_core/regs.h"
+#include "video_core/renderer_vulkan/vk_shader_decompiler.h"
 #include "video_core/renderer_vulkan/vk_shader_gen_spv.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/shader/shader_cache.h"
@@ -111,7 +112,12 @@ struct PipelineInfo {
  * Vulkan specialized PICA shader caches
  */
 using ProgrammableVertexShaders = Pica::Shader::ShaderDoubleCache<PicaVSConfig, vk::ShaderModule,
-                                                                  &Compile, &GenerateVertexShader>;
+                                                                  std::string, &Compile,
+                                                                  &GenerateVertexShader>;
+
+using ProgrammableVertexShadersSPV = Pica::Shader::ShaderDoubleCache<PicaVSConfig, vk::ShaderModule,
+                                                                    std::vector<u32>, &CompileSPV,
+                                                                    &GenerateVertexShaderSPV>;
 
 using FixedGeometryShaders = Pica::Shader::ShaderCache<PicaFixedGSConfig, vk::ShaderModule,
                                                        &Compile, &GenerateFixedGeometryShader>;
@@ -219,6 +225,7 @@ private:
     std::array<vk::ShaderModule, MAX_SHADER_STAGES> current_shaders;
     std::array<u64, MAX_SHADER_STAGES> shader_hashes;
     ProgrammableVertexShaders programmable_vertex_shaders;
+    ProgrammableVertexShadersSPV programmable_vertex_shaders_spv;
     FixedGeometryShaders fixed_geometry_shaders;
     FragmentShadersGLSL fragment_shaders_glsl;
     FragmentShadersSPV fragment_shaders_spv;

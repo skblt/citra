@@ -221,7 +221,7 @@ public:
 
     int scope = 0;
 
-private:
+public:
     void AddExpression(std::string_view text) {
         if (!text.empty()) {
             shader_source.append(static_cast<std::size_t>(scope) * 4, ' ');
@@ -816,6 +816,7 @@ private:
     }
 
     void Generate() {
+        bool dump = false;
         if (sanitize_mul) {
 #ifdef ANDROID
             // Use a cheaper sanitize_mul on Android, as mobile GPUs struggle here
@@ -884,6 +885,8 @@ private:
                     u32 compile_end = CompileRange(label, next_label);
                     if (compile_end > next_label && compile_end != PROGRAM_END) {
                         // This happens only when there is a label inside a IF/LOOP block
+                        dump = true;
+                        LOG_INFO(Render_OpenGL, "compile_end: {}", compile_end);
                         shader.AddLine("{{ jmp_to = {}u; break; }}", compile_end);
                         labels.emplace(compile_end);
                     }
@@ -905,6 +908,10 @@ private:
             shader.AddLine("}}\n");
 
             DEBUG_ASSERT(shader.scope == 0);
+        }
+
+        if (dump) {
+            LOG_INFO(Render_OpenGL, "{}", shader.shader_source);
         }
     }
 
