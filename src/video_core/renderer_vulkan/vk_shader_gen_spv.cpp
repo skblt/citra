@@ -1344,7 +1344,7 @@ void FragmentModule::DefineUniformStructs() {
         i32_id, i32_id, f32_id, f32_id, f32_id, f32_id, i32_id, i32_id, i32_id, i32_id, i32_id,
         i32_id, i32_id, i32_id, i32_id, i32_id, f32_id, i32_id, u32_id, lighting_lut_array_id,
         vec_ids.Get(3), vec_ids.Get(2), vec_ids.Get(2), vec_ids.Get(2), vec_ids.Get(3),
-        light_src_array_id, const_color_array_id, vec_ids.Get(4), vec_ids.Get(3), vec_ids.Get(4))};
+        light_src_array_id, const_color_array_id, vec_ids.Get(4), vec_ids.Get(4), vec_ids.Get(3))};
 
     constexpr std::array light_src_offsets{0u, 16u, 32u, 48u, 64u, 80u, 92u, 96u};
     constexpr std::array shader_data_offsets{
