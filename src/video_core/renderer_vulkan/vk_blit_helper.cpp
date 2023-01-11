@@ -14,8 +14,7 @@
 namespace Vulkan {
 
 BlitHelper::BlitHelper(const Instance& instance, Scheduler& scheduler,
-                       DescriptorManager& desc_manager,
-                       RenderpassCache& renderpass_cache)
+                       DescriptorManager& desc_manager, RenderpassCache& renderpass_cache)
     : scheduler{scheduler}, desc_manager{desc_manager},
       renderpass_cache{renderpass_cache}, device{instance.GetDevice()} {
     constexpr std::string_view cs_source = R"(
@@ -242,24 +241,24 @@ void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
                 },
             }};
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eEarlyFragmentTests |
-                               vk::PipelineStageFlagBits::eLateFragmentTests,
+                                   vk::PipelineStageFlagBits::eLateFragmentTests,
                                vk::PipelineStageFlagBits::eComputeShader,
                                vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
 
-        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout,
-                                         0, set, {});
+        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout, 0, set,
+                                  {});
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
 
         const auto src_offset = Common::MakeVec(blit.src_rect.left, blit.src_rect.bottom);
         cmdbuf.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
-                                    sizeof(Common::Vec2i), src_offset.AsArray());
+                             sizeof(Common::Vec2i), src_offset.AsArray());
 
         cmdbuf.dispatch(blit.src_rect.GetWidth() / 8, blit.src_rect.GetHeight() / 8, 1);
 
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
                                vk::PipelineStageFlagBits::eEarlyFragmentTests |
-                               vk::PipelineStageFlagBits::eLateFragmentTests |
-                               vk::PipelineStageFlagBits::eTransfer,
+                                   vk::PipelineStageFlagBits::eLateFragmentTests |
+                                   vk::PipelineStageFlagBits::eTransfer,
                                vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
     });
 }

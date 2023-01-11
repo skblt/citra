@@ -247,11 +247,10 @@ bool PipelineCache::UseProgrammableVertexShader(const Pica::Regs& regs,
         return false;
     }
 
-    scheduler.Record(
-        [this, handle = handle, hash = config.Hash()](vk::CommandBuffer) {
-            current_shaders[ProgramType::VS] = handle;
-            shader_hashes[ProgramType::VS] = hash;
-        });
+    scheduler.Record([this, handle = handle, hash = config.Hash()](vk::CommandBuffer) {
+        current_shaders[ProgramType::VS] = handle;
+        shader_hashes[ProgramType::VS] = hash;
+    });
 
     return true;
 }
@@ -354,16 +353,12 @@ void PipelineCache::BindSampler(u32 binding, vk::Sampler sampler) {
 
 void PipelineCache::SetViewport(float x, float y, float width, float height) {
     const vk::Viewport viewport{x, y, width, height, 0.f, 1.f};
-    scheduler.Record([viewport](vk::CommandBuffer cmdbuf) {
-        cmdbuf.setViewport(0, viewport);
-    });
+    scheduler.Record([viewport](vk::CommandBuffer cmdbuf) { cmdbuf.setViewport(0, viewport); });
 }
 
 void PipelineCache::SetScissor(s32 x, s32 y, u32 width, u32 height) {
     const vk::Rect2D scissor{{x, y}, {width, height}};
-    scheduler.Record([scissor](vk::CommandBuffer cmdbuf) {
-        cmdbuf.setScissor(0, scissor);
-    });
+    scheduler.Record([scissor](vk::CommandBuffer cmdbuf) { cmdbuf.setScissor(0, scissor); });
 }
 
 void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
@@ -373,17 +368,17 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info) {
     scheduler.Record([this, info, is_dirty, current](vk::CommandBuffer cmdbuf) {
         if (info.dynamic.stencil_compare_mask != current.dynamic.stencil_compare_mask || is_dirty) {
             cmdbuf.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                                info.dynamic.stencil_compare_mask);
+                                         info.dynamic.stencil_compare_mask);
         }
 
         if (info.dynamic.stencil_write_mask != current.dynamic.stencil_write_mask || is_dirty) {
             cmdbuf.setStencilWriteMask(vk::StencilFaceFlagBits::eFrontAndBack,
-                                              info.dynamic.stencil_write_mask);
+                                       info.dynamic.stencil_write_mask);
         }
 
         if (info.dynamic.stencil_reference != current.dynamic.stencil_reference || is_dirty) {
             cmdbuf.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack,
-                                              info.dynamic.stencil_reference);
+                                       info.dynamic.stencil_reference);
         }
 
         if (info.dynamic.blend_color != current.dynamic.blend_color || is_dirty) {

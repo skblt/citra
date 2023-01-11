@@ -19,13 +19,13 @@
 
 static bool IsPortraitMode() {
     return JNI_FALSE != IDCache::GetEnvForThread()->CallStaticBooleanMethod(
-            IDCache::GetNativeLibraryClass(), IDCache::GetIsPortraitMode());
+                            IDCache::GetNativeLibraryClass(), IDCache::GetIsPortraitMode());
 }
 
 static void UpdateLandscapeScreenLayout() {
     Settings::values.layout_option =
-            static_cast<Settings::LayoutOption>(IDCache::GetEnvForThread()->CallStaticIntMethod(
-                    IDCache::GetNativeLibraryClass(), IDCache::GetLandscapeScreenLayout()));
+        static_cast<Settings::LayoutOption>(IDCache::GetEnvForThread()->CallStaticIntMethod(
+            IDCache::GetNativeLibraryClass(), IDCache::GetLandscapeScreenLayout()));
 }
 
 void EmuWindow_Android::OnSurfaceChanged(ANativeWindow* surface) {
@@ -63,7 +63,7 @@ void EmuWindow_Android::OnFramebufferSizeChanged() {
     }
 }
 
-EmuWindow_Android::EmuWindow_Android(ANativeWindow *surface) : host_window{surface} {
+EmuWindow_Android::EmuWindow_Android(ANativeWindow* surface) : host_window{surface} {
     LOG_DEBUG(Frontend, "Initializing EmuWindow_Android");
 
     if (!surface) {
@@ -71,7 +71,7 @@ EmuWindow_Android::EmuWindow_Android(ANativeWindow *surface) : host_window{surfa
         return;
     }
 
-    window_width =  ANativeWindow_getWidth(surface);
+    window_width = ANativeWindow_getWidth(surface);
     window_height = ANativeWindow_getHeight(surface);
 
     Network::Init();

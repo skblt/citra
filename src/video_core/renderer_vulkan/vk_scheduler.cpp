@@ -27,8 +27,8 @@ void Scheduler::CommandChunk::ExecuteAll(vk::CommandBuffer cmdbuf) {
 
 Scheduler::Scheduler(const Instance& instance, RenderpassCache& renderpass_cache)
     : instance{instance}, renderpass_cache{renderpass_cache}, master_semaphore{instance},
-      command_pool{instance, master_semaphore},
-      use_worker_thread{Settings::values.async_command_recording} {
+      command_pool{instance, master_semaphore}, use_worker_thread{
+                                                    Settings::values.async_command_recording} {
     AllocateWorkerCommandBuffers();
     if (use_worker_thread) {
         AcquireNewChunk();
@@ -119,50 +119,50 @@ void Scheduler::SubmitExecution(vk::Semaphore signal_semaphore, vk::Semaphore wa
     state = StateFlags::AllDirty;
 
     renderpass_cache.ExitRenderpass();
-    Record([signal_semaphore, wait_semaphore, handle, signal_value,
-            this](vk::CommandBuffer cmdbuf) {
-        MICROPROFILE_SCOPE(Vulkan_Submit);
-        cmdbuf.end();
+    Record(
+        [signal_semaphore, wait_semaphore, handle, signal_value, this](vk::CommandBuffer cmdbuf) {
+            MICROPROFILE_SCOPE(Vulkan_Submit);
+            cmdbuf.end();
 
-        const u32 num_signal_semaphores = signal_semaphore ? 2U : 1U;
-        const std::array signal_values{signal_value, u64(0)};
-        const std::array signal_semaphores{handle, signal_semaphore};
+            const u32 num_signal_semaphores = signal_semaphore ? 2U : 1U;
+            const std::array signal_values{signal_value, u64(0)};
+            const std::array signal_semaphores{handle, signal_semaphore};
 
-        const u32 num_wait_semaphores = wait_semaphore ? 2U : 1U;
-        const std::array wait_values{signal_value - 1, u64(1)};
-        const std::array wait_semaphores{handle, wait_semaphore};
+            const u32 num_wait_semaphores = wait_semaphore ? 2U : 1U;
+            const std::array wait_values{signal_value - 1, u64(1)};
+            const std::array wait_semaphores{handle, wait_semaphore};
 
-        static constexpr std::array<vk::PipelineStageFlags, 2> wait_stage_masks = {
-            vk::PipelineStageFlagBits::eAllCommands,
-            vk::PipelineStageFlagBits::eColorAttachmentOutput,
-        };
+            static constexpr std::array<vk::PipelineStageFlags, 2> wait_stage_masks = {
+                vk::PipelineStageFlagBits::eAllCommands,
+                vk::PipelineStageFlagBits::eColorAttachmentOutput,
+            };
 
-        const vk::TimelineSemaphoreSubmitInfoKHR timeline_si = {
-            .waitSemaphoreValueCount = num_wait_semaphores,
-            .pWaitSemaphoreValues = wait_values.data(),
-            .signalSemaphoreValueCount = num_signal_semaphores,
-            .pSignalSemaphoreValues = signal_values.data(),
-        };
+            const vk::TimelineSemaphoreSubmitInfoKHR timeline_si = {
+                .waitSemaphoreValueCount = num_wait_semaphores,
+                .pWaitSemaphoreValues = wait_values.data(),
+                .signalSemaphoreValueCount = num_signal_semaphores,
+                .pSignalSemaphoreValues = signal_values.data(),
+            };
 
-        const vk::SubmitInfo submit_info = {
-            .pNext = &timeline_si,
-            .waitSemaphoreCount = num_wait_semaphores,
-            .pWaitSemaphores = wait_semaphores.data(),
-            .pWaitDstStageMask = wait_stage_masks.data(),
-            .commandBufferCount = 1u,
-            .pCommandBuffers = &cmdbuf,
-            .signalSemaphoreCount = num_signal_semaphores,
-            .pSignalSemaphores = signal_semaphores.data(),
-        };
+            const vk::SubmitInfo submit_info = {
+                .pNext = &timeline_si,
+                .waitSemaphoreCount = num_wait_semaphores,
+                .pWaitSemaphores = wait_semaphores.data(),
+                .pWaitDstStageMask = wait_stage_masks.data(),
+                .commandBufferCount = 1u,
+                .pCommandBuffers = &cmdbuf,
+                .signalSemaphoreCount = num_signal_semaphores,
+                .pSignalSemaphores = signal_semaphores.data(),
+            };
 
-        try {
-            vk::Queue queue = instance.GetGraphicsQueue();
-            queue.submit(submit_info);
-        } catch (vk::DeviceLostError& err) {
-            LOG_CRITICAL(Render_Vulkan, "Device lost during submit: {}", err.what());
-            UNREACHABLE();
-        }
-    });
+            try {
+                vk::Queue queue = instance.GetGraphicsQueue();
+                queue.submit(submit_info);
+            } catch (vk::DeviceLostError& err) {
+                LOG_CRITICAL(Render_Vulkan, "Device lost during submit: {}", err.what());
+                UNREACHABLE();
+            }
+        });
 
     if (!use_worker_thread) {
         AllocateWorkerCommandBuffers();

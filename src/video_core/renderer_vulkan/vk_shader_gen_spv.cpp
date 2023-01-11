@@ -87,7 +87,7 @@ void FragmentModule::Generate() {
             // Take the color output as-is
             break;
         case FramebufferRegs::LogicOp::CopyInverted:
-            //out += "color = ~color;\n";
+            // out += "color = ~color;\n";
             break;
         case FramebufferRegs::LogicOp::NoOp:
             // We need to discard the color, but not necessarily the depth. This is not possible
@@ -975,7 +975,8 @@ void FragmentModule::DefineProcTexSampler() {
         const Id proctex_alpha_map_offset{GetShaderDataMember(i32_id, ConstS32(13))};
         const Id final_alpha{AppendProcTexCombineAndMap(config.state.proctex.alpha_combiner, u, v,
                                                         proctex_alpha_map_offset)};
-        const Id final_color_xyz{OpVectorShuffle(vec_ids.Get(3), final_color, final_color, 0, 1, 2)};
+        const Id final_color_xyz{
+            OpVectorShuffle(vec_ids.Get(3), final_color, final_color, 0, 1, 2)};
         final_color = OpCompositeConstruct(vec_ids.Get(4), final_color_xyz, final_alpha);
     }
 
@@ -1373,7 +1374,7 @@ void FragmentModule::DefineUniformStructs() {
 
     constexpr std::array light_src_offsets{0u, 16u, 32u, 48u, 64u, 80u, 92u, 96u};
     constexpr std::array shader_data_offsets{
-        0u,  4u,  8u,  12u, 16u, 20u,  24u,  28u,  32u,  36u,  40u,  44u,   48u,   52u,  56u,
+        0u,  4u,  8u,  12u, 16u, 20u,  24u,  28u,  32u,  36u,  40u,  44u,   48u,   52u,   56u,
         60u, 64u, 68u, 72u, 80u, 176u, 192u, 200u, 208u, 224u, 240u, 1136u, 1232u, 1248u, 1264u};
 
     Decorate(lighting_lut_array_id, spv::Decoration::ArrayStride, 16u);

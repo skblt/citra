@@ -208,11 +208,10 @@ void RendererVulkan::BeginRendering() {
     device.updateDescriptorSetWithTemplate(set, present_update_template, present_textures[0]);
 
     scheduler.Record([this, set, pipeline_index = current_pipeline](vk::CommandBuffer cmdbuf) {
-        cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics,
-                                   present_pipelines[pipeline_index]);
+        cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, present_pipelines[pipeline_index]);
 
-        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, present_pipeline_layout,
-                                         0, set, {});
+        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, present_pipeline_layout, 0, set,
+                                  {});
     });
 
     const RenderpassState renderpass_info = {
@@ -561,15 +560,14 @@ void RendererVulkan::LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color
         };
 
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eFragmentShader,
-                                      vk::PipelineStageFlagBits::eTransfer,
-                                      vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
+                               vk::PipelineStageFlagBits::eTransfer,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
 
-        cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, clear_color,
-                                      range);
+        cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, clear_color, range);
 
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                      vk::PipelineStageFlagBits::eFragmentShader,
-                                      vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
+                               vk::PipelineStageFlagBits::eFragmentShader,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
     });
 }
 
@@ -626,9 +624,8 @@ void RendererVulkan::DrawSingleScreenRotated(u32 screen_id, float x, float y, fl
 
     scheduler.Record([this, offset = offset, info = draw_info](vk::CommandBuffer cmdbuf) {
         cmdbuf.pushConstants(present_pipeline_layout,
-                                    vk::ShaderStageFlagBits::eFragment |
-                                        vk::ShaderStageFlagBits::eVertex,
-                                    0, sizeof(info), &info);
+                             vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
+                             0, sizeof(info), &info);
 
         cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
         cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
@@ -664,9 +661,8 @@ void RendererVulkan::DrawSingleScreen(u32 screen_id, float x, float y, float w, 
 
     scheduler.Record([this, offset = offset, info = draw_info](vk::CommandBuffer cmdbuf) {
         cmdbuf.pushConstants(present_pipeline_layout,
-                                    vk::ShaderStageFlagBits::eFragment |
-                                        vk::ShaderStageFlagBits::eVertex,
-                                    0, sizeof(info), &info);
+                             vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
+                             0, sizeof(info), &info);
 
         cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
         cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
@@ -703,9 +699,8 @@ void RendererVulkan::DrawSingleScreenStereoRotated(u32 screen_id_l, u32 screen_i
 
     scheduler.Record([this, offset = offset, info = draw_info](vk::CommandBuffer cmdbuf) {
         cmdbuf.pushConstants(present_pipeline_layout,
-                                    vk::ShaderStageFlagBits::eFragment |
-                                        vk::ShaderStageFlagBits::eVertex,
-                                    0, sizeof(info), &info);
+                             vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
+                             0, sizeof(info), &info);
 
         cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
         cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);
@@ -744,9 +739,8 @@ void RendererVulkan::DrawSingleScreenStereo(u32 screen_id_l, u32 screen_id_r, fl
 
     scheduler.Record([this, offset = offset, info = draw_info](vk::CommandBuffer cmdbuf) {
         cmdbuf.pushConstants(present_pipeline_layout,
-                                    vk::ShaderStageFlagBits::eFragment |
-                                        vk::ShaderStageFlagBits::eVertex,
-                                    0, sizeof(info), &info);
+                             vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex,
+                             0, sizeof(info), &info);
 
         cmdbuf.bindVertexBuffers(0, vertex_buffer.Handle(), {0});
         cmdbuf.draw(4, 1, offset / sizeof(ScreenRectVertex), 0);

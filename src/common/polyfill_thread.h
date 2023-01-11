@@ -105,7 +105,7 @@ private:
 } // namespace polyfill
 
 #if ANDROID
-template < class T, class... Args >
+template <class T, class... Args>
 concept constructible_from = is_nothrow_destructible_v<T> && is_constructible_v<T, Args...>;
 #endif
 

@@ -305,10 +305,9 @@ void RasterizerVulkan::SetupVertexArray(u32 vs_input_size, u32 vs_input_index_mi
     SetupFixedAttribs();
 
     // Bind the generated bindings
-    scheduler.Record([this, binding_count = layout.binding_count, vertex_offsets = binding_offsets]
-                     (vk::CommandBuffer cmdbuf) {
-        cmdbuf.bindVertexBuffers(0, binding_count, vertex_buffers.data(),
-                                        vertex_offsets.data());
+    scheduler.Record([this, binding_count = layout.binding_count,
+                      vertex_offsets = binding_offsets](vk::CommandBuffer cmdbuf) {
+        cmdbuf.bindVertexBuffers(0, binding_count, vertex_buffers.data(), vertex_offsets.data());
     });
 }
 
@@ -478,10 +477,10 @@ void RasterizerVulkan::SetupIndexArray() {
 
     stream_buffer.Commit(index_buffer_size);
 
-    scheduler.Record([this, index_offset = index_offset,
-                      index_type = index_type](vk::CommandBuffer cmdbuf) {
-        cmdbuf.bindIndexBuffer(stream_buffer.Handle(), index_offset, index_type);
-    });
+    scheduler.Record(
+        [this, index_offset = index_offset, index_type = index_type](vk::CommandBuffer cmdbuf) {
+            cmdbuf.bindIndexBuffer(stream_buffer.Handle(), index_offset, index_type);
+        });
 }
 
 void RasterizerVulkan::DrawTriangles() {
@@ -591,16 +590,14 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         // nothing. Always sample from the base level until mipmaps for texture cubes are
         // implemented
         const bool skip_mipmap = config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
-        info = SamplerInfo{
-            .mag_filter = config.mag_filter,
-            .min_filter = config.min_filter,
-            .mip_filter = config.mip_filter,
-            .wrap_s = config.wrap_s,
-            .wrap_t = config.wrap_t,
-            .border_color = config.border_color.raw,
-            .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
-            .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level)
-        };
+        info = SamplerInfo{.mag_filter = config.mag_filter,
+                           .min_filter = config.min_filter,
+                           .mip_filter = config.mip_filter,
+                           .wrap_s = config.wrap_s,
+                           .wrap_t = config.wrap_t,
+                           .border_color = config.border_color.raw,
+                           .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
+                           .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level)};
 
         // Search the cache and bind the appropriate sampler
         if (auto it = samplers.find(info); it != samplers.end()) {
@@ -798,11 +795,11 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
             std::memcpy(array_ptr, vertex_batch.data() + base_vertex, vertex_size);
             stream_buffer.Commit(vertex_size);
 
-            scheduler.Record([this, vertices, base_vertex,
-                              offset = offset](vk::CommandBuffer cmdbuf) {
-                cmdbuf.bindVertexBuffers(0, stream_buffer.Handle(), offset);
-                cmdbuf.draw(vertices, 1, base_vertex, 0);
-            });
+            scheduler.Record(
+                [this, vertices, base_vertex, offset = offset](vk::CommandBuffer cmdbuf) {
+                    cmdbuf.bindVertexBuffers(0, stream_buffer.Handle(), offset);
+                    cmdbuf.draw(vertices, 1, base_vertex, 0);
+                });
         }
     }
 

@@ -19,7 +19,8 @@
 
 class SharedContext_Android : public Frontend::GraphicsContext {};
 
-EmuWindow_Android_Vulkan::EmuWindow_Android_Vulkan(ANativeWindow* surface) : EmuWindow_Android{surface} {
+EmuWindow_Android_Vulkan::EmuWindow_Android_Vulkan(ANativeWindow* surface)
+    : EmuWindow_Android{surface} {
     CreateWindowSurface();
 
     if (core_context = CreateSharedContext(); !core_context) {

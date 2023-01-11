@@ -125,7 +125,7 @@ void Driver::DeduceVendor() {
     } else if (gpu_vendor.find("ARM") != gpu_vendor.npos) {
         vendor = Vendor::ARM;
     } else if (gpu_vendor.find("GDI Generic") != gpu_vendor.npos) {
-            vendor = Vendor::Generic;
+        vendor = Vendor::Generic;
     }
 }
 

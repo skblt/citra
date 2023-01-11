@@ -106,7 +106,8 @@ Instance::Instance(bool validation, bool dump_command_buffers)
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
     // Enable the instance extensions the platform requires
-    const std::vector extensions = GetInstanceExtensions(Frontend::WindowSystemType::Headless, false);
+    const std::vector extensions =
+        GetInstanceExtensions(Frontend::WindowSystemType::Headless, false);
 
     const vk::ApplicationInfo application_info = {
         .pApplicationName = "Citra",
@@ -217,9 +218,10 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
 
     // If validation is enabled attempt to also enable debug messenger
     if (enable_validation) {
-        const auto it = std::find_if(extensions.begin(), extensions.end(), [](const char* extension) {
-            return std::strcmp(extension, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0;
-        });
+        const auto it =
+            std::find_if(extensions.begin(), extensions.end(), [](const char* extension) {
+                return std::strcmp(extension, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0;
+            });
 
         const bool debug_messenger_supported = it != extensions.end();
         if (debug_messenger_supported) {

@@ -358,8 +358,8 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, VideoCore::PixelForma
         };
 
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
-                                      vk::PipelineStageFlagBits::eTopOfPipe,
-                                      vk::DependencyFlagBits::eByRegion, {}, {}, init_barrier);
+                               vk::PipelineStageFlagBits::eTopOfPipe,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, init_barrier);
     });
 
     return alloc;
@@ -460,25 +460,22 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
                 },
             };
 
-            cmdbuf.pipelineBarrier(params.pipeline_flags,
-                                          vk::PipelineStageFlagBits::eTransfer,
-                                          vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
+            cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
+                                   vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
 
             const bool is_color =
                 static_cast<bool>(params.aspect & vk::ImageAspectFlagBits::eColor);
             if (is_color) {
-                cmdbuf.clearColorImage(params.src_image,
-                                              vk::ImageLayout::eTransferDstOptimal,
-                                              MakeClearColorValue(value), range);
+                cmdbuf.clearColorImage(params.src_image, vk::ImageLayout::eTransferDstOptimal,
+                                       MakeClearColorValue(value), range);
             } else {
                 cmdbuf.clearDepthStencilImage(params.src_image,
-                                                     vk::ImageLayout::eTransferDstOptimal,
-                                                     MakeClearDepthStencilValue(value), range);
+                                              vk::ImageLayout::eTransferDstOptimal,
+                                              MakeClearDepthStencilValue(value), range);
             }
 
-            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                          params.pipeline_flags, vk::DependencyFlagBits::eByRegion,
-                                          {}, {}, post_barrier);
+            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
+                                   vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
         });
         return true;
     }
@@ -494,14 +491,14 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
                           surface.type != VideoCore::SurfaceType::DepthStencil;
 
     const vk::AccessFlags access_flag =
-            is_color ? vk::AccessFlagBits::eColorAttachmentRead |
-                       vk::AccessFlagBits::eColorAttachmentWrite
-                     : vk::AccessFlagBits::eDepthStencilAttachmentRead |
-                       vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        is_color
+            ? vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite
+            : vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                  vk::AccessFlagBits::eDepthStencilAttachmentWrite;
 
     const vk::PipelineStageFlags pipeline_flags =
-            is_color ? vk::PipelineStageFlagBits::eColorAttachmentOutput
-                     : vk::PipelineStageFlagBits::eEarlyFragmentTests;
+        is_color ? vk::PipelineStageFlagBits::eColorAttachmentOutput
+                 : vk::PipelineStageFlagBits::eEarlyFragmentTests;
 
     const vk::RenderPass clear_renderpass =
         is_color ? renderpass_cache.GetRenderpass(surface.pixel_format,
@@ -698,13 +695,13 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
         };
 
         cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
-                                      vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
+                               vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
 
-        cmdbuf.copyImage(params.src_image, vk::ImageLayout::eTransferSrcOptimal,
-                                params.dst_image, vk::ImageLayout::eTransferDstOptimal, image_copy);
+        cmdbuf.copyImage(params.src_image, vk::ImageLayout::eTransferSrcOptimal, params.dst_image,
+                         vk::ImageLayout::eTransferDstOptimal, image_copy);
 
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
-                                      vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
+                               vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
     });
 
     return true;
@@ -826,21 +823,19 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
         };
 
         cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
-                                      vk::DependencyFlagBits::eByRegion, {}, {}, read_barriers);
+                               vk::DependencyFlagBits::eByRegion, {}, {}, read_barriers);
 
-        cmdbuf.blitImage(params.src_image, vk::ImageLayout::eTransferSrcOptimal,
-                                params.dst_image, vk::ImageLayout::eTransferDstOptimal, blit_area,
-                                params.filter);
+        cmdbuf.blitImage(params.src_image, vk::ImageLayout::eTransferSrcOptimal, params.dst_image,
+                         vk::ImageLayout::eTransferDstOptimal, blit_area, params.filter);
 
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
-                                      vk::DependencyFlagBits::eByRegion, {}, {}, write_barriers);
+                               vk::DependencyFlagBits::eByRegion, {}, {}, write_barriers);
     });
 
     return true;
 }
 
-void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {
-}
+void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {}
 
 const ReinterpreterList& TextureRuntime::GetPossibleReinterpretations(
     VideoCore::PixelFormat dest_format) const {
@@ -914,81 +909,79 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
             .src_image = alloc.image,
         };
 
-        scheduler.Record([format = alloc.format, params, staging,
-                          upload](vk::CommandBuffer cmdbuf) {
-            u32 num_copies = 1;
-            std::array<vk::BufferImageCopy, 2> buffer_image_copies;
+        scheduler.Record(
+            [format = alloc.format, params, staging, upload](vk::CommandBuffer cmdbuf) {
+                u32 num_copies = 1;
+                std::array<vk::BufferImageCopy, 2> buffer_image_copies;
 
-            const VideoCore::Rect2D rect = upload.texture_rect;
-            buffer_image_copies[0] = vk::BufferImageCopy{
-                .bufferOffset = staging.buffer_offset + upload.buffer_offset,
-                .bufferRowLength = rect.GetWidth(),
-                .bufferImageHeight = rect.GetHeight(),
-                .imageSubresource{
-                    .aspectMask = params.aspect,
-                    .mipLevel = upload.texture_level,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                },
-                .imageOffset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom), 0},
-                .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1},
-            };
+                const VideoCore::Rect2D rect = upload.texture_rect;
+                buffer_image_copies[0] = vk::BufferImageCopy{
+                    .bufferOffset = staging.buffer_offset + upload.buffer_offset,
+                    .bufferRowLength = rect.GetWidth(),
+                    .bufferImageHeight = rect.GetHeight(),
+                    .imageSubresource{
+                        .aspectMask = params.aspect,
+                        .mipLevel = upload.texture_level,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
+                    .imageOffset = {static_cast<s32>(rect.left), static_cast<s32>(rect.bottom), 0},
+                    .imageExtent = {rect.GetWidth(), rect.GetHeight(), 1},
+                };
 
-            if (params.aspect & vk::ImageAspectFlagBits::eStencil) {
-                buffer_image_copies[0].imageSubresource.aspectMask =
-                    vk::ImageAspectFlagBits::eDepth;
-                vk::BufferImageCopy& stencil_copy = buffer_image_copies[1];
-                stencil_copy = buffer_image_copies[0];
-                stencil_copy.bufferOffset += UnpackDepthStencil(staging, format);
-                stencil_copy.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eStencil;
-                num_copies++;
-            }
+                if (params.aspect & vk::ImageAspectFlagBits::eStencil) {
+                    buffer_image_copies[0].imageSubresource.aspectMask =
+                        vk::ImageAspectFlagBits::eDepth;
+                    vk::BufferImageCopy& stencil_copy = buffer_image_copies[1];
+                    stencil_copy = buffer_image_copies[0];
+                    stencil_copy.bufferOffset += UnpackDepthStencil(staging, format);
+                    stencil_copy.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eStencil;
+                    num_copies++;
+                }
 
-            const vk::ImageMemoryBarrier read_barrier = {
-                .srcAccessMask = params.src_access,
-                .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
-                .oldLayout = vk::ImageLayout::eGeneral,
-                .newLayout = vk::ImageLayout::eTransferDstOptimal,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = params.src_image,
-                .subresourceRange{
-                    .aspectMask = params.aspect,
-                    .baseMipLevel = upload.texture_level,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                },
-            };
-            const vk::ImageMemoryBarrier write_barrier = {
-                .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
-                .dstAccessMask = params.src_access,
-                .oldLayout = vk::ImageLayout::eTransferDstOptimal,
-                .newLayout = vk::ImageLayout::eGeneral,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = params.src_image,
-                .subresourceRange{
-                    .aspectMask = params.aspect,
-                    .baseMipLevel = upload.texture_level,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                },
-            };
+                const vk::ImageMemoryBarrier read_barrier = {
+                    .srcAccessMask = params.src_access,
+                    .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+                    .oldLayout = vk::ImageLayout::eGeneral,
+                    .newLayout = vk::ImageLayout::eTransferDstOptimal,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = params.src_image,
+                    .subresourceRange{
+                        .aspectMask = params.aspect,
+                        .baseMipLevel = upload.texture_level,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                };
+                const vk::ImageMemoryBarrier write_barrier = {
+                    .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+                    .dstAccessMask = params.src_access,
+                    .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+                    .newLayout = vk::ImageLayout::eGeneral,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = params.src_image,
+                    .subresourceRange{
+                        .aspectMask = params.aspect,
+                        .baseMipLevel = upload.texture_level,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                };
 
-            cmdbuf.pipelineBarrier(params.pipeline_flags,
-                                          vk::PipelineStageFlagBits::eTransfer,
-                                          vk::DependencyFlagBits::eByRegion, {}, {}, read_barrier);
+                cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
+                                       vk::DependencyFlagBits::eByRegion, {}, {}, read_barrier);
 
-            cmdbuf.copyBufferToImage(staging.buffer, params.src_image,
-                                            vk::ImageLayout::eTransferDstOptimal, num_copies,
-                                            buffer_image_copies.data());
+                cmdbuf.copyBufferToImage(staging.buffer, params.src_image,
+                                         vk::ImageLayout::eTransferDstOptimal, num_copies,
+                                         buffer_image_copies.data());
 
-            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                          params.pipeline_flags, vk::DependencyFlagBits::eByRegion,
-                                          {}, {}, write_barrier);
-        });
+                cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
+                                       vk::DependencyFlagBits::eByRegion, {}, {}, write_barrier);
+            });
 
         runtime.upload_buffer.Commit(staging.size);
     }
@@ -1073,16 +1066,15 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
                 .dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
             };
 
-            cmdbuf.pipelineBarrier(params.pipeline_flags,
-                                          vk::PipelineStageFlagBits::eTransfer,
-                                          vk::DependencyFlagBits::eByRegion, {}, {}, read_barrier);
+            cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
+                                   vk::DependencyFlagBits::eByRegion, {}, {}, read_barrier);
 
             cmdbuf.copyImageToBuffer(params.src_image, vk::ImageLayout::eTransferSrcOptimal,
-                                            staging.buffer, buffer_image_copy);
+                                     staging.buffer, buffer_image_copy);
 
-            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                          params.pipeline_flags, vk::DependencyFlagBits::eByRegion,
-                                          memory_write_barrier, {}, image_write_barrier);
+            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
+                                   vk::DependencyFlagBits::eByRegion, memory_write_barrier, {},
+                                   image_write_barrier);
         });
         runtime.download_buffer.Commit(staging.size);
     }

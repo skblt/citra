@@ -20,8 +20,7 @@ class Surface;
 
 class BlitHelper {
 public:
-    BlitHelper(const Instance& instance, Scheduler& scheduler,
-               DescriptorManager& desc_manager,
+    BlitHelper(const Instance& instance, Scheduler& scheduler, DescriptorManager& desc_manager,
                RenderpassCache& renderpass_cache);
     ~BlitHelper();
 

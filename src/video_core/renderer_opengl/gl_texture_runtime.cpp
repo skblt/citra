@@ -222,11 +222,10 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
 
 bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
                                   const VideoCore::TextureCopy& copy) {
-    glCopyImageSubData(source.texture.handle, GL_TEXTURE_2D,
-                       copy.src_level, copy.src_offset.x, copy.src_offset.y, 0,
-                       dest.texture.handle, GL_TEXTURE_2D,
-                       copy.dst_level, copy.dst_offset.x, copy.dst_offset.y, 0,
-                       copy.extent.width, copy.extent.height, 1);
+    glCopyImageSubData(source.texture.handle, GL_TEXTURE_2D, copy.src_level, copy.src_offset.x,
+                       copy.src_offset.y, 0, dest.texture.handle, GL_TEXTURE_2D, copy.dst_level,
+                       copy.dst_offset.x, copy.dst_offset.y, 0, copy.extent.width,
+                       copy.extent.height, 1);
     return true;
 }
 

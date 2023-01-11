@@ -41,9 +41,11 @@ static constexpr std::array<EGLint, 4> egl_context_attribs{EGL_CONTEXT_CLIENT_VE
 class SharedContext_Android : public Frontend::GraphicsContext {
 public:
     SharedContext_Android(EGLDisplay egl_display, EGLConfig egl_config,
-                          EGLContext egl_share_context) : egl_display{egl_display},
-      egl_surface{eglCreatePbufferSurface(egl_display, egl_config, egl_empty_attribs.data())},
-      egl_context{eglCreateContext(egl_display, egl_config, egl_share_context, egl_context_attribs.data())} {
+                          EGLContext egl_share_context)
+        : egl_display{egl_display}, egl_surface{eglCreatePbufferSurface(egl_display, egl_config,
+                                                                        egl_empty_attribs.data())},
+          egl_context{eglCreateContext(egl_display, egl_config, egl_share_context,
+                                       egl_context_attribs.data())} {
         ASSERT_MSG(egl_surface, "eglCreatePbufferSurface() failed!");
         ASSERT_MSG(egl_context, "eglCreateContext() failed!");
     }
@@ -72,7 +74,8 @@ private:
     EGLContext egl_context{};
 };
 
-EmuWindow_Android_OpenGL::EmuWindow_Android_OpenGL(ANativeWindow* surface) : EmuWindow_Android{surface} {
+EmuWindow_Android_OpenGL::EmuWindow_Android_OpenGL(ANativeWindow* surface)
+    : EmuWindow_Android{surface} {
     if (egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY); egl_display == EGL_NO_DISPLAY) {
         LOG_CRITICAL(Frontend, "eglGetDisplay() failed");
         return;

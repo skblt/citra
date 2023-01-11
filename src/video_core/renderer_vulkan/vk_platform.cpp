@@ -151,8 +151,8 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
             });
 
         if (it == properties.end()) {
-            LOG_WARNING(Render_Vulkan,
-                        "Required instance extension {} is not available", extension);
+            LOG_WARNING(Render_Vulkan, "Required instance extension {} is not available",
+                        extension);
             return true;
         }
         return false;

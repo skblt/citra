@@ -176,7 +176,8 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .image = src_image,
                 .subresourceRange{
-                    .aspectMask = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil,
+                    .aspectMask =
+                        vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil,
                     .baseMipLevel = 0,
                     .levelCount = VK_REMAINING_MIP_LEVELS,
                     .baseArrayLayer = 0,
@@ -198,8 +199,7 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
                     .baseArrayLayer = 0,
                     .layerCount = VK_REMAINING_ARRAY_LAYERS,
                 },
-            }
-        };
+            }};
         const std::array post_barriers = {
             vk::ImageMemoryBarrier{
                 .srcAccessMask = vk::AccessFlagBits::eShaderRead,
@@ -237,25 +237,25 @@ void D24S8toRGBA8::Reinterpret(Surface& source, VideoCore::Rect2D src_rect, Surf
         };
 
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput |
-                               vk::PipelineStageFlagBits::eEarlyFragmentTests |
-                               vk::PipelineStageFlagBits::eLateFragmentTests,
+                                   vk::PipelineStageFlagBits::eEarlyFragmentTests |
+                                   vk::PipelineStageFlagBits::eLateFragmentTests,
                                vk::PipelineStageFlagBits::eComputeShader,
                                vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
 
-        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout,
-                                         0, set, {});
+        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout, 0, set,
+                                  {});
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline);
 
         const auto src_offset = Common::MakeVec(src_rect.left, src_rect.bottom);
         cmdbuf.pushConstants(compute_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
-                                    sizeof(Common::Vec2i), src_offset.AsArray());
+                             sizeof(Common::Vec2i), src_offset.AsArray());
 
         cmdbuf.dispatch(src_rect.GetWidth() / 8, src_rect.GetHeight() / 8, 1);
 
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
                                vk::PipelineStageFlagBits::eFragmentShader |
-                               vk::PipelineStageFlagBits::eEarlyFragmentTests |
-                               vk::PipelineStageFlagBits::eLateFragmentTests,
+                                   vk::PipelineStageFlagBits::eEarlyFragmentTests |
+                                   vk::PipelineStageFlagBits::eLateFragmentTests,
                                vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
     });
 }
