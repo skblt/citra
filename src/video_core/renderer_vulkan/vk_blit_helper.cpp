@@ -14,8 +14,10 @@
 namespace Vulkan {
 
 BlitHelper::BlitHelper(const Instance& instance, Scheduler& scheduler,
-                       DescriptorManager& desc_manager)
-    : scheduler{scheduler}, desc_manager{desc_manager}, device{instance.GetDevice()} {
+                       DescriptorManager& desc_manager,
+                       RenderpassCache& renderpass_cache)
+    : scheduler{scheduler}, desc_manager{desc_manager},
+      renderpass_cache{renderpass_cache}, device{instance.GetDevice()} {
     constexpr std::string_view cs_source = R"(
 #version 450 core
 #extension GL_EXT_samplerless_texture_functions : require
@@ -166,14 +168,13 @@ void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
     vk::DescriptorSet set = desc_manager.AllocateSet(descriptor_layout);
     device.updateDescriptorSetWithTemplate(set, update_template, textures[0]);
 
+    renderpass_cache.ExitRenderpass();
     scheduler.Record([this, set, blit, src_image = source.alloc.image,
                       dst_image = dest.alloc.image](vk::CommandBuffer cmdbuf) {
         const std::array pre_barriers = {
             vk::ImageMemoryBarrier{
-                .srcAccessMask = vk::AccessFlagBits::eShaderWrite |
-                                 vk::AccessFlagBits::eDepthStencilAttachmentWrite |
-                                 vk::AccessFlagBits::eDepthStencilAttachmentRead,
-                .dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
+                .srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite,
+                .dstAccessMask = vk::AccessFlagBits::eShaderRead,
                 .oldLayout = vk::ImageLayout::eGeneral,
                 .newLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -203,12 +204,13 @@ void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
                     .baseArrayLayer = 0,
                     .layerCount = VK_REMAINING_ARRAY_LAYERS,
                 },
-            }};
+            },
+        };
         const std::array post_barriers = {
             vk::ImageMemoryBarrier{
                 .srcAccessMask = vk::AccessFlagBits::eShaderRead,
-                .dstAccessMask = vk::AccessFlagBits::eShaderWrite |
-                                 vk::AccessFlagBits::eDepthStencilAttachmentWrite,
+                .dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite |
+                                 vk::AccessFlagBits::eDepthStencilAttachmentRead,
                 .oldLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal,
                 .newLayout = vk::ImageLayout::eGeneral,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -225,7 +227,7 @@ void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
             },
             vk::ImageMemoryBarrier{
                 .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
-                .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+                .dstAccessMask = vk::AccessFlagBits::eTransferRead,
                 .oldLayout = vk::ImageLayout::eGeneral,
                 .newLayout = vk::ImageLayout::eGeneral,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -239,9 +241,10 @@ void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
                     .layerCount = VK_REMAINING_ARRAY_LAYERS,
                 },
             }};
-        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
-                                      vk::PipelineStageFlagBits::eComputeShader,
-                                      vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eEarlyFragmentTests |
+                               vk::PipelineStageFlagBits::eLateFragmentTests,
+                               vk::PipelineStageFlagBits::eComputeShader,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
 
         cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, compute_pipeline_layout,
                                          0, set, {});
@@ -254,8 +257,10 @@ void BlitHelper::BlitD24S8ToR32(Surface& source, Surface& dest,
         cmdbuf.dispatch(blit.src_rect.GetWidth() / 8, blit.src_rect.GetHeight() / 8, 1);
 
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
-                                      vk::PipelineStageFlagBits::eAllCommands,
-                                      vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
+                               vk::PipelineStageFlagBits::eEarlyFragmentTests |
+                               vk::PipelineStageFlagBits::eLateFragmentTests |
+                               vk::PipelineStageFlagBits::eTransfer,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
     });
 }
 

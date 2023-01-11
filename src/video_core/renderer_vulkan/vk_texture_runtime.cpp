@@ -109,7 +109,7 @@ constexpr u64 DOWNLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 TextureRuntime::TextureRuntime(const Instance& instance, Scheduler& scheduler,
                                RenderpassCache& renderpass_cache, DescriptorManager& desc_manager)
     : instance{instance}, scheduler{scheduler}, renderpass_cache{renderpass_cache},
-      desc_manager{desc_manager}, blit_helper{instance, scheduler, desc_manager},
+      desc_manager{desc_manager}, blit_helper{instance, scheduler, desc_manager, renderpass_cache},
       upload_buffer{instance, scheduler, vk::BufferUsageFlagBits::eTransferSrc, UPLOAD_BUFFER_SIZE},
       download_buffer{instance, scheduler, vk::BufferUsageFlagBits::eTransferDst,
                       DOWNLOAD_BUFFER_SIZE, true} {
@@ -840,41 +840,6 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
 }
 
 void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {
-    /*renderpass_cache.ExitRenderpass();
-
-    // TODO: Investigate AMD single pass downsampler
-    s32 current_width = surface.GetScaledWidth();
-    s32 current_height = surface.GetScaledHeight();
-
-    const u32 levels = std::bit_width(std::max(surface.width, surface.height));
-    vk::ImageAspectFlags aspect = ToVkAspect(surface.type);
-    vk::CommandBuffer command_buffer = scheduler.GetRenderCommandBuffer();
-    for (u32 i = 1; i < levels; i++) {
-        surface.Transition(vk::ImageLayout::eTransferSrcOptimal, i - 1, 1);
-        surface.Transition(vk::ImageLayout::eTransferDstOptimal, i, 1);
-
-        const std::array source_offsets = {vk::Offset3D{0, 0, 0},
-                                           vk::Offset3D{current_width, current_height, 1}};
-
-        const std::array dest_offsets = {
-            vk::Offset3D{0, 0, 0}, vk::Offset3D{current_width > 1 ? current_width / 2 : 1,
-                                                current_height > 1 ? current_height / 2 : 1, 1}};
-
-        const vk::ImageBlit blit_area = {.srcSubresource = {.aspectMask = aspect,
-                                                            .mipLevel = i - 1,
-                                                            .baseArrayLayer = 0,
-                                                            .layerCount = 1},
-                                         .srcOffsets = source_offsets,
-                                         .dstSubresource = {.aspectMask = aspect,
-                                                            .mipLevel = i,
-                                                            .baseArrayLayer = 0,
-                                                            .layerCount = 1},
-                                         .dstOffsets = dest_offsets};
-
-        command_buffer.blitImage(surface.alloc.image, vk::ImageLayout::eTransferSrcOptimal,
-                                 surface.alloc.image, vk::ImageLayout::eTransferDstOptimal,
-                                 blit_area, vk::Filter::eLinear);
-    }*/
 }
 
 const ReinterpreterList& TextureRuntime::GetPossibleReinterpretations(

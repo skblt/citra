@@ -21,7 +21,7 @@ namespace Vulkan {
 
 using TriangleTopology = Pica::PipelineRegs::TriangleTopology;
 
-constexpr u64 VERTEX_BUFFER_SIZE = 128 * 1024 * 1024;
+constexpr u64 STREAM_BUFFER_SIZE = 128 * 1024 * 1024;
 constexpr u64 TEXTURE_BUFFER_SIZE = 2 * 1024 * 1024;
 
 constexpr vk::BufferUsageFlags BUFFER_USAGE = vk::BufferUsageFlagBits::eVertexBuffer |
@@ -65,7 +65,7 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
       pipeline_cache{instance, scheduler, renderpass_cache, desc_manager},
       null_surface{NULL_PARAMS, vk::Format::eR8G8B8A8Unorm, NULL_USAGE, runtime},
       null_storage_surface{NULL_PARAMS, vk::Format::eR32Uint, NULL_STORAGE_USAGE, runtime},
-      stream_buffer{instance, scheduler, BUFFER_USAGE, VERTEX_BUFFER_SIZE},
+      stream_buffer{instance, scheduler, BUFFER_USAGE, STREAM_BUFFER_SIZE},
       texture_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)},
       texture_lf_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)} {
 
@@ -787,7 +787,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         pipeline_cache.UseTrivialGeometryShader();
         pipeline_cache.BindPipeline(pipeline_info);
 
-        const u32 max_vertices = VERTEX_BUFFER_SIZE / sizeof(HardwareVertex);
+        const u32 max_vertices = STREAM_BUFFER_SIZE / sizeof(HardwareVertex);
         const u32 batch_size = static_cast<u32>(vertex_batch.size());
         for (u32 base_vertex = 0; base_vertex < batch_size; base_vertex += max_vertices) {
             const u32 vertices = std::min(max_vertices, batch_size - base_vertex);

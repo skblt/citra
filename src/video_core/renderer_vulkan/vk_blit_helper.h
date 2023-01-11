@@ -14,12 +14,15 @@ namespace Vulkan {
 
 class Instance;
 class DescriptorManager;
+class RenderpassCache;
 class Scheduler;
 class Surface;
 
 class BlitHelper {
 public:
-    BlitHelper(const Instance& instance, Scheduler& scheduler, DescriptorManager& desc_manager);
+    BlitHelper(const Instance& instance, Scheduler& scheduler,
+               DescriptorManager& desc_manager,
+               RenderpassCache& renderpass_cache);
     ~BlitHelper();
 
     /// Blits D24S8 pixel data to the provided buffer
@@ -29,6 +32,7 @@ public:
 private:
     Scheduler& scheduler;
     DescriptorManager& desc_manager;
+    RenderpassCache& renderpass_cache;
     vk::Device device;
     vk::Pipeline compute_pipeline;
     vk::PipelineLayout compute_pipeline_layout;
