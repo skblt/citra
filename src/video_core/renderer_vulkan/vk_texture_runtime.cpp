@@ -625,12 +625,18 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
             .extent = {copy.extent.width, copy.extent.height, 1},
         };
 
+        const bool self_copy = params.src_image == params.dst_image;
+        const vk::ImageLayout new_src_layout =
+            self_copy ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferSrcOptimal;
+        const vk::ImageLayout new_dst_layout =
+            self_copy ? vk::ImageLayout::eGeneral : vk::ImageLayout::eTransferDstOptimal;
+
         const std::array pre_barriers = {
             vk::ImageMemoryBarrier{
                 .srcAccessMask = params.src_access,
                 .dstAccessMask = vk::AccessFlagBits::eTransferRead,
                 .oldLayout = vk::ImageLayout::eGeneral,
-                .newLayout = vk::ImageLayout::eTransferSrcOptimal,
+                .newLayout = new_src_layout,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .image = params.src_image,
@@ -646,7 +652,7 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
                 .srcAccessMask = params.dst_access,
                 .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
                 .oldLayout = vk::ImageLayout::eGeneral,
-                .newLayout = vk::ImageLayout::eTransferDstOptimal,
+                .newLayout = new_dst_layout,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .image = params.dst_image,
@@ -663,7 +669,7 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
             vk::ImageMemoryBarrier{
                 .srcAccessMask = vk::AccessFlagBits::eNone,
                 .dstAccessMask = vk::AccessFlagBits::eNone,
-                .oldLayout = vk::ImageLayout::eTransferSrcOptimal,
+                .oldLayout = new_src_layout,
                 .newLayout = vk::ImageLayout::eGeneral,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -679,7 +685,7 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
             vk::ImageMemoryBarrier{
                 .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
                 .dstAccessMask = params.dst_access,
-                .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+                .oldLayout = new_dst_layout,
                 .newLayout = vk::ImageLayout::eGeneral,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -697,8 +703,8 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
         cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
                                vk::DependencyFlagBits::eByRegion, {}, {}, pre_barriers);
 
-        cmdbuf.copyImage(params.src_image, vk::ImageLayout::eTransferSrcOptimal, params.dst_image,
-                         vk::ImageLayout::eTransferDstOptimal, image_copy);
+        cmdbuf.copyImage(params.src_image, new_src_layout, params.dst_image, new_dst_layout,
+                         image_copy);
 
         cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
                                vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);

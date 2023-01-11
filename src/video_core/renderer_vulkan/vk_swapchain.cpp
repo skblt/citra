@@ -43,8 +43,10 @@ Swapchain::~Swapchain() {
 }
 
 void Swapchain::Create(vk::SurfaceKHR new_surface) {
-    is_outdated = false;
-    is_suboptimal = false;
+    vk::Device device = instance.GetDevice();
+    device.waitIdle();
+    Destroy();
+
     if (new_surface) {
         instance.GetInstance().destroySurfaceKHR(surface);
         surface = new_surface;
@@ -79,10 +81,6 @@ void Swapchain::Create(vk::SurfaceKHR new_surface) {
         .oldSwapchain = nullptr,
     };
 
-    vk::Device device = instance.GetDevice();
-    device.waitIdle();
-    Destroy();
-
     try {
         swapchain = device.createSwapchainKHR(swapchain_info);
     } catch (vk::SystemError& err) {
@@ -93,6 +91,9 @@ void Swapchain::Create(vk::SurfaceKHR new_surface) {
     SetupImages();
     resource_ticks.clear();
     resource_ticks.resize(image_count);
+
+    is_outdated = false;
+    is_suboptimal = false;
 }
 
 MICROPROFILE_DEFINE(Vulkan_Acquire, "Vulkan", "Swapchain Acquire", MP_RGB(185, 66, 245));
