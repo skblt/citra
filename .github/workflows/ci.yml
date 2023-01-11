@@ -165,7 +165,10 @@ jobs:
       - name: Deps
         run: |
           sudo apt-get update
-          sudo apt-get install glslang-tools ccache apksigner -y
+          sudo apt-get install ccache apksigner -y
+          sudo add-apt-repository -y ppa:savoury1/ffmpeg4
+          sudo apt-get update -y
+          sudo apt-get install --no-install-recommends -y glslang-dev glslang-tools
       - name: Build
         run: ./.ci/android/build.sh
       - name: Copy and sign artifacts
