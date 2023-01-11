@@ -912,6 +912,7 @@ void RendererVulkan::SwapBuffers() {
             scheduler.Finish();
             swapchain.Create();
         }
+        scheduler.WaitWorker();
         swapchain.AcquireNextImage();
     } while (swapchain.NeedsRecreation());
 
@@ -957,6 +958,7 @@ void RendererVulkan::SwapBuffers() {
 }
 
 void RendererVulkan::NotifySurfaceChanged() {
+    scheduler.Finish();
     vk::SurfaceKHR new_surface = CreateSurface(instance.GetInstance(), render_window);
     swapchain.Create(new_surface);
 }

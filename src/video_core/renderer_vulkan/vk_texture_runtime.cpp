@@ -501,7 +501,7 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
 
     const vk::PipelineStageFlags pipeline_flags =
             is_color ? vk::PipelineStageFlagBits::eColorAttachmentOutput
-                     : vk::PipelineStageFlagBits::eNone;
+                     : vk::PipelineStageFlagBits::eEarlyFragmentTests;
 
     const vk::RenderPass clear_renderpass =
         is_color ? renderpass_cache.GetRenderpass(surface.pixel_format,
@@ -792,8 +792,8 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
         };
         const std::array write_barriers = {
             vk::ImageMemoryBarrier{
-                .srcAccessMask = vk::AccessFlagBits::eNone,
-                .dstAccessMask = vk::AccessFlagBits::eNone,
+                .srcAccessMask = vk::AccessFlagBits::eTransferRead,
+                .dstAccessMask = params.src_access,
                 .oldLayout = vk::ImageLayout::eTransferSrcOptimal,
                 .newLayout = vk::ImageLayout::eGeneral,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,

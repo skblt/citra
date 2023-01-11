@@ -87,8 +87,7 @@ public:
 
     /// Returns true if logic operations need shader emulation
     bool NeedsLogicOpEmulation() const {
-        return true;
-        //return !features.logicOp;
+        return !features.logicOp;
     }
 
     bool UseGeometryShaders() const {
