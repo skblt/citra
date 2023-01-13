@@ -202,6 +202,7 @@ private:
     u64 uniform_buffer_alignment;
     u64 uniform_size_aligned_vs;
     u64 uniform_size_aligned_fs;
+    bool async_shaders{false};
 };
 
 } // namespace Vulkan

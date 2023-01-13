@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>513</height>
+    <height>579</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -166,6 +166,13 @@
         </property>
         <property name="text">
          <string>Enable Shader JIT</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="toggle_async_shaders">
+        <property name="text">
+         <string>Async Shader Compilation</string>
         </property>
        </widget>
       </item>

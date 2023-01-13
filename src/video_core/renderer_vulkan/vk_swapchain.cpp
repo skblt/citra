@@ -196,6 +196,8 @@ void Swapchain::SetPresentMode() {
             present_mode = vk::PresentModeKHR::eMailbox;
         }
     }
+
+    LOG_INFO(Render_Vulkan, "Using {} present mode", vk::to_string(present_mode));
 }
 
 void Swapchain::SetSurfaceProperties() {
@@ -216,6 +218,8 @@ void Swapchain::SetSurfaceProperties() {
         image_count = std::clamp(PREFERRED_IMAGE_COUNT, capabilities.minImageCount + 1,
                                  capabilities.maxImageCount);
     }
+
+    LOG_INFO(Render_Vulkan, "Using {} images", image_count);
 
     // Prefer identity transform if possible
     transform = vk::SurfaceTransformFlagBitsKHR::eIdentity;

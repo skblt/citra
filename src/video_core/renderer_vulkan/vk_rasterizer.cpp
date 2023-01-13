@@ -69,7 +69,8 @@ RasterizerVulkan::RasterizerVulkan(Frontend::EmuWindow& emu_window, const Instan
                            vk::ImageAspectFlagBits::eColor, runtime},
       stream_buffer{instance, scheduler, BUFFER_USAGE, STREAM_BUFFER_SIZE},
       texture_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)},
-      texture_lf_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)} {
+      texture_lf_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)},
+      async_shaders{Settings::values.async_shader_compilation.GetValue()} {
 
     vertex_buffers.fill(stream_buffer.Handle());
 
@@ -355,8 +356,7 @@ bool RasterizerVulkan::SetupGeometryShader() {
         return false;
     }
 
-    pipeline_cache.UseFixedGeometryShader(regs);
-    return true;
+    return pipeline_cache.UseFixedGeometryShader(regs);
 }
 
 bool RasterizerVulkan::AccelerateDrawBatch(bool is_indexed) {
@@ -400,7 +400,9 @@ bool RasterizerVulkan::AccelerateDrawBatchInternal(bool is_indexed) {
     }
 
     pipeline_info.rasterization.topology.Assign(regs.pipeline.triangle_topology);
-    pipeline_cache.BindPipeline(pipeline_info);
+    if (!pipeline_cache.BindPipeline(pipeline_info, !async_shaders)) {
+        return true; ///< Skip draw call when pipeline is not ready
+    }
 
     const DrawParams params = {
         .vertex_count = regs.pipeline.num_vertices,
@@ -459,7 +461,6 @@ void RasterizerVulkan::DrawTriangles() {
 
 MICROPROFILE_DEFINE(Vulkan_Drawing, "Vulkan", "Drawing", MP_RGB(128, 128, 192));
 bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
-    MICROPROFILE_SCOPE(Vulkan_Drawing);
     const auto& regs = Pica::g_state.regs;
 
     const bool shadow_rendering = regs.framebuffer.IsShadowRendering();
@@ -679,6 +680,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                                viewport_rect_unscaled.GetWidth() * res_scale,
                                viewport_rect_unscaled.GetHeight() * res_scale);
 
+    MICROPROFILE_SCOPE(Vulkan_Drawing);
+
     // Sync and bind the shader
     if (shader_dirty) {
         pipeline_cache.UseFragmentShader(regs);
@@ -748,7 +751,7 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         pipeline_info.vertex_layout = software_layout;
         pipeline_cache.UseTrivialVertexShader();
         pipeline_cache.UseTrivialGeometryShader();
-        pipeline_cache.BindPipeline(pipeline_info);
+        pipeline_cache.BindPipeline(pipeline_info, true);
 
         const u32 max_vertices = STREAM_BUFFER_SIZE / sizeof(HardwareVertex);
         const u32 batch_size = static_cast<u32>(vertex_batch.size());
@@ -785,11 +788,11 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
                                    depth_surface);
     }
 
-    static int submit_threshold = 40;
+    static int submit_threshold = 20;
     submit_threshold--;
     if (!submit_threshold) {
-        submit_threshold = 40;
-        scheduler.Flush();
+        submit_threshold = 20;
+        scheduler.DispatchWork();
     }
 
     return succeeded;

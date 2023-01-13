@@ -89,6 +89,7 @@ void ConfigureGraphics::SetConfiguration() {
         static_cast<int>(Settings::values.physical_device.GetValue()));
     ui->toggle_async_recording->setChecked(Settings::values.async_command_recording.GetValue());
     ui->spirv_shader_gen->setChecked(Settings::values.spirv_shader_gen.GetValue());
+    ui->toggle_async_shaders->setChecked(Settings::values.async_shader_compilation.GetValue());
 
     if (Settings::IsConfiguringGlobal()) {
         ui->toggle_shader_jit->setChecked(Settings::values.use_shader_jit.GetValue());
@@ -114,6 +115,8 @@ void ConfigureGraphics::ApplyConfiguration() {
                                              ui->physical_device_combo);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.async_command_recording,
                                              ui->toggle_async_recording, async_command_recording);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.async_shader_compilation,
+                                             ui->toggle_async_shaders, async_shader_compilation);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.spirv_shader_gen,
                                              ui->spirv_shader_gen, spirv_shader_gen);
 
@@ -136,6 +139,8 @@ void ConfigureGraphics::SetupPerGameUI() {
         ui->toggle_disk_shader_cache->setEnabled(
             Settings::values.use_disk_shader_cache.UsingGlobal());
         ui->toggle_vsync_new->setEnabled(Settings::values.use_vsync_new.UsingGlobal());
+        ui->toggle_async_shaders->setEnabled(
+            Settings::values.async_shader_compilation.UsingGlobal());
         return;
     }
 
@@ -154,6 +159,9 @@ void ConfigureGraphics::SetupPerGameUI() {
                                             use_disk_shader_cache);
     ConfigurationShared::SetColoredTristate(ui->toggle_vsync_new, Settings::values.use_vsync_new,
                                             use_vsync_new);
+    ConfigurationShared::SetColoredTristate(ui->toggle_async_shaders,
+                                            Settings::values.async_shader_compilation,
+                                            async_shader_compilation);
 }
 
 void ConfigureGraphics::DiscoverPhysicalDevices() {

@@ -126,7 +126,6 @@ add_library(video_core STATIC
     shader/debug_data.h
     shader/shader.cpp
     shader/shader.h
-    shader/shader_cache.h
     shader/shader_interpreter.cpp
     shader/shader_interpreter.h
     shader/shader_uniforms.cpp

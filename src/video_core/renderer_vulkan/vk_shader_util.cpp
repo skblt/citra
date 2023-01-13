@@ -6,11 +6,14 @@
 #include <glslang/Include/ResourceLimits.h>
 #include <glslang/Public/ShaderLang.h>
 #include "common/assert.h"
+#include "common/literals.h"
 #include "common/logging/log.h"
 #include "common/microprofile.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 
 namespace Vulkan {
+
+using namespace Common::Literals;
 
 constexpr TBuiltInResource DefaultTBuiltInResource = {
     .maxLights = 32,
@@ -156,11 +159,15 @@ bool InitializeCompiler() {
     return true;
 }
 
+MICROPROFILE_DEFINE(Vulkan_GLSLCompilation, "VulkanShader", "GLSL Shader Compilation",
+                    MP_RGB(100, 255, 52));
 vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage, vk::Device device,
                          ShaderOptimization level) {
     if (!InitializeCompiler()) {
         return VK_NULL_HANDLE;
     }
+
+    MICROPROFILE_SCOPE(Vulkan_GLSLCompilation);
 
     EProfile profile = ECoreProfile;
     EShMessages messages =
@@ -209,9 +216,11 @@ vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage, v
         options.validate = true;
     } else {
         options.disableOptimizer = false;
-        options.stripDebugInfo = true;
+        options.validate = false;
+        options.optimizeSize = true;
     }
 
+    out_code.reserve(8_KiB);
     glslang::GlslangToSpv(*intermediate, out_code, &logger, &options);
 
     const std::string spv_messages = logger.getAllMessages();
@@ -222,10 +231,7 @@ vk::ShaderModule Compile(std::string_view code, vk::ShaderStageFlagBits stage, v
     return CompileSPV(out_code, device);
 }
 
-MICROPROFILE_DEFINE(Vulkan_SPVCompilation, "Vulkan", "SPIR-V Shader Compilation",
-                    MP_RGB(100, 255, 52));
 vk::ShaderModule CompileSPV(std::span<const u32> code, vk::Device device) {
-    MICROPROFILE_SCOPE(Vulkan_SPVCompilation);
     const vk::ShaderModuleCreateInfo shader_info = {
         .codeSize = code.size() * sizeof(u32),
         .pCode = code.data(),

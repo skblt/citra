@@ -13,4 +13,4 @@ void* GetSurfaceLayer(void* surface) {
     return view.layer;
 }
 
-} // AppleSurfaceHelper
+} // namespace AppleSurfaceHelper

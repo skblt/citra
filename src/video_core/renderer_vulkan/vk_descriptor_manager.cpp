@@ -96,7 +96,7 @@ DescriptorManager::DescriptorManager(const Instance& instance, Scheduler& schedu
     : instance{instance}, scheduler{scheduler}, pool_provider{instance,
                                                               scheduler.GetMasterSemaphore()} {
     BuildLayouts();
-    descriptor_set_dirty.fill(true);
+    descriptor_set_dirty.set();
     current_pool = pool_provider.Commit();
 }
 
@@ -120,14 +120,14 @@ void DescriptorManager::SetBinding(u32 set, u32 binding, DescriptorData data) {
 
 void DescriptorManager::BindDescriptorSets() {
     const bool is_dirty = scheduler.IsStateDirty(StateFlags::DescriptorSets);
-    if (is_dirty) {
-        descriptor_set_dirty.fill(true);
+    if (descriptor_set_dirty.none() && !is_dirty) {
+        return;
     }
 
     const vk::Device device = instance.GetDevice();
     std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> bound_sets;
     for (u32 i = 0; i < MAX_DESCRIPTOR_SETS; i++) {
-        if (descriptor_set_dirty[i]) {
+        if (descriptor_set_dirty[i] || is_dirty) {
             vk::DescriptorSet set = AllocateSet(descriptor_set_layouts[i]);
             device.updateDescriptorSetWithTemplate(set, update_templates[i], update_data[i][0]);
             descriptor_sets[i] = set;
@@ -141,10 +141,8 @@ void DescriptorManager::BindDescriptorSets() {
                                   {});
     });
 
-    descriptor_set_dirty.fill(false);
-    if (is_dirty) {
-        scheduler.MarkStateNonDirty(StateFlags::DescriptorSets);
-    }
+    descriptor_set_dirty.reset();
+    scheduler.MarkStateNonDirty(StateFlags::DescriptorSets);
 }
 
 void DescriptorManager::BuildLayouts() {

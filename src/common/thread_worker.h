@@ -34,10 +34,10 @@ class StatefulThreadWorker {
     using StateMaker = std::conditional_t<with_state, std::function<StateType()>, DummyCallable>;
 
 public:
-    explicit StatefulThreadWorker(size_t num_workers, std::string name, StateMaker func = {})
-        : workers_queued{num_workers}, thread_name{std::move(name)} {
+    explicit StatefulThreadWorker(size_t num_workers, std::string_view name, StateMaker func = {})
+        : workers_queued{num_workers}, thread_name{name} {
         const auto lambda = [this, func](std::stop_token stop_token) {
-            Common::SetCurrentThreadName(thread_name.c_str());
+            Common::SetCurrentThreadName(thread_name.data());
             {
                 [[maybe_unused]] std::conditional_t<with_state, StateType, int> state{func()};
                 while (!stop_token.stop_requested()) {
@@ -108,7 +108,7 @@ private:
     std::atomic<size_t> work_done{};
     std::atomic<size_t> workers_stopped{};
     std::atomic<size_t> workers_queued{};
-    std::string thread_name;
+    std::string_view thread_name;
     std::vector<std::jthread> threads;
 };
 

@@ -5,13 +5,17 @@
 #pragma once
 
 #include <array>
+#include "common/async_handle.h"
 #include "common/bit_field.h"
 #include "common/hash.h"
+#include "common/thread_worker.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
-#include "video_core/regs.h"
-#include "video_core/renderer_vulkan/vk_shader_gen_spv.h"
-#include "video_core/renderer_vulkan/vk_shader_util.h"
-#include "video_core/shader/shader_cache.h"
+#include "video_core/renderer_vulkan/vk_common.h"
+#include "video_core/renderer_vulkan/vk_shader_gen.h"
+
+namespace Pica {
+struct Regs;
+}
 
 namespace Vulkan {
 
@@ -59,6 +63,8 @@ struct DynamicState {
     u8 stencil_reference;
     u8 stencil_compare_mask;
     u8 stencil_write_mask;
+
+    auto operator<=>(const DynamicState&) const noexcept = default;
 };
 
 union VertexBinding {
@@ -107,21 +113,6 @@ struct PipelineInfo {
     }
 };
 
-/**
- * Vulkan specialized PICA shader caches
- */
-using ProgrammableVertexShaders = Pica::Shader::ShaderDoubleCache<PicaVSConfig, vk::ShaderModule,
-                                                                  &Compile, &GenerateVertexShader>;
-
-using FixedGeometryShaders = Pica::Shader::ShaderCache<PicaFixedGSConfig, vk::ShaderModule,
-                                                       &Compile, &GenerateFixedGeometryShader>;
-
-using FragmentShadersGLSL =
-    Pica::Shader::ShaderCache<PicaFSConfig, vk::ShaderModule, &Compile, &GenerateFragmentShader>;
-
-using FragmentShadersSPV = Pica::Shader::ShaderCache<PicaFSConfig, vk::ShaderModule, &CompileSPV,
-                                                     &GenerateFragmentShaderSPV>;
-
 class Instance;
 class Scheduler;
 class RenderpassCache;
@@ -131,6 +122,48 @@ class DescriptorManager;
  * Stores a collection of rasterizer pipelines used during rendering.
  */
 class PipelineCache {
+    struct Shader : public Common::AsyncHandle {
+        Shader(const Instance& instance);
+        Shader(const Instance& instance, vk::ShaderStageFlagBits stage, std::string code);
+
+        ~Shader();
+
+        [[nodiscard]] vk::ShaderModule Handle() const noexcept {
+            return module;
+        }
+
+        vk::ShaderModule module;
+        vk::Device device;
+        std::string program;
+    };
+
+    class GraphicsPipeline : public Common::AsyncHandle {
+    public:
+        GraphicsPipeline(const Instance& instance, RenderpassCache& renderpass_cache,
+                         const PipelineInfo& info, vk::PipelineCache pipeline_cache,
+                         vk::PipelineLayout layout, std::array<Shader*, 3> stages,
+                         Common::ThreadWorker* worker);
+        ~GraphicsPipeline();
+
+        bool Build(bool fail_on_compile_required = false);
+
+        [[nodiscard]] vk::Pipeline Handle() const noexcept {
+            return pipeline;
+        }
+
+    private:
+        const Instance& instance;
+        Common::ThreadWorker* worker;
+
+        vk::Pipeline pipeline;
+        vk::PipelineLayout pipeline_layout;
+        vk::PipelineCache pipeline_cache;
+
+        PipelineInfo info;
+        std::array<Shader*, 3> stages;
+        vk::RenderPass renderpass;
+    };
+
 public:
     PipelineCache(const Instance& instance, Scheduler& scheduler, RenderpassCache& renderpass_cache,
                   DescriptorManager& desc_manager);
@@ -143,7 +176,7 @@ public:
     void SaveDiskCache();
 
     /// Binds a pipeline using the provided information
-    void BindPipeline(const PipelineInfo& info);
+    bool BindPipeline(const PipelineInfo& info, bool wait_built = false);
 
     /// Binds a PICA decompiled vertex shader
     bool UseProgrammableVertexShader(const Pica::Regs& regs, Pica::Shader::ShaderSetup& setup,
@@ -153,7 +186,7 @@ public:
     void UseTrivialVertexShader();
 
     /// Binds a PICA decompiled geometry shader
-    void UseFixedGeometryShader(const Pica::Regs& regs);
+    bool UseFixedGeometryShader(const Pica::Regs& regs);
 
     /// Binds a passthrough geometry shader
     void UseTrivialGeometryShader();
@@ -184,13 +217,10 @@ public:
 
 private:
     /// Applies dynamic pipeline state to the current command buffer
-    void ApplyDynamic(const PipelineInfo& info);
+    void ApplyDynamic(const PipelineInfo& info, bool is_dirty);
 
     /// Builds the rasterizer pipeline layout
     void BuildLayout();
-
-    /// Builds a rasterizer pipeline using the PipelineInfo struct
-    vk::Pipeline BuildPipeline(const PipelineInfo& info);
 
     /// Returns true when the disk data can be used by the current driver
     bool IsCacheValid(const u8* data, u64 size) const;
@@ -207,22 +237,26 @@ private:
     RenderpassCache& renderpass_cache;
     DescriptorManager& desc_manager;
 
-    // Cached pipelines
     vk::PipelineCache pipeline_cache;
-    std::unordered_map<u64, vk::Pipeline, Common::IdentityHash<u64>> graphics_pipelines;
-    vk::Pipeline current_pipeline{};
+    Common::ThreadWorker workers;
     PipelineInfo current_info{};
+    GraphicsPipeline* current_pipeline{};
+    std::unordered_map<u64, std::unique_ptr<GraphicsPipeline>, Common::IdentityHash<u64>>
+        graphics_pipelines;
 
-    // Bound shader modules
-    enum ProgramType : u32 { VS = 0, GS = 2, FS = 1 };
+    enum ProgramType : u32 {
+        VS = 0,
+        GS = 2,
+        FS = 1,
+    };
 
-    std::array<vk::ShaderModule, MAX_SHADER_STAGES> current_shaders;
     std::array<u64, MAX_SHADER_STAGES> shader_hashes;
-    ProgrammableVertexShaders programmable_vertex_shaders;
-    FixedGeometryShaders fixed_geometry_shaders;
-    FragmentShadersGLSL fragment_shaders_glsl;
-    FragmentShadersSPV fragment_shaders_spv;
-    vk::ShaderModule trivial_vertex_shader;
+    std::array<Shader*, MAX_SHADER_STAGES> current_shaders;
+    std::unordered_map<PicaVSConfig, Shader*> programmable_vertex_map;
+    std::unordered_map<std::string, Shader> programmable_vertex_cache;
+    std::unordered_map<PicaFixedGSConfig, Shader> fixed_geometry_shaders;
+    std::unordered_map<PicaFSConfig, Shader> fragment_shaders;
+    Shader trivial_vertex_shader;
 };
 
 } // namespace Vulkan

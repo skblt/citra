@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <bitset>
 #include "video_core/renderer_vulkan/vk_resource_pool.h"
 
 namespace Vulkan {
@@ -59,7 +60,7 @@ private:
     std::array<vk::DescriptorUpdateTemplate, MAX_DESCRIPTOR_SETS> update_templates;
     std::array<DescriptorSetData, MAX_DESCRIPTOR_SETS> update_data{};
     std::array<vk::DescriptorSet, MAX_DESCRIPTOR_SETS> descriptor_sets{};
-    std::array<bool, MAX_DESCRIPTOR_SETS> descriptor_set_dirty{};
+    std::bitset<MAX_DESCRIPTOR_SETS> descriptor_set_dirty{};
 };
 
 } // namespace Vulkan

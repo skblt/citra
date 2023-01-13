@@ -43,7 +43,7 @@ void FragmentModule::Generate() {
     }
 
     // Check if the fragment is outside scissor rectangle
-    WriteScissor();
+    // WriteScissor();
 
     // Write shader bytecode to emulate all enabled PICA lights
     if (config.state.lighting.enable) {

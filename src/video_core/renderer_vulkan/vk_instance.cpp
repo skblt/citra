@@ -295,8 +295,7 @@ vk::ImageAspectFlags MakeAspect(VideoCore::SurfaceType type) {
 }
 
 FormatTraits Instance::DetermineTraits(VideoCore::PixelFormat pixel_format, vk::Format format) {
-    const vk::ImageAspectFlags format_aspect =
-        MakeAspect(VideoCore::GetFormatType(pixel_format));
+    const vk::ImageAspectFlags format_aspect = MakeAspect(VideoCore::GetFormatType(pixel_format));
     const vk::FormatProperties format_properties = physical_device.getFormatProperties(format);
 
     const vk::FormatFeatureFlagBits attachment_usage =
@@ -392,13 +391,12 @@ void Instance::CreateFormatTable() {
 }
 
 bool Instance::CreateDevice() {
-    const vk::StructureChain feature_chain =
-        physical_device.getFeatures2<vk::PhysicalDeviceFeatures2,
-                                     vk::PhysicalDevicePortabilitySubsetFeaturesKHR,
-                                     vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-                                     vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR,
-                                     vk::PhysicalDeviceCustomBorderColorFeaturesEXT,
-                                     vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>();
+    const vk::StructureChain feature_chain = physical_device.getFeatures2<
+        vk::PhysicalDeviceFeatures2, vk::PhysicalDevicePortabilitySubsetFeaturesKHR,
+        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+        vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR,
+        vk::PhysicalDeviceCustomBorderColorFeaturesEXT, vk::PhysicalDeviceIndexTypeUint8FeaturesEXT,
+        vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT>();
 
     // Not having geometry shaders will cause issues with accelerated rendering.
     features = feature_chain.get().features;
@@ -440,6 +438,8 @@ bool Instance::CreateDevice() {
     custom_border_color = AddExtension(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
     index_type_uint8 = AddExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME);
     image_format_list = AddExtension(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
+    pipeline_creation_cache_control =
+        AddExtension(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME);
 
     // Search queue families for graphics and present queues
     auto family_properties = physical_device.getQueueFamilyProperties();
@@ -519,6 +519,7 @@ bool Instance::CreateDevice() {
         feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>(),
         feature_chain.get<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>(),
+        feature_chain.get<vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT>(),
     };
 
     if (portability_subset) {
@@ -546,6 +547,10 @@ bool Instance::CreateDevice() {
 
     if (!custom_border_color) {
         device_chain.unlink<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>();
+    }
+
+    if (!pipeline_creation_cache_control) {
+        device_chain.unlink<vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT>();
     }
 
     try {

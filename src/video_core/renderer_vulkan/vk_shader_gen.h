@@ -4,11 +4,9 @@
 
 #pragma once
 
-#include <functional>
 #include <optional>
 #include "common/hash.h"
 #include "video_core/regs.h"
-#include "video_core/regs_pipeline.h"
 #include "video_core/shader/shader.h"
 
 namespace Vulkan {

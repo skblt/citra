@@ -137,6 +137,11 @@ public:
         return image_format_list;
     }
 
+    /// Returns true when VK_EXT_pipeline_creation_cache_control is supported
+    bool IsPipelineCreationCacheControlSupported() const {
+        return pipeline_creation_cache_control;
+    }
+
     /// Returns the vendor ID of the physical device
     u32 GetVendorID() const {
         return properties.vendorID;
@@ -248,6 +253,7 @@ private:
     bool custom_border_color{};
     bool index_type_uint8{};
     bool image_format_list{};
+    bool pipeline_creation_cache_control{};
     bool enable_validation{};
     bool dump_command_buffers{};
 };

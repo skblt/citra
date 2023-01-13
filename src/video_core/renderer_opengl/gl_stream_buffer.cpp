@@ -12,9 +12,9 @@ MICROPROFILE_DEFINE(OpenGL_StreamBuffer, "OpenGL", "Stream Buffer Orphaning",
 
 namespace OpenGL {
 
-OGLStreamBuffer::OGLStreamBuffer(GLenum target, GLsizeiptr size, bool readback,
+OGLStreamBuffer::OGLStreamBuffer(GLenum target, GLsizeiptr size, bool readback_,
                                  bool prefer_coherent)
-    : gl_target(target), buffer_size(size) {
+    : gl_target(target), readback(readback_), buffer_size(size) {
     gl_buffer.Create();
     glBindBuffer(gl_target, gl_buffer.handle);
 

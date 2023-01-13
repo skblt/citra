@@ -58,6 +58,7 @@ add_library(common STATIC
     announce_multiplayer_room.h
     archives.h
     assert.h
+    async_handle.h
     atomic_ops.h
     detached_tasks.cpp
     detached_tasks.h
