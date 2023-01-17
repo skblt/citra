@@ -149,15 +149,10 @@ bool PipelineCache::GraphicsPipeline::Build(bool fail_on_compile_required) {
         }
 
         // Check if all shader modules are ready
-        bool shaders_ready = true;
-        for (Shader* shader : stages) {
-            if (shader) {
-                shaders_ready &= shader->IsBuilt();
+        for (auto& shader : stages) {
+            if (shader && !shader->IsBuilt()) {
+                return false;
             }
-        }
-
-        if (!shaders_ready) {
-            return false;
         }
     }
 

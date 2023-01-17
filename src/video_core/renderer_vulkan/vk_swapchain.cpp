@@ -43,8 +43,7 @@ Swapchain::~Swapchain() {
 }
 
 void Swapchain::Create(vk::SurfaceKHR new_surface) {
-    vk::Device device = instance.GetDevice();
-    device.waitIdle();
+    scheduler.Finish();
     Destroy();
 
     if (new_surface) {
@@ -82,7 +81,7 @@ void Swapchain::Create(vk::SurfaceKHR new_surface) {
     };
 
     try {
-        swapchain = device.createSwapchainKHR(swapchain_info);
+        swapchain = instance.GetDevice().createSwapchainKHR(swapchain_info);
     } catch (vk::SystemError& err) {
         LOG_CRITICAL(Render_Vulkan, "{}", err.what());
         UNREACHABLE();
