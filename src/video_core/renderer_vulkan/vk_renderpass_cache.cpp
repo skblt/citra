@@ -84,15 +84,15 @@ RenderpassCache::~RenderpassCache() {
 void RenderpassCache::EnterRenderpass(const RenderpassState& state) {
     const bool is_dirty = scheduler.IsStateDirty(StateFlags::Renderpass);
     if (current_state == state && !is_dirty) {
+        cmd_count++;
         return;
     }
 
-    scheduler.Record(
-        [should_end = bool(current_state.renderpass), state](vk::CommandBuffer cmdbuf) {
-            if (should_end) {
-                cmdbuf.endRenderPass();
-            }
+    if (current_state.renderpass) {
+        ExitRenderpass();
+    }
 
+    scheduler.Record([state](vk::CommandBuffer cmdbuf) {
             const vk::RenderPassBeginInfo renderpass_begin_info = {
                 .renderPass = state.renderpass,
                 .framebuffer = state.framebuffer,
@@ -118,6 +118,13 @@ void RenderpassCache::ExitRenderpass() {
 
     scheduler.Record([](vk::CommandBuffer cmdbuf) { cmdbuf.endRenderPass(); });
     current_state = {};
+
+    // The Mali guide recommends flushing at the end of each major renderpass
+    // Testing has shown this has a significant effect on rendering performance
+    if (cmd_count > 20 && instance.IsMaliGpu()) {
+        scheduler.Flush();
+        cmd_count = 0;
+    }
 }
 
 void RenderpassCache::CreatePresentRenderpass(vk::Format format) {

@@ -207,6 +207,11 @@ public:
         return min_vertex_stride_alignment;
     }
 
+    /// Returns true if the physical device is a Mali gpu
+    bool IsMaliGpu() const {
+        return driver_id == vk::DriverIdKHR::eArmProprietary;
+    }
+
 private:
     /// Returns the optimal supported usage for the requested format
     [[nodiscard]] FormatTraits DetermineTraits(VideoCore::PixelFormat pixel_format,

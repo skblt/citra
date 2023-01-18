@@ -62,6 +62,7 @@ private:
     RenderpassState current_state{};
     vk::RenderPass present_renderpass{};
     vk::RenderPass cached_renderpasses[MAX_COLOR_FORMATS + 1][MAX_DEPTH_FORMATS + 1][2];
+    u32 cmd_count{};
 };
 
 } // namespace Vulkan
