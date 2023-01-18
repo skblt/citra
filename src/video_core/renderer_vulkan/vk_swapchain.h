@@ -50,6 +50,11 @@ public:
         return framebuffers[image_index];
     }
 
+    /// Returns the current image
+    [[nodiscard]] vk::Image Image() const {
+        return images[image_index];
+    }
+
     /// Returns the swapchain format
     [[nodiscard]] vk::SurfaceFormatKHR GetSurfaceFormat() const {
         return surface_format;

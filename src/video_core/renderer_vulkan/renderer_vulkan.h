@@ -91,6 +91,7 @@ private:
     void LoadColorToActiveVkTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo& texture);
     void ConfigureRenderPipeline();
     void PrepareRendertarget();
+    void RenderScreenshot();
     void BeginRendering();
 
     void DrawScreens(const Layout::FramebufferLayout& layout, bool flipped);

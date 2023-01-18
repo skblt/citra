@@ -25,6 +25,8 @@
 #include "video_core/host_shaders/vulkan_present_interlaced_frag_spv.h"
 #include "video_core/host_shaders/vulkan_present_vert_spv.h"
 
+#include <vk_mem_alloc.h>
+
 namespace Vulkan {
 
 /**
@@ -900,6 +902,7 @@ void RendererVulkan::DrawScreens(const Layout::FramebufferLayout& layout, bool f
 void RendererVulkan::SwapBuffers() {
     const auto& layout = render_window.GetFramebufferLayout();
     PrepareRendertarget();
+    RenderScreenshot();
 
     do {
         if (swapchain.NeedsRecreation()) {
@@ -949,6 +952,187 @@ void RendererVulkan::SwapBuffers() {
     if (Pica::g_debug_context && Pica::g_debug_context->recorder) {
         Pica::g_debug_context->recorder->FrameFinished();
     }
+}
+
+void RendererVulkan::RenderScreenshot() {
+    if (!VideoCore::g_renderer_screenshot_requested) {
+        return;
+    }
+
+    const Layout::FramebufferLayout layout{VideoCore::g_screenshot_framebuffer_layout};
+    const vk::Extent2D extent = swapchain.GetExtent();
+    const u32 width = std::min(layout.width, extent.width);
+    const u32 height = std::min(layout.height, extent.height);
+
+    const vk::ImageCreateInfo staging_image_info = {
+        .imageType = vk::ImageType::e2D,
+        .format = vk::Format::eB8G8R8A8Unorm,
+        .extent =
+            {
+                .width = width,
+                .height = height,
+                .depth = 1,
+            },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = vk::SampleCountFlagBits::e1,
+        .tiling = vk::ImageTiling::eLinear,
+        .usage = vk::ImageUsageFlagBits::eTransferDst,
+        .initialLayout = vk::ImageLayout::eUndefined,
+    };
+
+    const VmaAllocationCreateInfo alloc_create_info = {
+        .flags = VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+        .requiredFlags = 0,
+        .preferredFlags = 0,
+        .pool = VK_NULL_HANDLE,
+        .pUserData = nullptr,
+    };
+
+    VkImage unsafe_image{};
+    VmaAllocation allocation{};
+    VmaAllocationInfo alloc_info;
+    VkImageCreateInfo unsafe_image_info = static_cast<VkImageCreateInfo>(staging_image_info);
+
+    VkResult result = vmaCreateImage(instance.GetAllocator(), &unsafe_image_info,
+                                     &alloc_create_info, &unsafe_image, &allocation, &alloc_info);
+    if (result != VK_SUCCESS) [[unlikely]] {
+        LOG_CRITICAL(Render_Vulkan, "Failed allocating texture with error {}", result);
+        UNREACHABLE();
+    }
+
+    vk::Image staging_image{unsafe_image};
+
+    renderpass_cache.ExitRenderpass();
+    scheduler.Record([width, height, swapchain_image = swapchain.Image(),
+                      staging_image](vk::CommandBuffer cmdbuf) {
+        const std::array read_barriers = {
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
+                .dstAccessMask = vk::AccessFlagBits::eTransferRead,
+                .oldLayout = vk::ImageLayout::ePresentSrcKHR,
+                .newLayout = vk::ImageLayout::eTransferSrcOptimal,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = swapchain_image,
+                .subresourceRange{
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            },
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eNone,
+                .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+                .oldLayout = vk::ImageLayout::eUndefined,
+                .newLayout = vk::ImageLayout::eTransferDstOptimal,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = staging_image,
+                .subresourceRange{
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            },
+        };
+        const std::array write_barriers = {
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eTransferRead,
+                .dstAccessMask = vk::AccessFlagBits::eMemoryWrite,
+                .oldLayout = vk::ImageLayout::eTransferSrcOptimal,
+                .newLayout = vk::ImageLayout::ePresentSrcKHR,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = swapchain_image,
+                .subresourceRange{
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            },
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+                .dstAccessMask = vk::AccessFlagBits::eMemoryRead,
+                .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+                .newLayout = vk::ImageLayout::eGeneral,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = staging_image,
+                .subresourceRange{
+                    .aspectMask = vk::ImageAspectFlagBits::eColor,
+                    .baseMipLevel = 0,
+                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                },
+            },
+        };
+
+        const std::array offsets = {
+            vk::Offset3D{0, 0, 0},
+            vk::Offset3D{static_cast<s32>(width), static_cast<s32>(height), 1},
+        };
+
+        const vk::ImageBlit blit_area = {
+            .srcSubresource{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .srcOffsets = offsets,
+            .dstSubresource{
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .dstOffsets = offsets,
+        };
+
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+                               vk::PipelineStageFlagBits::eTransfer,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, read_barriers);
+        cmdbuf.blitImage(swapchain_image, vk::ImageLayout::eTransferSrcOptimal, staging_image,
+                         vk::ImageLayout::eTransferDstOptimal, blit_area, vk::Filter::eNearest);
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                               vk::PipelineStageFlagBits::eAllCommands,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, write_barriers);
+    });
+
+    // Ensure the copy is fully completed before saving the screenshot
+    scheduler.Finish();
+
+    const vk::Device device = instance.GetDevice();
+
+    // Get layout of the image (including row pitch)
+    const vk::ImageSubresource subresource = {
+        .aspectMask = vk::ImageAspectFlagBits::eColor,
+        .mipLevel = 0,
+        .arrayLayer = 0,
+    };
+
+    const vk::SubresourceLayout subresource_layout =
+        device.getImageSubresourceLayout(staging_image, subresource);
+
+    // Map image memory so we can start copying from it
+    const u8* data = reinterpret_cast<const u8*>(alloc_info.pMappedData);
+    std::memcpy(VideoCore::g_screenshot_bits, data + subresource_layout.offset,
+                subresource_layout.size);
+
+    // Destroy staging image
+    vmaDestroyImage(instance.GetAllocator(), unsafe_image, allocation);
+
+    VideoCore::g_screenshot_complete_callback();
+    VideoCore::g_renderer_screenshot_requested = false;
 }
 
 void RendererVulkan::NotifySurfaceChanged() {
