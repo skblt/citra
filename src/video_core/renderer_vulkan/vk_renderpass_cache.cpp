@@ -93,16 +93,16 @@ void RenderpassCache::EnterRenderpass(const RenderpassState& state) {
     }
 
     scheduler.Record([state](vk::CommandBuffer cmdbuf) {
-            const vk::RenderPassBeginInfo renderpass_begin_info = {
-                .renderPass = state.renderpass,
-                .framebuffer = state.framebuffer,
-                .renderArea = state.render_area,
-                .clearValueCount = 1,
-                .pClearValues = &state.clear,
-            };
+        const vk::RenderPassBeginInfo renderpass_begin_info = {
+            .renderPass = state.renderpass,
+            .framebuffer = state.framebuffer,
+            .renderArea = state.render_area,
+            .clearValueCount = 1,
+            .pClearValues = &state.clear,
+        };
 
-            cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
-        });
+        cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
+    });
 
     if (is_dirty) {
         scheduler.MarkStateNonDirty(StateFlags::Renderpass);

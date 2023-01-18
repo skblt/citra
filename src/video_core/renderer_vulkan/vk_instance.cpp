@@ -515,11 +515,22 @@ bool Instance::CreateDevice() {
             },
         },
         feature_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>(),
-        feature_chain.get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>(),
-        feature_chain.get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>(),
-        feature_chain.get<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>(),
-        feature_chain.get<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>(),
-        feature_chain.get<vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT>(),
+        vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR{
+            .timelineSemaphore = true,
+        },
+        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT{
+            .extendedDynamicState = true,
+        },
+        vk::PhysicalDeviceCustomBorderColorFeaturesEXT{
+            .customBorderColors = true,
+            .customBorderColorWithoutFormat = true,
+        },
+        vk::PhysicalDeviceIndexTypeUint8FeaturesEXT{
+            .indexTypeUint8 = true,
+        },
+        vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT{
+            .pipelineCreationCacheControl = true,
+        },
     };
 
     if (portability_subset) {
