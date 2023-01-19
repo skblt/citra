@@ -488,8 +488,9 @@ bool Instance::CreateDevice() {
     };
 
     AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    // According to the Vulkan spec, VK_KHR_portability_subset must be added if supported.
+#ifdef __APPLE__
     bool portability_subset = AddExtension(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+#endif
     timeline_semaphores = AddExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
@@ -572,7 +573,9 @@ bool Instance::CreateDevice() {
                 .shaderClipDistance = features.shaderClipDistance,
             },
         },
+#ifdef __APPLE__
         feature_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>(),
+#endif
         vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR{
             .timelineSemaphore = true,
         },
@@ -591,6 +594,7 @@ bool Instance::CreateDevice() {
         },
     };
 
+#ifdef __APPLE__
     if (portability_subset) {
         const vk::PhysicalDevicePortabilitySubsetFeaturesKHR portability_features =
             feature_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
@@ -605,6 +609,7 @@ bool Instance::CreateDevice() {
     } else {
         device_chain.unlink<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
     }
+#endif
 
     if (!index_type_uint8) {
         device_chain.unlink<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>();
