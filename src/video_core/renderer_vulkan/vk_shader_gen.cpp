@@ -47,7 +47,9 @@ static std::string GetVertexInterfaceDeclaration(bool is_output) {
         out += R"(
 out gl_PerVertex {
     vec4 gl_Position;
+#if defined(GL_EXT_clip_cull_distance)
     float gl_ClipDistance[2];
+#endif
 };
 )";
     }
@@ -1587,12 +1589,14 @@ void main() {
     gl_Position = vert_position;
     gl_Position.z = (gl_Position.z + gl_Position.w) / 2.0;
 
+#if defined(GL_EXT_clip_cull_distance)
     gl_ClipDistance[0] = -vert_position.z; // fixed PICA clipping plane z <= 0
     if (enable_clip1) {
         gl_ClipDistance[1] = dot(clip_coef, vert_position);
     } else {
         gl_ClipDistance[1] = 0;
     }
+#endif
 }
 )";
 

@@ -561,15 +561,12 @@ bool Instance::CreateDevice() {
         },
         vk::PhysicalDeviceFeatures2{
             .features{
-                .robustBufferAccess = features.robustBufferAccess,
                 .geometryShader = features.geometryShader,
-                .dualSrcBlend = features.dualSrcBlend,
                 .logicOp = features.logicOp,
                 .depthClamp = features.depthClamp,
                 .largePoints = features.largePoints,
                 .samplerAnisotropy = features.samplerAnisotropy,
                 .fragmentStoresAndAtomics = features.fragmentStoresAndAtomics,
-                .shaderStorageImageMultisample = features.shaderStorageImageMultisample,
                 .shaderClipDistance = features.shaderClipDistance,
             },
         },
