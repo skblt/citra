@@ -1,8 +1,10 @@
 package org.citra.citra_emu.fragments;
 
+import android.app.Application;
 import android.content.Context;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.preference.PreferenceManager;
@@ -21,6 +23,7 @@ import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import org.citra.citra_emu.CitraApplication;
 import org.citra.citra_emu.NativeLibrary;
 import org.citra.citra_emu.R;
 import org.citra.citra_emu.activities.EmulationActivity;
@@ -354,6 +357,10 @@ public final class EmulationFragment extends Fragment implements SurfaceHolder.C
             mRunWhenSurfaceIsValid = false;
             if (state == State.STOPPED) {
                 NativeLibrary.SurfaceChanged(mSurface);
+
+                Context applicationContext = CitraApplication.getAppContext();
+                ApplicationInfo applicationInfo = CitraApplication.getAppInfo();
+                NativeLibrary.SetPaths(applicationInfo.nativeLibraryDir + "/", applicationContext.getExternalFilesDir(null) + "/", applicationContext.getFilesDir() + "/");
                 Thread mEmulationThread = new Thread(() ->
                 {
                     Log.debug("[EmulationFragment] Starting emulation thread.");

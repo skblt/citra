@@ -11,6 +11,10 @@
 
 #include <vk_mem_alloc.h>
 
+#ifdef ANDROID
+#include <adrenotools/driver.h>
+#endif
+
 namespace Vulkan {
 
 vk::DynamicLoader Instance::dl;
@@ -152,15 +156,42 @@ Instance::Instance(bool validation, bool dump_command_buffers)
     physical_devices = instance.enumeratePhysicalDevices();
 }
 
+std::string native_library_path;
+std::string public_app_files_path;
+std::string private_app_files_path;
+
 Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
     : enable_validation{Settings::values.renderer_debug},
       dump_command_buffers{Settings::values.dump_command_buffers} {
     const Frontend::EmuWindow::WindowSystemInfo window_info = window.GetWindowInfo();
 
     // Fetch instance independant function pointers
+#ifdef ANDROID
+    const std::string gpu_driver = "vulkan.mali.so";
+    void* libvulkanHandle = adrenotools_open_libvulkan(RTLD_NOW | RTLD_LOCAL,
+                                                       ADRENOTOOLS_DRIVER_FILE_REDIRECT | ADRENOTOOLS_DRIVER_CUSTOM,
+                                                       nullptr,
+                                                       native_library_path.c_str(),
+                                                       (private_app_files_path + "gpu_drivers/").c_str(),
+                                                       gpu_driver.c_str(),
+                                                       (public_app_files_path + "gpu/vk_file_redirect/").c_str(),
+                                                       nullptr);
+    LOG_ERROR(Render_Vulkan, "Native library path {}", native_library_path);
+    LOG_ERROR(Render_Vulkan, "Private app files path {}", private_app_files_path);
+    LOG_ERROR(Render_Vulkan, "Public app files path {}", public_app_files_path);
+    if (!libvulkanHandle) {
+        LOG_ERROR(Render_Vulkan, "Could not load vulkan library : {}", dlerror());
+        return;
+    }
+    auto vkGetInstanceProcAddr =
+        reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(libvulkanHandle, "vkGetInstanceProcAddr"));
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
+    LOG_INFO(Render_Vulkan, "Loading custom driver entry point {}", fmt::ptr(vkGetInstanceProcAddr));
+#else
     auto vkGetInstanceProcAddr =
         dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
     VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
+#endif
 
     // Enable the instance extensions the backend uses
     const std::vector extensions = GetInstanceExtensions(window_info.type, enable_validation);
@@ -515,9 +546,9 @@ bool Instance::CreateDevice() {
             },
         },
         feature_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>(),
-        vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR{
-            .timelineSemaphore = true,
-        },
+        //vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR{
+        //    .timelineSemaphore = true,
+        //},
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT{
             .extendedDynamicState = true,
         },

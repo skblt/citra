@@ -100,6 +100,11 @@ JNIEXPORT void JNICALL Java_org_citra_citra_1emu_NativeLibrary_SwapScreens(JNIEn
                                                                            jboolean swap_screens,
                                                                            jint rotation);
 
+JNIEXPORT void JNICALL Java_org_citra_citra_1emu_NativeLibrary_SetPaths(JNIEnv* env, jclass clazz,
+                                                                        jstring j_native_library_path,
+                                                                        jstring j_public_app_files_path,
+                                                                        jstring j_private_app_files_path);
+
 JNIEXPORT void JNICALL Java_org_citra_citra_1emu_NativeLibrary_Run__Ljava_lang_String_2(
     JNIEnv* env, jclass clazz, jstring j_path);
 

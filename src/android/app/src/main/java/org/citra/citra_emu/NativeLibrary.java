@@ -164,6 +164,8 @@ public final class NativeLibrary {
 
     public static native int DefaultCPUCore();
 
+    public static native void SetPaths(String nativeLibraryPath, String publicAppFilesPath, String privateAppFilesPath);
+
     /**
      * Begins emulation.
      */

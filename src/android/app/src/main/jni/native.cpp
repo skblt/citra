@@ -45,6 +45,12 @@
 #include "video_core/renderer_base.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
 
+namespace Vulkan {
+    extern std::string native_library_path;
+    extern std::string public_app_files_path;
+    extern std::string private_app_files_path;
+}
+
 namespace {
 
 ANativeWindow* s_surf;
@@ -595,6 +601,15 @@ void Java_org_citra_citra_1emu_utils_DirectoryInitialization_SetSysDirectory(
     std::string_view path = env->GetStringUTFChars(j_path, 0);
 
     env->ReleaseStringUTFChars(j_path, path.data());
+}
+
+void Java_org_citra_citra_1emu_NativeLibrary_SetPaths(JNIEnv* env, jclass clazz,
+                                                      jstring j_native_library_path,
+                                                      jstring j_public_app_files_path,
+                                                      jstring j_private_app_files_path) {
+    Vulkan::native_library_path = GetJString(env, j_native_library_path);
+    Vulkan::public_app_files_path = GetJString(env, j_public_app_files_path);
+    Vulkan::private_app_files_path = GetJString(env, j_private_app_files_path);
 }
 
 void Java_org_citra_citra_1emu_NativeLibrary_Run__Ljava_lang_String_2(JNIEnv* env,

@@ -176,3 +176,5 @@ target_include_directories(vma INTERFACE ./vma)
 add_library(vulkan-headers INTERFACE)
 target_include_directories(vulkan-headers INTERFACE ./vulkan-headers/include)
 
+# libadrenotools
+add_subdirectory(adrenotools)

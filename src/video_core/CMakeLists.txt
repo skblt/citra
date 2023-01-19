@@ -183,6 +183,10 @@ target_include_directories(video_core PRIVATE ${HOST_SHADERS_INCLUDE})
 target_link_libraries(video_core PRIVATE vulkan-headers vma sirit SPIRV glslang glad)
 target_link_libraries(video_core PRIVATE nihstro-headers Boost::serialization glm::glm)
 
+if (ANDROID)
+    target_link_libraries(video_core PRIVATE adrenotools)
+endif()
+
 if (ARCHITECTURE_x86_64)
     target_link_libraries(video_core PUBLIC xbyak)
 endif()

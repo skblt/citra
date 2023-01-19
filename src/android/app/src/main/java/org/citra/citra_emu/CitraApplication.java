@@ -8,6 +8,7 @@ import android.app.Application;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
+import android.content.pm.ApplicationInfo;
 import android.os.Build;
 
 import org.citra.citra_emu.model.GameDatabase;
@@ -52,5 +53,9 @@ public class CitraApplication extends Application {
 
     public static Context getAppContext() {
         return application.getApplicationContext();
+    }
+
+    public static ApplicationInfo getAppInfo() {
+        return application.getApplicationInfo();
     }
 }
