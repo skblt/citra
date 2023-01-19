@@ -20,25 +20,10 @@ Swapchain::Swapchain(const Instance& instance, Scheduler& scheduler,
     FindPresentFormat();
     SetPresentMode();
     renderpass_cache.CreatePresentRenderpass(surface_format.format);
-
-    vk::Device device = instance.GetDevice();
-    for (u32 i = 0; i < PREFERRED_IMAGE_COUNT; i++) {
-        image_acquired.push_back(device.createSemaphore({}));
-        present_ready.push_back(device.createSemaphore({}));
-    }
 }
 
 Swapchain::~Swapchain() {
     Destroy();
-
-    vk::Device device = instance.GetDevice();
-    for (const vk::Semaphore semaphore : image_acquired) {
-        device.destroySemaphore(semaphore);
-    }
-    for (const vk::Semaphore semaphore : present_ready) {
-        device.destroySemaphore(semaphore);
-    }
-
     instance.GetInstance().destroySurfaceKHR(surface);
 }
 
@@ -88,6 +73,7 @@ void Swapchain::Create(vk::SurfaceKHR new_surface) {
         UNREACHABLE();
     }
 
+    RefreshSemaphores();
     SetupImages();
     resource_ticks.clear();
     resource_ticks.resize(image_count);
@@ -213,10 +199,9 @@ void Swapchain::SetSurfaceProperties() {
     LOG_INFO(Render_Vulkan, "Creating {}x{} surface", extent.width, extent.height);
 
     // Select number of images in swap chain, we prefer one buffer in the background to work on
-    image_count = PREFERRED_IMAGE_COUNT;
+    image_count = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount > 0) {
-        image_count = std::clamp(PREFERRED_IMAGE_COUNT, capabilities.minImageCount + 1,
-                                 capabilities.maxImageCount);
+        image_count = std::min(image_count, capabilities.maxImageCount);
     }
 
     LOG_INFO(Render_Vulkan, "Using {} images", image_count);
@@ -245,9 +230,30 @@ void Swapchain::Destroy() {
     for (const vk::Framebuffer framebuffer : framebuffers) {
         device.destroyFramebuffer(framebuffer);
     }
+    for (const vk::Semaphore semaphore : image_acquired) {
+        device.destroySemaphore(semaphore);
+    }
+    for (const vk::Semaphore semaphore : present_ready) {
+        device.destroySemaphore(semaphore);
+    }
 
     framebuffers.clear();
     image_views.clear();
+    image_acquired.clear();
+    present_ready.clear();
+}
+
+void Swapchain::RefreshSemaphores() {
+    const vk::Device device = instance.GetDevice();
+    image_acquired.resize(image_count);
+    present_ready.resize(image_count);
+
+    for (vk::Semaphore& semaphore : image_acquired) {
+        semaphore = device.createSemaphore({});
+    }
+    for (vk::Semaphore& semaphore : present_ready) {
+        semaphore = device.createSemaphore({});
+    }
 }
 
 void Swapchain::SetupImages() {

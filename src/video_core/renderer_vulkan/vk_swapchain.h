@@ -15,8 +15,6 @@ class Scheduler;
 class RenderpassCache;
 
 class Swapchain {
-    static constexpr u32 PREFERRED_IMAGE_COUNT = 3;
-
 public:
     Swapchain(const Instance& instance, Scheduler& scheduler, RenderpassCache& renderpass_cache);
     ~Swapchain();
@@ -88,6 +86,9 @@ private:
 
     /// Performs creation of image views and framebuffers from the swapchain images
     void SetupImages();
+
+    /// Creates the image acquired and present ready semaphores
+    void RefreshSemaphores();
 
 private:
     const Instance& instance;
