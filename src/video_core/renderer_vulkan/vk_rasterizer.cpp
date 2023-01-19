@@ -461,6 +461,7 @@ void RasterizerVulkan::DrawTriangles() {
 
 MICROPROFILE_DEFINE(Vulkan_Drawing, "Vulkan", "Drawing", MP_RGB(128, 128, 192));
 bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
+    MICROPROFILE_SCOPE(Vulkan_Drawing);
     const auto& regs = Pica::g_state.regs;
 
     const bool shadow_rendering = regs.framebuffer.IsShadowRendering();
@@ -674,32 +675,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     // NOTE: From here onwards its a safe zone to set the draw state, doing that any earlier will
     // cause issues as the rasterizer cache might cause a scheduler switch and invalidate our state
 
-    // Sync the viewport
-    pipeline_cache.SetViewport(surfaces_rect.left + viewport_rect_unscaled.left * res_scale,
-                               surfaces_rect.bottom + viewport_rect_unscaled.bottom * res_scale,
-                               viewport_rect_unscaled.GetWidth() * res_scale,
-                               viewport_rect_unscaled.GetHeight() * res_scale);
-
-    MICROPROFILE_SCOPE(Vulkan_Drawing);
-
-    // Sync and bind the shader
-    if (shader_dirty) {
-        pipeline_cache.UseFragmentShader(regs);
-        shader_dirty = false;
-    }
-
-    // Sync the LUTs within the texture buffer
-    SyncAndUploadLUTs();
-    SyncAndUploadLUTsLF();
-
-    // Sync the uniform data
-    UploadUniforms(accelerate);
-
-    // Viewport can have negative offsets or larger dimensions than our framebuffer sub-rect.
-    // Enable scissor test to prevent drawing outside of the framebuffer region
-    pipeline_cache.SetScissor(draw_rect.left, draw_rect.bottom, draw_rect.GetWidth(),
-                              draw_rect.GetHeight());
-
     // Sometimes the dimentions of the color and depth framebuffers might not be the same
     // In that case select the minimum one to abide by the spec
     u32 width = 0;
@@ -741,6 +716,30 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     };
 
     renderpass_cache.EnterRenderpass(renderpass_info);
+
+    // Sync and bind the shader
+    if (shader_dirty) {
+        pipeline_cache.UseFragmentShader(regs);
+        shader_dirty = false;
+    }
+
+    // Sync the LUTs within the texture buffer
+    SyncAndUploadLUTs();
+    SyncAndUploadLUTsLF();
+
+    // Sync the uniform data
+    UploadUniforms(accelerate);
+
+    // Sync the viewport
+    pipeline_cache.SetViewport(surfaces_rect.left + viewport_rect_unscaled.left * res_scale,
+                               surfaces_rect.bottom + viewport_rect_unscaled.bottom * res_scale,
+                               viewport_rect_unscaled.GetWidth() * res_scale,
+                               viewport_rect_unscaled.GetHeight() * res_scale);
+
+    // Viewport can have negative offsets or larger dimensions than our framebuffer sub-rect.
+    // Enable scissor test to prevent drawing outside of the framebuffer region
+    pipeline_cache.SetScissor(draw_rect.left, draw_rect.bottom, draw_rect.GetWidth(),
+                              draw_rect.GetHeight());
 
     // Draw the vertex batch
     bool succeeded = true;

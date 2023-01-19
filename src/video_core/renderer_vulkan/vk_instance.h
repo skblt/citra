@@ -240,6 +240,7 @@ private:
     vk::PhysicalDeviceLimits limits;
     vk::DriverIdKHR driver_id;
     vk::DebugUtilsMessengerEXT debug_messenger;
+    vk::DebugReportCallbackEXT callback;
     std::string vendor_name;
     VmaAllocator allocator;
     vk::Queue present_queue;

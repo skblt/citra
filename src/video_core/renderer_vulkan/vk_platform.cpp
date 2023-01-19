@@ -141,6 +141,7 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
 
     if (enable_debug_utils) {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
     }
 
     // Sanitize extension list
@@ -151,8 +152,7 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
             });
 
         if (it == properties.end()) {
-            LOG_WARNING(Render_Vulkan, "Required instance extension {} is not available",
-                        extension);
+            LOG_INFO(Render_Vulkan, "Candidate instance extension {} is not available", extension);
             return true;
         }
         return false;

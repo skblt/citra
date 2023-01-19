@@ -15,9 +15,9 @@ namespace Vulkan {
 
 vk::DynamicLoader Instance::dl;
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL
-DebugHandler(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
-             const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data) {
+static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data) {
 
     switch (callback_data->messageIdNumber) {
     case 0x609a13b: // Vertex attribute at location not consumed by shader
@@ -45,6 +45,39 @@ DebugHandler(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessag
     LOG_GENERIC(Log::Class::Render_Vulkan, level, "{}: {}",
                 callback_data->pMessageIdName ? callback_data->pMessageIdName : "<null>",
                 callback_data->pMessage ? callback_data->pMessage : "<null>");
+
+    return VK_FALSE;
+}
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(VkDebugReportFlagsEXT flags,
+                                                          VkDebugReportObjectTypeEXT objectType,
+                                                          uint64_t object, size_t location,
+                                                          int32_t messageCode,
+                                                          const char* pLayerPrefix,
+                                                          const char* pMessage, void* pUserData) {
+
+    const VkDebugReportFlagBitsEXT severity = static_cast<VkDebugReportFlagBitsEXT>(flags);
+    Log::Level level{};
+    switch (severity) {
+    case VK_DEBUG_REPORT_ERROR_BIT_EXT:
+        level = Log::Level::Error;
+        break;
+    case VK_DEBUG_REPORT_INFORMATION_BIT_EXT:
+        level = Log::Level::Warning;
+        break;
+    case VK_DEBUG_REPORT_DEBUG_BIT_EXT:
+    case VK_DEBUG_REPORT_WARNING_BIT_EXT:
+    case VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT:
+        level = Log::Level::Debug;
+        break;
+    default:
+        level = Log::Level::Info;
+    }
+
+    const vk::DebugReportObjectTypeEXT type = static_cast<vk::DebugReportObjectTypeEXT>(objectType);
+    LOG_GENERIC(Log::Class::Render_Vulkan, level,
+                "type = {}, object = {} | MessageCode = {:#x}, LayerPrefix = {} | {}",
+                vk::to_string(type), object, messageCode, pLayerPrefix, pMessage);
 
     return VK_FALSE;
 }
@@ -86,7 +119,17 @@ vk::Format ToVkFormat(VideoCore::PixelFormat format) {
                        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
                        vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding |
                        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
-        .pfnUserCallback = DebugHandler,
+        .pfnUserCallback = DebugUtilsCallback,
+    };
+}
+
+[[nodiscard]] vk::DebugReportCallbackCreateInfoEXT MakeDebugReportCallbackInfo() {
+    return vk::DebugReportCallbackCreateInfoEXT{
+        .flags = vk::DebugReportFlagBitsEXT::eDebug | vk::DebugReportFlagBitsEXT::eInformation |
+                 vk::DebugReportFlagBitsEXT::eError |
+                 vk::DebugReportFlagBitsEXT::ePerformanceWarning |
+                 vk::DebugReportFlagBitsEXT::eWarning,
+        .pfnCallback = DebugReportCallback,
     };
 }
 
@@ -207,6 +250,24 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
         MakeDebugUtilsMessengerInfo(),
     };
 
+    const auto IsSupported = [&extensions](std::string_view requested) {
+        const auto it =
+            std::find_if(extensions.begin(), extensions.end(),
+                         [requested](const char* extension) { return requested == extension; });
+
+        return it != extensions.end();
+    };
+
+    bool debug_messenger_supported{};
+    bool debug_report_supported{};
+    if (enable_validation) {
+        debug_messenger_supported = IsSupported(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        debug_report_supported = IsSupported(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+        if (!debug_messenger_supported) {
+            instance_chain.unlink<vk::DebugUtilsMessengerCreateInfoEXT>();
+        }
+    }
+
     try {
         instance = vk::createInstance(instance_chain.get());
     } catch (vk::LayerNotPresentError& err) {
@@ -219,16 +280,10 @@ Instance::Instance(Frontend::EmuWindow& window, u32 physical_device_index)
 
     // If validation is enabled attempt to also enable debug messenger
     if (enable_validation) {
-        const auto it =
-            std::find_if(extensions.begin(), extensions.end(), [](const char* extension) {
-                return std::strcmp(extension, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0;
-            });
-
-        const bool debug_messenger_supported = it != extensions.end();
         if (debug_messenger_supported) {
             debug_messenger = instance.createDebugUtilsMessengerEXT(MakeDebugUtilsMessengerInfo());
-        } else {
-            instance_chain.unlink<vk::DebugUtilsMessengerCreateInfoEXT>();
+        } else if (debug_report_supported) {
+            callback = instance.createDebugReportCallbackEXT(MakeDebugReportCallbackInfo());
         }
     }
 
@@ -261,6 +316,9 @@ Instance::~Instance() {
 
         if (debug_messenger) {
             instance.destroyDebugUtilsMessengerEXT(debug_messenger);
+        }
+        if (callback) {
+            instance.destroyDebugReportCallbackEXT(callback);
         }
     }
 
