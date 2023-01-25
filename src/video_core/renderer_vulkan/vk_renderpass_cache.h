@@ -43,7 +43,7 @@ public:
 
     /// Returns the renderpass associated with the color-depth format pair
     [[nodiscard]] vk::RenderPass GetRenderpass(VideoCore::PixelFormat color,
-                                               VideoCore::PixelFormat depth, bool is_clear) const;
+                                               VideoCore::PixelFormat depth, bool is_clear);
 
     /// Returns the swapchain clear renderpass
     [[nodiscard]] vk::RenderPass GetPresentRenderpass() const {
