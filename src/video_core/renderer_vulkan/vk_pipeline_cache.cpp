@@ -617,11 +617,8 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info, bool is_dirty) {
         return;
     }
 
-    scheduler.Record([this, is_dirty, current_dynamic = current_info.dynamic,
-                      current_rasterization = current_info.rasterization,
-                      current_depth_stencil = current_info.depth_stencil, dynamic = info.dynamic,
-                      rasterization = info.rasterization,
-                      depth_stencil = info.depth_stencil](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([is_dirty, current_dynamic = current_info.dynamic,
+                      dynamic = info.dynamic](vk::CommandBuffer cmdbuf) {
         if (dynamic.stencil_compare_mask != current_dynamic.stencil_compare_mask || is_dirty) {
             cmdbuf.setStencilCompareMask(vk::StencilFaceFlagBits::eFrontAndBack,
                                          dynamic.stencil_compare_mask);
@@ -641,8 +638,13 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info, bool is_dirty) {
             const Common::Vec4f color = PicaToVK::ColorRGBA8(dynamic.blend_color);
             cmdbuf.setBlendConstants(color.AsArray());
         }
+    });
 
-        if (instance.IsExtendedDynamicStateSupported()) {
+    if (instance.IsExtendedDynamicStateSupported()) {
+        scheduler.Record([is_dirty, current_rasterization = current_info.rasterization,
+                          current_depth_stencil = current_info.depth_stencil,
+                          rasterization = info.rasterization,
+                          depth_stencil = info.depth_stencil](vk::CommandBuffer cmdbuf) {
             if (rasterization.cull_mode != current_rasterization.cull_mode || is_dirty) {
                 cmdbuf.setCullModeEXT(PicaToVK::CullMode(rasterization.cull_mode));
                 cmdbuf.setFrontFaceEXT(PicaToVK::FrontFace(rasterization.cull_mode));
@@ -684,8 +686,8 @@ void PipelineCache::ApplyDynamic(const PipelineInfo& info, bool is_dirty) {
                                        PicaToVK::StencilOp(depth_stencil.stencil_depth_fail_op),
                                        PicaToVK::CompareFunc(depth_stencil.stencil_compare_op));
             }
-        }
-    });
+        });
+    }
 
     current_info = info;
 }

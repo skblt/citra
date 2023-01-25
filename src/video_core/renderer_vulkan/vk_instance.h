@@ -121,6 +121,33 @@ public:
         return extended_dynamic_state;
     }
 
+    /// Returns true when VK_EXT_extended_dynamic_state2 is supported
+    bool IsExtendedDynamicState2Supported() const {
+        return extended_dynamic_state2;
+    }
+
+    /// Returns true when the logicOpEnable feature of VK_EXT_extended_dynamic_state3 is supported
+    bool IsExtendedDynamicState3LogicOpSupported() const {
+        return extended_dynamic_state3_logicop_enable;
+    }
+
+    /// Returns true when the colorBlendEnable feature of VK_EXT_extended_dynamic_state3 is
+    /// supported
+    bool IsExtendedDynamicState3BlendEnableSupported() const {
+        return extended_dynamic_state3_color_blend_enable;
+    }
+
+    /// Returns true when the colorBlendEquation feature of VK_EXT_extended_dynamic_state3 is
+    /// supported
+    bool IsExtendedDynamicState3BlendEqSupported() const {
+        return extended_dynamic_state3_color_blend_eq;
+    }
+
+    /// Returns true when the colorWriteMask feature of VK_EXT_extended_dynamic_state3 is supported
+    bool IsExtendedDynamicState3ColorMaskSupported() const {
+        return extended_dynamic_state3_color_write_mask;
+    }
+
     /// Returns true when VK_KHR_push_descriptors is supported
     bool IsPushDescriptorsSupported() const {
         return push_descriptors;
@@ -262,6 +289,11 @@ private:
     u32 min_vertex_stride_alignment{1};
     bool timeline_semaphores{};
     bool extended_dynamic_state{};
+    bool extended_dynamic_state2{};
+    bool extended_dynamic_state3_logicop_enable{};
+    bool extended_dynamic_state3_color_blend_enable{};
+    bool extended_dynamic_state3_color_blend_eq{};
+    bool extended_dynamic_state3_color_write_mask{};
     bool push_descriptors{};
     bool custom_border_color{};
     bool index_type_uint8{};

@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <span>
+#include <boost/container/small_vector.hpp>
 #include "common/assert.h"
 #include "common/settings.h"
 #include "core/frontend/emu_window.h"
@@ -525,9 +526,14 @@ bool Instance::CreateDevice() {
     const vk::StructureChain feature_chain = physical_device.getFeatures2<
         vk::PhysicalDeviceFeatures2, vk::PhysicalDevicePortabilitySubsetFeaturesKHR,
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+        vk::PhysicalDeviceExtendedDynamicState2FeaturesEXT,
+        vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT,
         vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR,
         vk::PhysicalDeviceCustomBorderColorFeaturesEXT, vk::PhysicalDeviceIndexTypeUint8FeaturesEXT,
         vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT>();
+    const vk::StructureChain properties_chain =
+        physical_device.getProperties2<vk::PhysicalDeviceProperties2,
+                                       vk::PhysicalDevicePortabilitySubsetPropertiesKHR>();
 
     // Not having geometry shaders will cause issues with accelerated rendering.
     features = feature_chain.get().features;
@@ -542,17 +548,14 @@ bool Instance::CreateDevice() {
         return false;
     }
 
-    // Helper lambda for adding extensions
-    std::array<const char*, 10> enabled_extensions;
-    u32 enabled_extension_count = 0;
-
-    auto AddExtension = [&](std::string_view extension) -> bool {
+    boost::container::small_vector<const char*, 12> enabled_extensions;
+    const auto AddExtension = [&](std::string_view extension) -> bool {
         auto result = std::find_if(available_extensions.begin(), available_extensions.end(),
                                    [&](const std::string& name) { return name == extension; });
 
         if (result != available_extensions.end()) {
             LOG_INFO(Render_Vulkan, "Enabling extension: {}", extension);
-            enabled_extensions[enabled_extension_count++] = extension.data();
+            enabled_extensions.push_back(extension.data());
             return true;
         }
 
@@ -561,16 +564,15 @@ bool Instance::CreateDevice() {
     };
 
     AddExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-#ifdef __APPLE__
-    bool portability_subset = AddExtension(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
-#endif
     timeline_semaphores = AddExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
-    extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-    push_descriptors = AddExtension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    custom_border_color = AddExtension(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
-    index_type_uint8 = AddExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME);
     image_format_list = AddExtension(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
-    pipeline_creation_cache_control =
+    bool has_portability_subset = AddExtension(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+    bool has_extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
+    bool has_extended_dynamic_state2 = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
+    bool has_extended_dynamic_state3 = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+    bool has_custom_border_color = AddExtension(VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
+    bool has_index_type_uint8 = AddExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME);
+    bool has_pipeline_creation_cache_control =
         AddExtension(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME);
 
     // Search queue families for graphics and present queues
@@ -629,7 +631,7 @@ bool Instance::CreateDevice() {
         vk::DeviceCreateInfo{
             .queueCreateInfoCount = queue_count,
             .pQueueCreateInfos = queue_infos.data(),
-            .enabledExtensionCount = enabled_extension_count,
+            .enabledExtensionCount = static_cast<u32>(enabled_extensions.size()),
             .ppEnabledExtensionNames = enabled_extensions.data(),
         },
         vk::PhysicalDeviceFeatures2{
@@ -643,59 +645,92 @@ bool Instance::CreateDevice() {
                 .shaderClipDistance = features.shaderClipDistance,
             },
         },
-#ifdef __APPLE__
-        feature_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>(),
-#endif
+        vk::PhysicalDevicePortabilitySubsetFeaturesKHR{},
+#ifndef ANDROID ///< Android uses the extension layer. Avoid enabling the feature because it messes
+                ///< with the pNext chain
         vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR{
             .timelineSemaphore = true,
         },
-        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT{
-            .extendedDynamicState = true,
-        },
-        vk::PhysicalDeviceCustomBorderColorFeaturesEXT{
-            .customBorderColors = true,
-            .customBorderColorWithoutFormat = true,
-        },
-        vk::PhysicalDeviceIndexTypeUint8FeaturesEXT{
-            .indexTypeUint8 = true,
-        },
-        vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT{
-            .pipelineCreationCacheControl = true,
-        },
+#endif
+        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT{},
+        vk::PhysicalDeviceExtendedDynamicState2FeaturesEXT{},
+        vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT{},
+        vk::PhysicalDeviceCustomBorderColorFeaturesEXT{},
+        vk::PhysicalDeviceIndexTypeUint8FeaturesEXT{},
+        vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT{},
     };
 
-#ifdef __APPLE__
-    if (portability_subset) {
-        const vk::PhysicalDevicePortabilitySubsetFeaturesKHR portability_features =
-            feature_chain.get<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
-        triangle_fan_supported = portability_features.triangleFans;
+#define PROP_GET(structName, prop, property) property = properties_chain.get<structName>().prop;
 
-        const vk::StructureChain portability_properties_chain =
-            physical_device.getProperties2<vk::PhysicalDeviceProperties2,
-                                           vk::PhysicalDevicePortabilitySubsetPropertiesKHR>();
-        const vk::PhysicalDevicePortabilitySubsetPropertiesKHR portability_properties =
-            portability_properties_chain.get<vk::PhysicalDevicePortabilitySubsetPropertiesKHR>();
-        min_vertex_stride_alignment = portability_properties.minVertexInputBindingStrideAlignment;
+#define FEAT_SET(structName, feature, property)                                                    \
+    if (feature_chain.get<structName>().feature) {                                                 \
+        property = true;                                                                           \
+        device_chain.get<structName>().feature = true;                                             \
+    } else {                                                                                       \
+        property = false;                                                                          \
+        device_chain.get<structName>().feature = false;                                            \
+    }
+
+    if (has_portability_subset) {
+        FEAT_SET(vk::PhysicalDevicePortabilitySubsetFeaturesKHR, triangleFans,
+                 triangle_fan_supported)
+        PROP_GET(vk::PhysicalDevicePortabilitySubsetPropertiesKHR,
+                 minVertexInputBindingStrideAlignment, min_vertex_stride_alignment)
     } else {
         device_chain.unlink<vk::PhysicalDevicePortabilitySubsetFeaturesKHR>();
     }
-#endif
 
-    if (!index_type_uint8) {
+    if (has_index_type_uint8) {
+        FEAT_SET(vk::PhysicalDeviceIndexTypeUint8FeaturesEXT, indexTypeUint8, index_type_uint8)
+    } else {
         device_chain.unlink<vk::PhysicalDeviceIndexTypeUint8FeaturesEXT>();
     }
 
-    if (!extended_dynamic_state) {
+    if (has_extended_dynamic_state) {
+        FEAT_SET(vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT, extendedDynamicState,
+                 extended_dynamic_state)
+    } else {
         device_chain.unlink<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
     }
 
-    if (!custom_border_color) {
+    if (has_extended_dynamic_state2) {
+        FEAT_SET(vk::PhysicalDeviceExtendedDynamicState2FeaturesEXT, extendedDynamicState2LogicOp,
+                 extended_dynamic_state2)
+    } else {
+        device_chain.unlink<vk::PhysicalDeviceExtendedDynamicState2FeaturesEXT>();
+    }
+
+    if (has_extended_dynamic_state3) {
+        FEAT_SET(vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT,
+                 extendedDynamicState3LogicOpEnable, extended_dynamic_state3_logicop_enable)
+        FEAT_SET(vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT,
+                 extendedDynamicState3ColorBlendEnable, extended_dynamic_state3_color_blend_enable)
+        FEAT_SET(vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT,
+                 extendedDynamicState3ColorBlendEquation, extended_dynamic_state3_color_blend_eq)
+        FEAT_SET(vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT,
+                 extendedDynamicState3ColorWriteMask, extended_dynamic_state3_color_write_mask)
+    } else {
+        device_chain.unlink<vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT>();
+    }
+
+    if (has_custom_border_color) {
+        FEAT_SET(vk::PhysicalDeviceCustomBorderColorFeaturesEXT, customBorderColors,
+                 custom_border_color)
+        FEAT_SET(vk::PhysicalDeviceCustomBorderColorFeaturesEXT, customBorderColorWithoutFormat,
+                 custom_border_color)
+    } else {
         device_chain.unlink<vk::PhysicalDeviceCustomBorderColorFeaturesEXT>();
     }
 
-    if (!pipeline_creation_cache_control) {
+    if (has_pipeline_creation_cache_control) {
+        FEAT_SET(vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT,
+                 pipelineCreationCacheControl, pipeline_creation_cache_control)
+    } else {
         device_chain.unlink<vk::PhysicalDevicePipelineCreationCacheControlFeaturesEXT>();
     }
+
+#undef PROP_GET
+#undef FEAT_SET
 
     try {
         device = physical_device.createDevice(device_chain.get());
@@ -706,7 +741,6 @@ bool Instance::CreateDevice() {
 
     VULKAN_HPP_DEFAULT_DISPATCHER.init(device);
 
-    // Grab the graphics and present queues.
     graphics_queue = device.getQueue(graphics_queue_family_index, 0);
     present_queue = device.getQueue(present_queue_family_index, 0);
 
