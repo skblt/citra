@@ -183,6 +183,11 @@ public:
         return pipeline_creation_feedback;
     }
 
+    /// Returns true when VK_EXT_shader_stencil_export is supported
+    bool IsShaderStencilExportSupported() const {
+        return shader_stencil_export;
+    }
+
     /// Returns the vendor ID of the physical device
     u32 GetVendorID() const {
         return properties.vendorID;
@@ -316,6 +321,7 @@ private:
     bool image_format_list{};
     bool pipeline_creation_cache_control{};
     bool pipeline_creation_feedback{};
+    bool shader_stencil_export{};
     bool enable_validation{};
     bool dump_command_buffers{};
 };

@@ -69,6 +69,11 @@ public:
         state |= flag;
     }
 
+    /// Marks the provided state as dirty
+    void MakeDirty(StateFlags flag) noexcept {
+        state &= ~flag;
+    }
+
     /// Returns true if the state is dirty
     [[nodiscard]] bool IsStateDirty(StateFlags flag) const noexcept {
         return False(state & flag);

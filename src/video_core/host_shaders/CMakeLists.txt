@@ -12,14 +12,17 @@ set(SHADER_FILES
     texture_filtering/xbrz_freescale.vert
     texture_filtering/x_gradient.frag
     texture_filtering/y_gradient.frag
+    full_screen_triangle.vert
     opengl_present.frag
     opengl_present.vert
     opengl_present_anaglyph.frag
     opengl_present_interlaced.frag
+    vulkan_d32s8_to_r32.comp
     vulkan_present.frag
     vulkan_present.vert
     vulkan_present_anaglyph.frag
     vulkan_present_interlaced.frag
+    vulkan_blit_depth_stencil.frag
 )
 
 find_program(GLSLANGVALIDATOR "glslangValidator")

@@ -645,6 +645,12 @@ bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
 
 bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
                                   const VideoCore::TextureBlit& blit) {
+    const bool is_depth_stencil = source.type == VideoCore::SurfaceType::DepthStencil;
+    const auto& depth_traits = instance.GetTraits(source.pixel_format);
+    if (is_depth_stencil && !depth_traits.blit_support) {
+        return blit_helper.BlitDepthStencil(source, dest, blit);
+    }
+
     renderpass_cache.ExitRenderpass();
 
     const RecordParams params = {
@@ -825,11 +831,6 @@ Surface::~Surface() {
 MICROPROFILE_DEFINE(Vulkan_Upload, "Vulkan", "Texture Upload", MP_RGB(128, 192, 64));
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
     MICROPROFILE_SCOPE(Vulkan_Upload);
-
-    if (type == VideoCore::SurfaceType::DepthStencil && !traits.blit_support) {
-        LOG_ERROR(Render_Vulkan, "Depth blit unsupported by hardware, ignoring");
-        return;
-    }
 
     runtime.renderpass_cache.ExitRenderpass();
 

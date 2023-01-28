@@ -568,6 +568,7 @@ bool Instance::CreateDevice() {
     timeline_semaphores = AddExtension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
     image_format_list = AddExtension(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
     pipeline_creation_feedback = AddExtension(VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME);
+    shader_stencil_export = AddExtension(VK_EXT_SHADER_STENCIL_EXPORT_EXTENSION_NAME);
     bool has_portability_subset = AddExtension(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
     bool has_dynamic_rendering = AddExtension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     bool has_extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
