@@ -1,6 +1,8 @@
 # CMake 3.12 required for 20 to be a valid value for CXX_STANDARD
 cmake_minimum_required(VERSION 3.15)
 
+project(citra LANGUAGES C CXX ASM)
+
 # Don't override the warning flags in MSVC:
 cmake_policy(SET CMP0092 NEW)
 # Enforce new LTO setting
@@ -12,10 +14,10 @@ set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/cmake-modules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/externals/find-modules")
+
 include(DownloadExternals)
 include(CMakeDependentOption)
-
-project(citra LANGUAGES C CXX ASM)
+include(CTest)
 
 if (APPLE)
     enable_language(OBJC)
@@ -60,7 +62,7 @@ option(CITRA_CHECK_SUBMODULES "Check if submodules are present" ON)
 
 CMAKE_DEPENDENT_OPTION(CITRA_USE_FASTER_LD "Check if a faster linker is available" ON "NOT WIN32" OFF)
 
-option(CITRA_TESTS "Compile tests" ON)
+option(CITRA_TESTS "Compile tests" "${BUILD_TESTING}")
 
 if (CITRA_USE_PRECOMPILED_HEADERS)
     if (MSVC AND CCACHE)
@@ -422,7 +424,6 @@ if (CITRA_USE_FASTER_LD AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     endif()
 endif()
 
-enable_testing()
 add_subdirectory(externals)
 
 # Boost

@@ -5,6 +5,9 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     add_compile_options(/W0)
 endif()
 
+# Disable tests in all externals supporting the standard option name
+set(BUILD_TESTING OFF)
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
 include(DownloadExternals)
 include(ExternalProject)
