@@ -5,12 +5,12 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     add_compile_options(/W0)
 endif()
 
+# Dynarmic has cmake_minimum_required(3.12) and we may want to override
+# some of its variables, which is only possible in 3.13+
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+
 # Disable tests in all externals supporting the standard option name
 set(BUILD_TESTING OFF)
-
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
-include(DownloadExternals)
-include(ExternalProject)
 
 # Boost
 if (NOT USE_SYSTEM_BOOST)
@@ -150,7 +150,7 @@ endif()
 
 # Cubeb
 if (ENABLE_CUBEB AND NOT TARGET cubeb::cubeb)
-    set(BUILD_TESTS OFF CACHE BOOL "")
+    set(BUILD_TESTS OFF)
     add_subdirectory(cubeb EXCLUDE_FROM_ALL)
     add_library(cubeb::cubeb ALIAS cubeb)
 endif()
@@ -162,6 +162,7 @@ if (USE_DISCORD_PRESENCE AND NOT TARGET DiscordRPC::discord-rpc)
     add_library(DiscordRPC::discord-rpc ALIAS discord-rpc)
 endif()
 
+# httplib
 if (ENABLE_WEB_SERVICE)
     if (NOT WIN32)
         find_package(OpenSSL 1.1)
@@ -172,7 +173,7 @@ if (ENABLE_WEB_SERVICE)
 
     if (WIN32 OR NOT OPENSSL_FOUND)
         # LibreSSL
-        set(LIBRESSL_SKIP_INSTALL ON CACHE BOOL "")
+        set(LIBRESSL_SKIP_INSTALL ON)
         set(OPENSSLDIR "/etc/ssl/")
         add_subdirectory(libressl EXCLUDE_FROM_ALL)
         target_include_directories(ssl INTERFACE ./libressl/include)
