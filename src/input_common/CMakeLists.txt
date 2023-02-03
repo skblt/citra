@@ -34,7 +34,8 @@ if(ENABLE_SDL2)
 endif()
 
 create_target_directory_groups(input_common)
-target_link_libraries(input_common PUBLIC core PRIVATE common ${Boost_LIBRARIES} libusb::usb)
+target_link_libraries(input_common PUBLIC core PRIVATE common ${Boost_LIBRARIES})
+target_link_libraries(input_common PRIVATE libusb::usb)
 set_target_properties(input_common PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})
 
 if (CITRA_USE_PRECOMPILED_HEADERS)
