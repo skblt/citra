@@ -570,7 +570,7 @@ bool Instance::CreateDevice() {
     pipeline_creation_feedback = AddExtension(VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME);
     shader_stencil_export = AddExtension(VK_EXT_SHADER_STENCIL_EXPORT_EXTENSION_NAME);
     bool has_portability_subset = AddExtension(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
-    bool has_dynamic_rendering = AddExtension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    bool has_dynamic_rendering = /*AddExtension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)*/false;
     bool has_extended_dynamic_state = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
     bool has_extended_dynamic_state2 = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
     bool has_extended_dynamic_state3 = AddExtension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
