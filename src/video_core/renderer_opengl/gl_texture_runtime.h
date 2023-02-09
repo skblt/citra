@@ -64,6 +64,9 @@ public:
     /// Blits a rectangle of src_tex to another rectange of dst_rect
     bool BlitTextures(Surface& surface, Surface& dest, const VideoCore::TextureBlit& blit);
 
+    /// Reinterprets a rectangle of pixel data from the source surface to the dest surface
+    bool Reinterpret(Surface& source, Surface& dest, const VideoCore::TextureBlit& blit);
+
     /// Generates mipmaps for all the available levels of the texture
     void GenerateMipmaps(Surface& surface, u32 max_level);
 
@@ -97,12 +100,25 @@ private:
     StreamBuffer upload_buffer;
     std::vector<u8> download_buffer;
     OGLFramebuffer read_fbo, draw_fbo;
+    OGLProgram convert_s8d24_program;
+    OGLBuffer intermediate_pbo;
+    std::size_t pbo_size{};
 };
 
 class Surface : public VideoCore::SurfaceBase<Surface> {
 public:
     Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
     ~Surface() override;
+
+    /// Returns the OpenGL texture handle
+    GLuint Handle() const noexcept {
+        return texture.handle;
+    }
+
+    /// Returns the format tuple of the texture handle
+    const FormatTuple& Tuple() const noexcept {
+        return tuple;
+    }
 
     /// Uploads pixel data in staging to a rectangle region of the surface texture
     void Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging);
@@ -125,6 +141,7 @@ private:
 private:
     TextureRuntime& runtime;
     const Driver& driver;
+    FormatTuple tuple;
 
 public:
     OGLTexture texture{};

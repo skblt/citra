@@ -81,7 +81,7 @@ Driver::Driver(bool gles, bool enable_debug) : is_gles{gles} {
      * https://developer.qualcomm.com/comment/11845
      */
     if (enable_debug) {
-        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageCallback(DebugHandler, nullptr);
     }
 
@@ -131,9 +131,8 @@ void Driver::DeduceVendor() {
 
 void Driver::CheckExtensionSupport() {
     ext_buffer_storage = GLAD_GL_EXT_buffer_storage;
-    arb_buffer_storage = GLAD_GL_ARB_buffer_storage;
+    //arb_buffer_storage = GLAD_GL_ARB_buffer_storage;
     ext_clip_cull_distance = GLAD_GL_EXT_clip_cull_distance;
-    arb_direct_state_access = GLAD_GL_ARB_direct_state_access;
 }
 
 void Driver::FindBugs() {

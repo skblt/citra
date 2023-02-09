@@ -119,6 +119,9 @@ public:
     /// Blits a rectangle of src_tex to another rectange of dst_rect
     bool BlitTextures(Surface& surface, Surface& dest, const VideoCore::TextureBlit& blit);
 
+    /// Reinterprets a rectangle of pixel data from the source surface to the dest surface
+    bool Reinterpret(Surface& source, Surface& dest, const VideoCore::TextureBlit& blit);
+
     /// Generates mipmaps for all the available levels of the texture
     void GenerateMipmaps(Surface& surface, u32 max_level);
 
@@ -139,6 +142,9 @@ private:
     void ClearTextureWithRenderpass(Surface& surface, const VideoCore::TextureClear& clear,
                                     VideoCore::ClearValue value);
 
+    /// Returns a temporary buffer used for reinterpretation
+    vk::Buffer GetTemporaryBuffer(std::size_t needed_size);
+
     /// Returns the current Vulkan instance
     const Instance& GetInstance() const {
         return instance;
@@ -158,6 +164,10 @@ private:
     StreamBuffer download_buffer;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
     std::unordered_multimap<HostTextureTag, ImageAlloc> texture_recycler;
+
+    constexpr static size_t indexing_slots = 8 * sizeof(size_t);
+    std::array<vk::Buffer, indexing_slots> buffers{};
+    std::array<VmaAllocation, indexing_slots> buffer_allocations{};
 };
 
 class Surface : public VideoCore::SurfaceBase<Surface> {

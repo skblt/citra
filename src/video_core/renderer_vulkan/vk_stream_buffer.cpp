@@ -43,6 +43,7 @@ u32 GetMemoryType(const vk::PhysicalDeviceMemoryProperties& properties, bool rea
 
     std::optional preferred_type = FindMemoryType(properties, DYNAMIC_MEMORY);
     if (!preferred_type) {
+        LOG_WARNING(Render_Vulkan, "Falling back to host memory");
         preferred_type = FindMemoryType(properties, HOST_MEMORY);
         ASSERT_MSG(preferred_type, "No host visible and coherent memory type found");
     }

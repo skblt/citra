@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <bit>
 #include "common/microprofile.h"
 #include "common/scope_exit.h"
 #include "common/settings.h"
@@ -12,7 +13,18 @@
 #include "video_core/renderer_opengl/gl_texture_runtime.h"
 #include "video_core/video_core.h"
 
+#include "video_core/host_shaders/opengl_convert_s8d24_comp.h"
+
 namespace OpenGL {
+
+using VideoCore::PixelFormatAsString;
+
+namespace {
+OpenGL::OGLProgram MakeProgram(std::string_view source) {
+    OpenGL::OGLProgram program;
+    program.Create(source);
+    return program;
+}
 
 constexpr FormatTuple DEFAULT_TUPLE = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
 
@@ -55,13 +67,16 @@ static constexpr std::array COLOR_TUPLES_OES = {
     return GL_COLOR_BUFFER_BIT;
 }
 
+} // Anonymous namespace
+
 constexpr std::size_t UPLOAD_BUFFER_SIZE = 32 * 1024 * 1024;
 constexpr std::size_t DOWNLOAD_BUFFER_SIZE = 4 * 1024 * 1024;
 
 TextureRuntime::TextureRuntime(Driver& driver)
     : driver{driver}, filterer{Settings::values.texture_filter_name.GetValue(),
                                VideoCore::GetResolutionScaleFactor()},
-      upload_buffer{GL_PIXEL_UNPACK_BUFFER, UPLOAD_BUFFER_SIZE} {
+      upload_buffer{GL_PIXEL_UNPACK_BUFFER, UPLOAD_BUFFER_SIZE},
+      convert_s8d24_program{MakeProgram(HostShaders::OPENGL_CONVERT_S8D24_COMP)} {
 
     download_buffer.resize(DOWNLOAD_BUFFER_SIZE);
     read_fbo.Create();
@@ -259,6 +274,60 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
     return true;
 }
 
+template <typename T>
+    requires std::is_integral_v<T>
+[[nodiscard]] T NextPow2(T value) {
+    return static_cast<T>(1ULL << ((8U * sizeof(T)) - std::countl_zero(value - 1U)));
+}
+
+bool TextureRuntime::Reinterpret(Surface& source, Surface& dest, const VideoCore::TextureBlit& blit) {
+    ASSERT_MSG(source.GetInternalBytesPerPixel() == dest.GetInternalBytesPerPixel(),
+               "Not matching bytes per pixel {}, {}",
+               PixelFormatAsString(source.pixel_format), PixelFormatAsString(dest.pixel_format));
+
+    const u32 copy_size = blit.src_rect.GetWidth() * blit.src_rect.GetHeight() * source.GetInternalBytesPerPixel();
+    if (pbo_size < copy_size) {
+        glCreateBuffers(1, &intermediate_pbo.handle);
+        pbo_size = NextPow2(copy_size);
+        glNamedBufferData(intermediate_pbo.handle, pbo_size, nullptr, GL_STREAM_COPY);
+    }
+    // Copy from source to PBO
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glPixelStorei(GL_PACK_ROW_LENGTH, blit.src_rect.GetWidth());
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, intermediate_pbo.handle);
+    glGetTextureSubImage(source.Handle(), blit.src_level, blit.src_rect.left, blit.src_rect.bottom,
+                         0, blit.src_rect.GetWidth(), blit.src_rect.GetHeight(), 1,
+                         source.Tuple().format, source.Tuple().type,
+                         static_cast<GLsizei>(pbo_size), nullptr);
+
+    // Copy from PBO to destination in desired GL format
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, blit.dst_rect.GetWidth());
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, intermediate_pbo.handle);
+    glTextureSubImage2D(dest.Handle(), blit.dst_level, blit.dst_rect.left, blit.dst_rect.bottom,
+                        blit.dst_rect.GetWidth(), blit.dst_rect.GetHeight(),
+                        dest.Tuple().format, dest.Tuple().type, nullptr);
+
+    if (source.pixel_format == VideoCore::PixelFormat::D24S8 &&
+            dest.pixel_format == VideoCore::PixelFormat::RGBA8) {
+        static constexpr GLuint BINDING_DESTINATION = 0;
+        static constexpr GLuint LOC_SIZE = 0;
+
+        const u32 size_x = blit.dst_rect.GetWidth();
+        const u32 size_y = blit.dst_rect.GetHeight();
+
+        glUseProgram(convert_s8d24_program.handle);
+        glUniform3ui(LOC_SIZE, size_x, size_y, 1);
+        glBindImageTexture(BINDING_DESTINATION, dest.Handle(),
+                           blit.dst_level, GL_TRUE, 0, GL_READ_WRITE, GL_RGBA8UI);
+        glDispatchCompute(size_x / 8, size_y / 8, 1);
+
+        glUseProgram(OpenGLState::GetCurState().draw.shader_program);
+    }
+
+    return true;
+}
+
 void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {
     OpenGLState prev_state = OpenGLState::GetCurState();
     SCOPE_EXIT({ prev_state.Apply(); });
@@ -313,6 +382,7 @@ Surface::Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
     if (pixel_format != VideoCore::PixelFormat::Invalid) {
         texture = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), params.pixel_format,
                                    texture_type);
+        tuple = runtime.GetFormatTuple(params.pixel_format);
     }
 }
 
@@ -374,6 +444,7 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
     SCOPE_EXIT({ prev_state.Apply(); });
 
     glPixelStorei(GL_PACK_ROW_LENGTH, static_cast<GLint>(stride));
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
     const bool is_scaled = res_scale != 1;
     if (is_scaled) {

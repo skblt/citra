@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include "common/bit_util.h"
 #include "common/microprofile.h"
 #include "video_core/rasterizer_cache/texture_codec.h"
 #include "video_core/rasterizer_cache/utils.h"
@@ -18,6 +19,8 @@ MICROPROFILE_DEFINE(Vulkan_Upload, "Vulkan", "Texture Upload", MP_RGB(128, 192, 
 MICROPROFILE_DEFINE(Vulkan_Download, "Vulkan", "Texture Download", MP_RGB(128, 192, 64));
 
 namespace Vulkan {
+
+using VideoCore::GetBytesPerPixel;
 
 struct RecordParams {
     vk::ImageAspectFlags aspect;
@@ -775,6 +778,172 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
     });
 
     return true;
+}
+
+bool TextureRuntime::Reinterpret(Surface& source, Surface& dest, const VideoCore::TextureBlit& blit) {
+    if (source.pixel_format == VideoCore::PixelFormat::D24S8 ||
+            dest.pixel_format == VideoCore::PixelFormat::D24S8) {
+        return true;
+    }
+
+    if (GetBytesPerPixel(source.pixel_format) != GetBytesPerPixel(dest.pixel_format)) {
+        LOG_INFO(HW_GPU, "Not matching bytes per pixel {}, {}",
+                         PixelFormatAsString(source.pixel_format),
+                         PixelFormatAsString(dest.pixel_format));
+        return false;
+    }
+
+    const u32 copy_size = blit.src_rect.GetWidth() * blit.src_rect.GetHeight() * source.GetInternalBytesPerPixel();
+    const vk::Buffer copy_buffer = GetTemporaryBuffer(copy_size);
+
+    const RecordParams params = {
+        .pipeline_flags = source.PipelineStageFlags() | dest.PipelineStageFlags(),
+        .src_access = source.AccessFlags(),
+        .dst_access = dest.AccessFlags(),
+        .src_image = source.Image(),
+        .dst_image = dest.Image(),
+    };
+
+    renderpass_cache.ExitRenderpass();
+    scheduler.Record([params, copy_buffer, src_aspect = source.Aspect(), dst_aspect = dest.Aspect(), blit]
+                     (vk::CommandBuffer cmdbuf) {
+        static constexpr vk::MemoryBarrier READ_BARRIER{
+            .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
+            .dstAccessMask = vk::AccessFlagBits::eTransferRead | vk::AccessFlagBits::eTransferWrite,
+        };
+        static constexpr vk::MemoryBarrier WRITE_BARRIER{
+            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
+        };
+        const vk::BufferImageCopy image_to_buffer = {
+            .bufferOffset = 0,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource{
+                .aspectMask = src_aspect,
+                .mipLevel = blit.src_level,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .imageOffset = {static_cast<s32>(blit.src_rect.left), static_cast<s32>(blit.src_rect.bottom), 0},
+            .imageExtent = {blit.src_rect.GetWidth(), blit.src_rect.GetHeight(), 1},
+        };
+        const vk::BufferImageCopy buffer_to_image = {
+            .bufferOffset = 0,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource{
+                .aspectMask = dst_aspect,
+                .mipLevel = blit.dst_level,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .imageOffset = {static_cast<s32>(blit.dst_rect.left), static_cast<s32>(blit.dst_rect.bottom), 0},
+            .imageExtent = {blit.dst_rect.GetWidth(), blit.dst_rect.GetHeight(), 1},
+        };
+
+        const vk::ImageMemoryBarrier pre_barrier{
+            .srcAccessMask = params.src_access,
+            .dstAccessMask = vk::AccessFlagBits::eTransferRead,
+            .oldLayout = vk::ImageLayout::eGeneral,
+            .newLayout = vk::ImageLayout::eTransferSrcOptimal,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = params.src_image,
+            .subresourceRange{
+                .aspectMask = src_aspect,
+                .baseMipLevel = blit.src_level,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+        const vk::ImageMemoryBarrier middle_in_barrier{
+            .srcAccessMask = vk::AccessFlagBits::eNone,
+            .dstAccessMask = vk::AccessFlagBits::eNone,
+            .oldLayout = vk::ImageLayout::eTransferSrcOptimal,
+            .newLayout = vk::ImageLayout::eGeneral,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = params.src_image,
+            .subresourceRange{
+                .aspectMask = src_aspect,
+                .baseMipLevel = blit.src_level,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+        const vk::ImageMemoryBarrier middle_out_barrier{
+            .srcAccessMask = params.dst_access,
+            .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .oldLayout = vk::ImageLayout::eGeneral,
+            .newLayout = vk::ImageLayout::eTransferDstOptimal,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = params.dst_image,
+            .subresourceRange{
+                .aspectMask = dst_aspect,
+                .baseMipLevel = blit.dst_level,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+        const vk::ImageMemoryBarrier post_barrier{
+            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = params.dst_access,
+            .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+            .newLayout = vk::ImageLayout::eGeneral,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = params.dst_image,
+            .subresourceRange{
+                .aspectMask = dst_aspect,
+                .baseMipLevel = blit.dst_level,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+        cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, pre_barrier);
+
+        cmdbuf.copyImageToBuffer(params.src_image, vk::ImageLayout::eTransferSrcOptimal, copy_buffer,
+                                 image_to_buffer);
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer,
+                               vk::DependencyFlagBits::eByRegion, WRITE_BARRIER, {}, middle_in_barrier);
+        cmdbuf.pipelineBarrier(params.pipeline_flags, vk::PipelineStageFlagBits::eTransfer,
+                               vk::DependencyFlagBits::eByRegion, READ_BARRIER, {}, middle_out_barrier);
+        cmdbuf.copyBufferToImage(copy_buffer, params.dst_image, vk::ImageLayout::eTransferDstOptimal, buffer_to_image);
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
+                               vk::DependencyFlagBits::eByRegion, {}, {}, post_barrier);
+    });
+
+    return true;
+}
+
+vk::Buffer TextureRuntime::GetTemporaryBuffer(std::size_t needed_size) {
+    const auto level = (8 * sizeof(size_t)) - std::countl_zero(needed_size - 1ULL);
+    if (buffers[level]) {
+        return buffers[level];
+    }
+    const auto new_size = Common::NextPow2(needed_size);
+    const vk::BufferCreateInfo buffer_info = {
+        .size = new_size,
+        .usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
+    };
+
+    const VmaAllocationCreateInfo alloc_create_info = {
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+    };
+
+    VkBuffer unsafe_buffer = VK_NULL_HANDLE;
+    VkBufferCreateInfo unsafe_buffer_info = static_cast<VkBufferCreateInfo>(buffer_info);
+    vmaCreateBuffer(instance.GetAllocator(), &unsafe_buffer_info, &alloc_create_info,
+                    &unsafe_buffer, &buffer_allocations[level], nullptr);
+
+    return buffers[level] = vk::Buffer{unsafe_buffer};
 }
 
 void TextureRuntime::GenerateMipmaps(Surface& surface, u32 max_level) {}

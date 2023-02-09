@@ -10,7 +10,7 @@ namespace OpenGL {
 
 StreamBuffer::StreamBuffer(GLenum target, size_t size_)
     : gl_target{target}, buffer_size{size_}, slot_size{buffer_size / SYNC_POINTS},
-      buffer_storage{bool(GLAD_GL_ARB_buffer_storage)} {
+      buffer_storage{true} {
     for (u64 i = 0; i < SYNC_POINTS; i++) {
         fences[i].Create();
     }

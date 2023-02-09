@@ -14,6 +14,10 @@
 
 namespace VideoCore {
 
+inline auto RangeFromInterval(auto& map, const auto& interval) {
+    return boost::make_iterator_range(map.equal_range(interval));
+}
+
 template <class T>
 RasterizerCache<T>::RasterizerCache(Memory::MemorySystem& memory_, TextureRuntime& runtime_)
     : memory{memory_}, runtime{runtime_}, resolution_scale_factor{
@@ -484,12 +488,14 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
                 ValidateSurface(face, face->addr, face->size);
             }
 
-            const TextureBlit texture_blit = {.src_level = 0,
-                                              .dst_level = 0,
-                                              .src_layer = 0,
-                                              .dst_layer = static_cast<u32>(i),
-                                              .src_rect = face->GetScaledRect(),
-                                              .dst_rect = Rect2D{0, scaled_size, scaled_size, 0}};
+            const TextureBlit texture_blit = {
+                .src_level = 0,
+                .dst_level = 0,
+                .src_layer = 0,
+                .dst_layer = static_cast<u32>(i),
+                .src_rect = face->GetScaledRect(),
+                .dst_rect = Rect2D{0, scaled_size, scaled_size, 0},
+            };
 
             runtime.BlitTextures(*face, *cube, texture_blit);
             watcher->Validate();
@@ -720,20 +726,6 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
             NotifyValidated(interval);
             continue;
         }
-        // Could not find a matching reinterpreter, check if we need to implement a
-        // reinterpreter
-        if (NoUnimplementedReinterpretations(surface, params, interval) &&
-            !IntervalHasInvalidPixelFormat(params, interval)) {
-            // No surfaces were found in the cache that had a matching bit-width.
-            // If the region was created entirely on the GPU,
-            // assume it was a developer mistake and skip flushing.
-            if (boost::icl::contains(dirty_regions, interval)) {
-                LOG_DEBUG(HW_GPU, "Region created fully on GPU and reinterpretation is "
-                                  "invalid. Skipping validation");
-                validate_regions.erase(interval);
-                continue;
-            }
-        }
 
         // Load data from 3DS memory
         FlushRegion(params.addr, params.size);
@@ -885,7 +877,34 @@ bool RasterizerCache<T>::IntervalHasInvalidPixelFormat(SurfaceParams& params,
 template <class T>
 bool RasterizerCache<T>::ValidateByReinterpretation(const Surface& surface, SurfaceParams& params,
                                                     SurfaceInterval interval) {
-    const PixelFormat dest_format = surface->pixel_format;
+    for (auto& [_, reinterpret_surface] : RangeFromInterval(dirty_regions, interval)) {
+        if (!reinterpret_surface) {
+            continue;
+        }
+
+        const SurfaceParams copy_params = reinterpret_surface->FromInterval(interval);
+        const auto copy_interval = reinterpret_surface->GetCopyableInterval(copy_params);
+        const auto reinterpret_interval = copy_interval & interval;
+        LOG_INFO(HW_GPU, "Validating {:#x} to {:#x} with {} surface", boost::icl::lower(reinterpret_interval),
+                 boost::icl::last(reinterpret_interval), PixelFormatAsString(reinterpret_surface->pixel_format));
+        if (!boost::icl::length(reinterpret_interval)) {
+            continue;
+        }
+
+        auto src_params = reinterpret_surface->FromInterval(reinterpret_interval);
+        auto dst_params = surface->FromInterval(reinterpret_interval);
+        const TextureBlit texture_blit = {
+            .src_level = 0,
+            .dst_level = 0,
+            .src_layer = 0,
+            .dst_layer = 0,
+            .src_rect = reinterpret_surface->GetScaledSubRect(src_params),
+            .dst_rect = surface->GetScaledSubRect(dst_params),
+        };
+        return runtime.Reinterpret(*reinterpret_surface, *surface, texture_blit);
+    }
+
+    /*const PixelFormat dest_format = surface->pixel_format;
     for (const auto& reinterpreter : runtime.GetPossibleReinterpretations(dest_format)) {
         params.pixel_format = reinterpreter->GetSourceFormat();
         Surface reinterpret_surface =
@@ -897,10 +916,22 @@ bool RasterizerCache<T>::ValidateByReinterpretation(const Surface& surface, Surf
             auto src_rect = reinterpret_surface->GetScaledSubRect(reinterpret_params);
             auto dest_rect = surface->GetScaledSubRect(reinterpret_params);
 
-            reinterpreter->Reinterpret(*reinterpret_surface, src_rect, *surface, dest_rect);
+            if (dest_format == PixelFormat::RGBA8) {
+                const TextureBlit texture_blit = {
+                    .src_level = 0,
+                    .dst_level = 0,
+                    .src_layer = 0,
+                    .dst_layer = 0,
+                    .src_rect = src_rect,
+                    .dst_rect = dest_rect,
+                };
+                runtime.Reinterpret(*reinterpret_surface, *surface, texture_blit);
+            } else {
+                reinterpreter->Reinterpret(*reinterpret_surface, src_rect, *surface, dest_rect);
+            }
             return true;
         }
-    }
+    }*/
 
     return false;
 }

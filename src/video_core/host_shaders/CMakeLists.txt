@@ -13,6 +13,7 @@ set(SHADER_FILES
     texture_filtering/x_gradient.frag
     texture_filtering/y_gradient.frag
     full_screen_triangle.vert
+    opengl_convert_s8d24.comp
     opengl_present.frag
     opengl_present.vert
     opengl_present_anaglyph.frag
