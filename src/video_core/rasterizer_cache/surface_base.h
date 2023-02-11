@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <boost/icl/interval_set.hpp>
 #include "common/alignment.h"
 #include "common/assert.h"
 #include "video_core/rasterizer_cache/surface_params.h"
@@ -80,6 +81,11 @@ public:
     bool IsSurfaceFullyInvalid() const {
         auto interval = GetInterval();
         return *invalid_regions.equal_range(interval).first == interval;
+    }
+
+    /// Removes interval from the invalid regions
+    void Validate(SurfaceInterval interval) {
+        invalid_regions.erase(interval);
     }
 
 public:

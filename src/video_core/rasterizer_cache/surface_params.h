@@ -4,12 +4,9 @@
 
 #pragma once
 
-#include <boost/icl/interval_set.hpp>
 #include "video_core/rasterizer_cache/utils.h"
 
 namespace VideoCore {
-
-using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
 
 class SurfaceParams {
 public:
@@ -39,6 +36,12 @@ public:
 
     /// Returns the address interval referenced by unscaled_rect
     SurfaceInterval GetSubRectInterval(Rect2D unscaled_rect) const;
+
+    /// Return the address interval of the provided level
+    SurfaceInterval LevelInterval(u32 level) const;
+
+    /// Returns the level of the provided address
+    u32 LevelOf(PAddr addr) const;
 
     [[nodiscard]] SurfaceInterval GetInterval() const noexcept {
         return SurfaceInterval{addr, end};
@@ -72,6 +75,13 @@ public:
         return pixels * GetFormatBpp() / 8;
     }
 
+private:
+    /// Computes the offset of each mipmap level
+    void CalculateMipLevelOffsets();
+
+    /// Calculates total surface size taking mipmaps into account
+    u32 CalculateSurfaceSize() const;
+
 public:
     PAddr addr = 0;
     PAddr end = 0;
@@ -87,6 +97,8 @@ public:
     TextureType texture_type = TextureType::Texture2D;
     PixelFormat pixel_format = PixelFormat::Invalid;
     SurfaceType type = SurfaceType::Invalid;
+
+    std::array<u32, MAX_PICA_LEVELS> mipmap_offsets{};
 };
 
 } // namespace VideoCore

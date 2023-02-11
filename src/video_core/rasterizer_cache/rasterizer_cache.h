@@ -302,6 +302,7 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
             new_params.size = new_params.end - new_params.addr;
             new_params.height =
                 new_params.size / aligned_params.BytesInPixels(aligned_params.stride);
+            new_params.UpdateParams();
             ASSERT(new_params.size % aligned_params.BytesInPixels(aligned_params.stride) == 0);
 
             Surface new_surface = CreateSurface(new_params);
@@ -369,63 +370,7 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
         return nullptr;
     }
 
-    auto surface = GetSurface(params, ScaleMatch::Ignore, true);
-    if (!surface) {
-        return nullptr;
-    }
-
-    // Update mipmap if necessary
-    if (max_level != 0) {
-        if (max_level >= 8) {
-            // Since PICA only supports texture size between 8 and 1024, there are at most eight
-            // possible mipmap levels including the base.
-            LOG_CRITICAL(HW_GPU, "Unsupported mipmap level {}", max_level);
-            return nullptr;
-        }
-
-        // Blit mipmaps that have been invalidated
-        SurfaceParams surface_params = *surface;
-        for (u32 level = 1; level <= max_level; level++) {
-            // In PICA all mipmap levels are stored next to each other
-            surface_params.addr +=
-                surface_params.width * surface_params.height * surface_params.GetFormatBpp() / 8;
-            surface_params.width /= 2;
-            surface_params.height /= 2;
-            surface_params.stride = 0; // reset stride and let UpdateParams re-initialize it
-            surface_params.levels = 1;
-            surface_params.UpdateParams();
-
-            auto& watcher = surface->level_watchers[level - 1];
-            if (!watcher || !watcher->Get()) {
-                auto level_surface = GetSurface(surface_params, ScaleMatch::Ignore, true);
-                if (level_surface) {
-                    watcher = level_surface->CreateWatcher();
-                } else {
-                    watcher = nullptr;
-                }
-            }
-
-            if (watcher && !watcher->IsValid()) {
-                auto level_surface = watcher->Get();
-                if (!level_surface->invalid_regions.empty()) {
-                    ValidateSurface(level_surface, level_surface->addr, level_surface->size);
-                }
-
-                const TextureBlit texture_blit = {
-                    .src_level = 0,
-                    .dst_level = level,
-                    .src_layer = 0,
-                    .dst_layer = 0,
-                    .src_rect = level_surface->GetScaledRect(),
-                    .dst_rect = surface_params.GetScaledRect(),
-                };
-                runtime.BlitTextures(*level_surface, *surface, texture_blit);
-                watcher->Validate();
-            }
-        }
-    }
-
-    return surface;
+    return GetSurface(params, ScaleMatch::Ignore, true);
 }
 
 template <class T>
@@ -682,65 +627,64 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
         return;
     }
 
-    const SurfaceInterval validate_interval(addr, addr + size);
+    const PAddr end = addr + size;
+    const SurfaceInterval validate_interval(addr, end);
+    const SurfaceRegions validate_regions = surface->invalid_regions & validate_interval;
+    if (validate_regions.empty()) {
+        return;
+    }
+
+    // Fill surfaces will always be valid when used
     if (surface->type == SurfaceType::Fill) {
-        // Sanity check, fill surfaces will always be valid when used
         ASSERT(surface->IsRegionValid(validate_interval));
         return;
     }
 
-    auto validate_regions = surface->invalid_regions & validate_interval;
+    for (u32 level = surface->LevelOf(addr); level <= surface->LevelOf(end); level++) {
+        auto level_regions = validate_regions & surface->LevelInterval(level);
+        while (!level_regions.empty()) {
+            const auto interval = *level_regions.begin();
+            SurfaceParams params = surface->FromInterval(interval);
 
-    const auto NotifyValidated = [&](SurfaceInterval interval) {
-        surface->invalid_regions.erase(interval);
-        validate_regions.erase(interval);
-    };
-
-    while (true) {
-        const auto it = validate_regions.begin();
-        if (it == validate_regions.end()) {
-            break;
-        }
-
-        // Look for a valid surface to copy from
-        const auto interval = *it & validate_interval;
-        SurfaceParams params = surface->FromInterval(interval);
-
-        Surface copy_surface =
-            FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
-        if (copy_surface != nullptr) {
-            SurfaceInterval copy_interval = copy_surface->GetCopyableInterval(params);
-            CopySurface(copy_surface, surface, copy_interval);
-            NotifyValidated(copy_interval);
-            continue;
-        }
-
-        // Try to find surface in cache with different format
-        // that can can be reinterpreted to the requested format.
-        if (ValidateByReinterpretation(surface, params, interval)) {
-            NotifyValidated(interval);
-            continue;
-        }
-        // Could not find a matching reinterpreter, check if we need to implement a
-        // reinterpreter
-        if (NoUnimplementedReinterpretations(surface, params, interval) &&
-            !IntervalHasInvalidPixelFormat(params, interval)) {
-            // No surfaces were found in the cache that had a matching bit-width.
-            // If the region was created entirely on the GPU,
-            // assume it was a developer mistake and skip flushing.
-            if (boost::icl::contains(dirty_regions, interval)) {
-                LOG_DEBUG(HW_GPU, "Region created fully on GPU and reinterpretation is "
-                                  "invalid. Skipping validation");
-                validate_regions.erase(interval);
+            // Look for a valid surface to copy from
+            Surface copy_surface =
+                FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
+            if (copy_surface != nullptr) {
+                const auto copy_interval = copy_surface->GetCopyableInterval(params);
+                CopySurface(copy_surface, surface, copy_interval);
+                level_regions.erase(copy_interval);
                 continue;
             }
-        }
 
-        // Load data from 3DS memory
-        FlushRegion(params.addr, params.size);
-        UploadSurface(surface, interval);
-        NotifyValidated(params.GetInterval());
+            // Try to find surface in cache with different format
+            // that can can be reinterpreted to the requested format.
+            if (ValidateByReinterpretation(surface, params, interval)) {
+                level_regions.erase(interval);
+                continue;
+            }
+            // Could not find a matching reinterpreter, check if we need to implement a
+            // reinterpreter
+            if (NoUnimplementedReinterpretations(surface, params, interval) &&
+                !IntervalHasInvalidPixelFormat(params, interval)) {
+                // No surfaces were found in the cache that had a matching bit-width.
+                // If the region was created entirely on the GPU,
+                // assume it was a developer mistake and skip flushing.
+                if (boost::icl::contains(dirty_regions, interval)) {
+                    LOG_DEBUG(HW_GPU, "Region created fully on GPU and reinterpretation is "
+                                      "invalid. Skipping validation");
+                    level_regions.erase(interval);
+                    continue;
+                }
+            }
+
+            // Load data from 3DS memory
+            FlushRegion(params.addr, params.size);
+            UploadSurface(surface, interval);
+            level_regions.erase(params.GetInterval());
+        }
     }
+
+    surface->Validate(validate_interval);
 }
 
 MICROPROFILE_DECLARE(RasterizerCache_SurfaceLoad);
@@ -767,7 +711,7 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
         .buffer_offset = 0,
         .buffer_size = staging.size,
         .texture_rect = surface->GetSubRect(load_info),
-        .texture_level = 0,
+        .texture_level = surface->LevelOf(load_info.addr),
     };
     surface->Upload(upload, staging);
 }
@@ -787,7 +731,7 @@ void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval
         .buffer_offset = 0,
         .buffer_size = staging.size,
         .texture_rect = surface->GetSubRect(flush_info),
-        .texture_level = 0,
+        .texture_level = surface->LevelOf(flush_info.addr),
     };
     surface->Download(download, staging);
 

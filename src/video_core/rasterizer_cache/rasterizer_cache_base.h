@@ -127,6 +127,7 @@ public:
     void ClearAll(bool flush);
 
 private:
+    /// Duplicates the contents of src_surface to dest_surface
     void DuplicateSurface(const Surface& src_surface, const Surface& dest_surface);
 
     /// Update surface's texture for given region when necessary

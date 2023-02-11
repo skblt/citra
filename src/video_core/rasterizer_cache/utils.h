@@ -5,6 +5,7 @@
 #pragma once
 
 #include <span>
+#include <boost/icl/right_open_interval.hpp>
 #include "common/hash.h"
 #include "common/math_util.h"
 #include "common/vector_math.h"
@@ -12,8 +13,11 @@
 
 namespace VideoCore {
 
+constexpr std::size_t MAX_PICA_LEVELS = 8;
+
+using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
+
 class SurfaceParams;
-using Rect2D = Common::Rectangle<u32>;
 
 struct Offset {
     constexpr auto operator<=>(const Offset&) const noexcept = default;
@@ -28,6 +32,8 @@ struct Extent {
     u32 width = 1;
     u32 height = 1;
 };
+
+using Rect2D = Common::Rectangle<u32>;
 
 union ClearValue {
     Common::Vec4f color;
