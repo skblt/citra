@@ -73,15 +73,11 @@ public:
     RasterizerCache(Memory::MemorySystem& memory, TextureRuntime& runtime);
     ~RasterizerCache();
 
-    /// Get the best surface match (and its match type) for the given flags
-    template <MatchFlags find_flags>
-    Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params,
-                      ScaleMatch match_scale_type,
-                      std::optional<SurfaceInterval> validate_interval = std::nullopt);
+    /// Perform hardware accelerated texture copy according to the provided configuration
+    bool AccelerateTextureCopy(const GPU::Regs::DisplayTransferConfig& config);
 
-    /// Blit one surface's texture to another
-    bool BlitSurfaces(const Surface& src_surface, Common::Rectangle<u32> src_rect,
-                      const Surface& dst_surface, Common::Rectangle<u32> dst_rect);
+    /// Perform hardware accelerated display transfer according to the provided configuration
+    bool AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config);
 
     /// Copy one surface's region to another
     void CopySurface(const Surface& src_surface, const Surface& dst_surface,
@@ -126,6 +122,12 @@ public:
     void ClearAll(bool flush);
 
 private:
+    /// Get the best surface match (and its match type) for the given flags
+    template <MatchFlags find_flags>
+    Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params,
+                      ScaleMatch match_scale_type,
+                      std::optional<SurfaceInterval> validate_interval = std::nullopt);
+
     /// Duplicates the contents of src_surface to dest_surface
     void DuplicateSurface(const Surface& src_surface, const Surface& dest_surface);
 

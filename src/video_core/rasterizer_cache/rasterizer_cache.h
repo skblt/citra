@@ -28,6 +28,147 @@ RasterizerCache<T>::~RasterizerCache() {
 }
 
 template <class T>
+bool RasterizerCache<T>::AccelerateTextureCopy(const GPU::Regs::DisplayTransferConfig& config) {
+    u32 copy_size = Common::AlignDown(config.texture_copy.size, 16);
+    if (copy_size == 0) {
+        return false;
+    }
+
+    u32 input_gap = config.texture_copy.input_gap * 16;
+    u32 input_width = config.texture_copy.input_width * 16;
+    if (input_width == 0 && input_gap != 0) {
+        return false;
+    }
+    if (input_gap == 0 || input_width >= copy_size) {
+        input_width = copy_size;
+        input_gap = 0;
+    }
+    if (copy_size % input_width != 0) {
+        return false;
+    }
+
+    u32 output_gap = config.texture_copy.output_gap * 16;
+    u32 output_width = config.texture_copy.output_width * 16;
+    if (output_width == 0 && output_gap != 0) {
+        return false;
+    }
+    if (output_gap == 0 || output_width >= copy_size) {
+        output_width = copy_size;
+        output_gap = 0;
+    }
+    if (copy_size % output_width != 0) {
+        return false;
+    }
+
+    SurfaceParams src_params;
+    src_params.addr = config.GetPhysicalInputAddress();
+    src_params.stride = input_width + input_gap; // stride in bytes
+    src_params.width = input_width;              // width in bytes
+    src_params.height = copy_size / input_width;
+    src_params.size = ((src_params.height - 1) * src_params.stride) + src_params.width;
+    src_params.end = src_params.addr + src_params.size;
+
+    auto [src_surface, src_rect] = GetTexCopySurface(src_params);
+    if (src_surface == nullptr) {
+        return false;
+    }
+
+    if (output_gap != 0 &&
+        (output_width != src_surface->BytesInPixels(src_rect.GetWidth() / src_surface->res_scale) *
+                             (src_surface->is_tiled ? 8 : 1) ||
+         output_gap % src_surface->BytesInPixels(src_surface->is_tiled ? 64 : 1) != 0)) {
+        return false;
+    }
+
+    SurfaceParams dst_params = *src_surface;
+    dst_params.addr = config.GetPhysicalOutputAddress();
+    dst_params.width = src_rect.GetWidth() / src_surface->res_scale;
+    dst_params.stride = dst_params.width + src_surface->PixelsInBytes(
+                                               src_surface->is_tiled ? output_gap / 8 : output_gap);
+    dst_params.height = src_rect.GetHeight() / src_surface->res_scale;
+    dst_params.res_scale = src_surface->res_scale;
+    dst_params.UpdateParams();
+
+    // Since we are going to invalidate the gap if there is one, we will have to load it first
+    const bool load_gap = output_gap != 0;
+    auto [dst_surface, dst_rect] = GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, load_gap);
+
+    if (!dst_surface || dst_surface->type == SurfaceType::Texture ||
+        !CheckFormatsBlittable(src_surface->pixel_format, dst_surface->pixel_format)) {
+        return false;
+    }
+
+    ASSERT(src_rect.GetWidth() == dst_rect.GetWidth());
+
+    const TextureCopy texture_copy = {
+        .src_level = src_surface->LevelOf(src_params.addr),
+        .dst_level = dst_surface->LevelOf(dst_params.addr),
+        .src_offset = {src_rect.left, src_rect.bottom},
+        .dst_offset = {dst_rect.left, dst_rect.bottom},
+        .extent = {src_rect.GetWidth(), src_rect.GetHeight()},
+    };
+    runtime.CopyTextures(*src_surface, *dst_surface, texture_copy);
+
+    InvalidateRegion(dst_params.addr, dst_params.size, dst_surface);
+    return true;
+}
+
+template <class T>
+bool RasterizerCache<T>::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config) {
+    SurfaceParams src_params;
+    src_params.addr = config.GetPhysicalInputAddress();
+    src_params.width = config.output_width;
+    src_params.stride = config.input_width;
+    src_params.height = config.output_height;
+    src_params.is_tiled = !config.input_linear;
+    src_params.pixel_format = PixelFormatFromGPUPixelFormat(config.input_format);
+    src_params.UpdateParams();
+
+    SurfaceParams dst_params;
+    dst_params.addr = config.GetPhysicalOutputAddress();
+    dst_params.width = config.scaling != config.NoScale ? config.output_width.Value() / 2
+                                                        : config.output_width.Value();
+    dst_params.height = config.scaling == config.ScaleXY ? config.output_height.Value() / 2
+                                                         : config.output_height.Value();
+    dst_params.is_tiled = config.input_linear != config.dont_swizzle;
+    dst_params.pixel_format = PixelFormatFromGPUPixelFormat(config.output_format);
+    dst_params.UpdateParams();
+
+    auto [src_surface, src_rect] = GetSurfaceSubRect(src_params, ScaleMatch::Ignore, true);
+    if (src_surface == nullptr)
+        return false;
+
+    dst_params.res_scale = src_surface->res_scale;
+
+    auto [dst_surface, dst_rect] = GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, false);
+    if (dst_surface == nullptr) {
+        return false;
+    }
+
+    if (src_surface->is_tiled != dst_surface->is_tiled) {
+        std::swap(src_rect.top, src_rect.bottom);
+    }
+    if (config.flip_vertically) {
+        std::swap(src_rect.top, src_rect.bottom);
+    }
+
+    if (!CheckFormatsBlittable(src_surface->pixel_format, dst_surface->pixel_format)) {
+        return false;
+    }
+
+    const TextureBlit texture_blit = {
+        .src_level = src_surface->LevelOf(src_params.addr),
+        .dst_level = dst_surface->LevelOf(dst_params.addr),
+        .src_rect = src_rect,
+        .dst_rect = dst_rect,
+    };
+    runtime.BlitTextures(*src_surface, *dst_surface, texture_blit);
+
+    InvalidateRegion(dst_params.addr, dst_params.size, dst_surface);
+    return true;
+}
+
+template <class T>
 template <MatchFlags find_flags>
 auto RasterizerCache<T>::FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params,
                                    ScaleMatch match_scale_type,
@@ -117,57 +258,18 @@ auto RasterizerCache<T>::FindMatch(const SurfaceCache& surface_cache, const Surf
     return match_surface;
 }
 
-MICROPROFILE_DECLARE(RasterizerCache_BlitSurface);
-template <class T>
-bool RasterizerCache<T>::BlitSurfaces(const Surface& src_surface, Common::Rectangle<u32> src_rect,
-                                      const Surface& dst_surface, Common::Rectangle<u32> dst_rect) {
-    MICROPROFILE_SCOPE(RasterizerCache_BlitSurface);
-
-    if (!CheckFormatsBlittable(src_surface->pixel_format, dst_surface->pixel_format)) [[unlikely]] {
-        return false;
-    }
-
-    // Prefer texture copy over blit when possible. This can happen when the following is true:
-    // 1. No scaling (the dimentions of src and dest rect are the same)
-    // 2. No flipping (if the bottom value is bigger than the top this indicates texture flip)
-    if (src_rect.GetWidth() == dst_rect.GetWidth() &&
-        src_rect.GetHeight() == dst_rect.GetHeight() && src_rect.bottom < src_rect.top) {
-        const TextureCopy texture_copy = {
-            .src_level = 0,
-            .dst_level = 0,
-            .src_layer = 0,
-            .dst_layer = 0,
-            .src_offset = {src_rect.left, src_rect.bottom},
-            .dst_offset = {dst_rect.left, dst_rect.bottom},
-            .extent = {src_rect.GetWidth(), src_rect.GetHeight()},
-        };
-        return runtime.CopyTextures(*src_surface, *dst_surface, texture_copy);
-    } else {
-        const TextureBlit texture_blit = {
-            .src_level = 0,
-            .dst_level = 0,
-            .src_layer = 0,
-            .dst_layer = 0,
-            .src_rect = src_rect,
-            .dst_rect = dst_rect,
-        };
-        return runtime.BlitTextures(*src_surface, *dst_surface, texture_blit);
-    }
-}
-
 MICROPROFILE_DECLARE(RasterizerCache_CopySurface);
 template <class T>
 void RasterizerCache<T>::CopySurface(const Surface& src_surface, const Surface& dst_surface,
                                      SurfaceInterval copy_interval) {
     MICROPROFILE_SCOPE(RasterizerCache_CopySurface);
 
-    const SurfaceParams subrect_params = dst_surface->FromInterval(copy_interval);
-    ASSERT(subrect_params.GetInterval() == copy_interval && src_surface != dst_surface);
+    const PAddr start_addr = copy_interval.lower();
+    const SurfaceParams dst_params = dst_surface->FromInterval(copy_interval);
+    ASSERT(dst_params.GetInterval() == copy_interval && src_surface != dst_surface);
 
     if (src_surface->type == SurfaceType::Fill) {
-        // FillSurface needs a 4 bytes buffer
-        const u32 fill_offset =
-            (boost::icl::first(copy_interval) - src_surface->addr) % src_surface->fill_size;
+        const u32 fill_offset = (start_addr - src_surface->addr) % src_surface->fill_size;
         std::array<u8, 4> fill_buffer;
 
         u32 fill_buff_pos = fill_offset;
@@ -177,27 +279,20 @@ void RasterizerCache<T>::CopySurface(const Surface& src_surface, const Surface& 
 
         const ClearValue clear_value =
             MakeClearValue(dst_surface->type, dst_surface->pixel_format, fill_buffer.data());
-        const TextureClear clear_rect = {
-            .texture_level = 0, .texture_rect = dst_surface->GetScaledSubRect(subrect_params)};
+        const TextureClear clear_rect = {.texture_level = 0,
+                                         .texture_rect = dst_surface->GetScaledSubRect(dst_params)};
 
         runtime.ClearTexture(*dst_surface, clear_rect, clear_value);
         return;
     }
 
-    if (src_surface->CanSubRect(subrect_params)) {
-        const TextureBlit texture_blit = {
-            .src_level = 0,
-            .dst_level = 0,
-            .src_layer = 0,
-            .dst_layer = 0,
-            .src_rect = src_surface->GetScaledSubRect(subrect_params),
-            .dst_rect = dst_surface->GetScaledSubRect(subrect_params),
-        };
-        runtime.BlitTextures(*src_surface, *dst_surface, texture_blit);
-        return;
-    }
-
-    UNREACHABLE();
+    const TextureBlit texture_blit = {
+        .src_level = src_surface->LevelOf(start_addr),
+        .dst_level = dst_surface->LevelOf(dst_params.addr),
+        .src_rect = src_surface->GetScaledSubRect(dst_params),
+        .dst_rect = dst_surface->GetScaledSubRect(dst_params),
+    };
+    runtime.BlitTextures(*src_surface, *dst_surface, texture_blit);
 }
 
 template <class T>
@@ -509,6 +604,8 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
     }
 
     if (color_surface != nullptr) {
+        ASSERT_MSG(color_surface->LevelOf(color_params.addr) == 0,
+                   "Rendering to mipmap of surface is unsupported");
         ValidateSurface(color_surface, boost::icl::first(color_vp_interval),
                         boost::icl::length(color_vp_interval));
     }
@@ -573,14 +670,24 @@ auto RasterizerCache<T>::GetTexCopySurface(const SurfaceParams& params) -> Surfa
 }
 
 template <class T>
-void RasterizerCache<T>::DuplicateSurface(const Surface& src_surface, const Surface& dest_surface) {
-    ASSERT(dest_surface->addr <= src_surface->addr && dest_surface->end >= src_surface->end);
+void RasterizerCache<T>::DuplicateSurface(const Surface& src_surface, const Surface& dst_surface) {
+    ASSERT(dst_surface->addr <= src_surface->addr && dst_surface->end >= src_surface->end);
 
-    BlitSurfaces(src_surface, src_surface->GetScaledRect(), dest_surface,
-                 dest_surface->GetScaledSubRect(*src_surface));
+    const Rect2D src_rect = src_surface->GetScaledRect();
+    const Rect2D dst_rect = dst_surface->GetScaledSubRect(*src_surface);
+    ASSERT(src_rect.GetWidth() == dst_rect.GetWidth());
 
-    dest_surface->invalid_regions -= src_surface->GetInterval();
-    dest_surface->invalid_regions += src_surface->invalid_regions;
+    const TextureCopy texture_copy = {
+        .src_level = 0,
+        .dst_level = 0,
+        .src_offset = {src_rect.left, src_rect.bottom},
+        .dst_offset = {dst_rect.left, dst_rect.bottom},
+        .extent = {src_rect.GetWidth(), src_rect.GetHeight()},
+    };
+    runtime.CopyTextures(*src_surface, *dst_surface, texture_copy);
+
+    dst_surface->invalid_regions -= src_surface->GetInterval();
+    dst_surface->invalid_regions += src_surface->invalid_regions;
 
     SurfaceRegions regions;
     for (const auto& pair : RangeFromInterval(dirty_regions, src_surface->GetInterval())) {
@@ -590,7 +697,7 @@ void RasterizerCache<T>::DuplicateSurface(const Surface& src_surface, const Surf
     }
 
     for (const auto& interval : regions) {
-        dirty_regions.set({interval, dest_surface});
+        dirty_regions.set({interval, dst_surface});
     }
 }
 
