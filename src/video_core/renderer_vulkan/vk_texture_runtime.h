@@ -162,11 +162,10 @@ private:
     std::unordered_multimap<HostTextureTag, ImageAlloc> texture_recycler;
 };
 
-class Surface : public VideoCore::SurfaceBase<Surface> {
+class Surface : public VideoCore::SurfaceBase {
     friend class TextureRuntime;
 
 public:
-    Surface(TextureRuntime& runtime);
     Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime);
     Surface(const VideoCore::SurfaceParams& params, vk::Format format, vk::ImageUsageFlags usage,
             vk::ImageAspectFlags aspect, TextureRuntime& runtime);

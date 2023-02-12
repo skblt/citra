@@ -127,8 +127,6 @@ bool RasterizerCache<T>::BlitSurfaces(const Surface& src_surface, Common::Rectan
         return false;
     }
 
-    dst_surface->InvalidateAllWatcher();
-
     // Prefer texture copy over blit when possible. This can happen when the following is true:
     // 1. No scaling (the dimentions of src and dest rect are the same)
     // 2. No flipping (if the bottom value is bigger than the top this indicates texture flip)
@@ -310,7 +308,6 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
 
             // Delete the expanded surface, this can't be done safely yet
             // because it may still be in use
-            surface->UnlinkAllWatcher(); // unlink watchers as if this surface is already deleted
             remove_surfaces.emplace(surface);
 
             surface = new_surface;
@@ -392,54 +389,32 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
 
     Surface& cube = it->second;
 
-    // Update surface watchers
-    auto& watchers = cube->level_watchers;
+    const u32 scaled_size = cube->GetScaledWidth();
     const std::array addresses = {config.px, config.nx, config.py, config.ny, config.pz, config.nz};
 
     for (std::size_t i = 0; i < addresses.size(); i++) {
-        auto& watcher = watchers[i];
-        if (!watcher || !watcher->Get()) {
-            Pica::Texture::TextureInfo info = {
-                .physical_address = addresses[i],
-                .width = config.width,
-                .height = config.width,
-                .format = config.format,
-            };
+        Pica::Texture::TextureInfo info = {
+            .physical_address = addresses[i],
+            .width = config.width,
+            .height = config.width,
+            .format = config.format,
+        };
 
-            info.SetDefaultStride();
-            auto surface = GetTextureSurface(info);
-            if (surface) {
-                watcher = surface->CreateWatcher();
-            } else {
-                // Can occur when texture address is invalid. We mark the watcher with nullptr
-                // in this case and the content of the face wouldn't get updated. These are usually
-                // leftover setup in the texture unit and games are not supposed to draw using them.
-                watcher = nullptr;
-            }
+        info.SetDefaultStride();
+        auto face = GetTextureSurface(info);
+        if (!face) {
+            continue;
         }
-    }
 
-    // Validate the face surfaces
-    const u32 scaled_size = cube->GetScaledWidth();
-    for (std::size_t i = 0; i < addresses.size(); i++) {
-        const auto& watcher = watchers[i];
-        if (watcher && !watcher->IsValid()) {
-            auto face = watcher->Get();
-            if (!face->invalid_regions.empty()) {
-                ValidateSurface(face, face->addr, face->size);
-            }
-
-            const TextureBlit texture_blit = {
-                .src_level = 0,
-                .dst_level = 0,
-                .src_layer = 0,
-                .dst_layer = static_cast<u32>(i),
-                .src_rect = face->GetScaledRect(),
-                .dst_rect = Rect2D{0, scaled_size, scaled_size, 0},
-            };
-            runtime.BlitTextures(*face, *cube, texture_blit);
-            watcher->Validate();
-        }
+        const TextureBlit texture_blit = {
+            .src_level = 0,
+            .dst_level = 0,
+            .src_layer = 0,
+            .dst_layer = static_cast<u32>(i),
+            .src_rect = face->GetScaledRect(),
+            .dst_rect = Rect2D{0, scaled_size, scaled_size, 0},
+        };
+        runtime.BlitTextures(*face, *cube, texture_blit);
     }
 
     return cube;
@@ -536,12 +511,10 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
     if (color_surface != nullptr) {
         ValidateSurface(color_surface, boost::icl::first(color_vp_interval),
                         boost::icl::length(color_vp_interval));
-        color_surface->InvalidateAllWatcher();
     }
     if (depth_surface != nullptr) {
         ValidateSurface(depth_surface, boost::icl::first(depth_vp_interval),
                         boost::icl::length(depth_vp_interval));
-        depth_surface->InvalidateAllWatcher();
     }
 
     return std::make_tuple(color_surface, depth_surface, fb_rect);
@@ -627,8 +600,7 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
         return;
     }
 
-    const PAddr end = addr + size;
-    const SurfaceInterval validate_interval(addr, end);
+    const SurfaceInterval validate_interval(addr, addr + size);
     const SurfaceRegions validate_regions = surface->invalid_regions & validate_interval;
     if (validate_regions.empty()) {
         return;
@@ -640,7 +612,7 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
         return;
     }
 
-    for (u32 level = surface->LevelOf(addr); level <= surface->LevelOf(end); level++) {
+    for (u32 level = surface->LevelOf(addr); level <= surface->LevelOf(addr + size); level++) {
         auto level_regions = validate_regions & surface->LevelInterval(level);
         while (!level_regions.empty()) {
             const auto interval = *level_regions.begin();
@@ -946,11 +918,10 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, const Surface& r
 
             const auto interval = cached_surface->GetInterval() & invalid_interval;
             cached_surface->invalid_regions.insert(interval);
-            cached_surface->InvalidateAllWatcher();
 
             // If the surface has no salvageable data it should be removed from the cache to avoid
             // clogging the data structure
-            if (cached_surface->IsSurfaceFullyInvalid()) {
+            if (cached_surface->IsFullyInvalid()) {
                 remove_surfaces.emplace(cached_surface);
             }
         }

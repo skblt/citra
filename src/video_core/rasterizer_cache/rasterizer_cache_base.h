@@ -48,7 +48,6 @@ class RasterizerCache : NonCopyable {
 public:
     using TextureRuntime = typename T::RuntimeType;
     using Surface = std::shared_ptr<typename T::SurfaceType>;
-    using Watcher = SurfaceWatcher<typename T::SurfaceType>;
 
 private:
     /// Declare rasterizer interval types

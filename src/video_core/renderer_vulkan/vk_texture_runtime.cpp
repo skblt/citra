@@ -746,11 +746,8 @@ bool TextureRuntime::NeedsConvertion(VideoCore::PixelFormat format) const {
            traits.aspect != (vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
 }
 
-Surface::Surface(TextureRuntime& runtime)
-    : runtime{runtime}, instance{runtime.GetInstance()}, scheduler{runtime.GetScheduler()} {}
-
 Surface::Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime)
-    : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, instance{runtime.GetInstance()},
+    : VideoCore::SurfaceBase{params}, runtime{runtime}, instance{runtime.GetInstance()},
       scheduler{runtime.GetScheduler()}, traits{instance.GetTraits(pixel_format)} {
 
     if (pixel_format != VideoCore::PixelFormat::Invalid) {
@@ -761,7 +758,7 @@ Surface::Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime
 
 Surface::Surface(const VideoCore::SurfaceParams& params, vk::Format format,
                  vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect, TextureRuntime& runtime)
-    : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, instance{runtime.GetInstance()},
+    : VideoCore::SurfaceBase{params}, runtime{runtime}, instance{runtime.GetInstance()},
       scheduler{runtime.GetScheduler()} {
     if (format != vk::Format::eUndefined) {
         alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), levels, pixel_format,
@@ -875,8 +872,6 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
 
         runtime.upload_buffer.Commit(staging.size);
     }
-
-    InvalidateAllWatcher();
 }
 
 void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
