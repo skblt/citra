@@ -264,30 +264,23 @@ void RasterizerCache<T>::CopySurface(const Surface& src_surface, const Surface& 
                                      SurfaceInterval copy_interval) {
     MICROPROFILE_SCOPE(RasterizerCache_CopySurface);
 
-    const PAddr start_addr = copy_interval.lower();
+    const PAddr copy_addr = copy_interval.lower();
     const SurfaceParams dst_params = dst_surface->FromInterval(copy_interval);
+    const Rect2D dst_rect = dst_surface->GetScaledSubRect(dst_params);
     ASSERT(dst_params.GetInterval() == copy_interval && src_surface != dst_surface);
 
     if (src_surface->type == SurfaceType::Fill) {
-        const u32 fill_offset = (start_addr - src_surface->addr) % src_surface->fill_size;
-        std::array<u8, 4> fill_buffer;
-
-        u32 fill_buff_pos = fill_offset;
-        for (std::size_t i = 0; i < fill_buffer.size(); i++) {
-            fill_buffer[i] = src_surface->fill_data[fill_buff_pos++ % src_surface->fill_size];
-        }
-
-        const ClearValue clear_value =
-            MakeClearValue(dst_surface->type, dst_surface->pixel_format, fill_buffer.data());
-        const TextureClear clear_rect = {.texture_level = 0,
-                                         .texture_rect = dst_surface->GetScaledSubRect(dst_params)};
-
-        runtime.ClearTexture(*dst_surface, clear_rect, clear_value);
+        const TextureClear texture_clear = {
+            .texture_level = 0,
+            .texture_rect = dst_rect,
+            .value = src_surface->MakeClearValue(copy_addr, dst_surface->pixel_format),
+        };
+        runtime.ClearTexture(*dst_surface, texture_clear);
         return;
     }
 
     const TextureBlit texture_blit = {
-        .src_level = src_surface->LevelOf(start_addr),
+        .src_level = src_surface->LevelOf(copy_addr),
         .dst_level = dst_surface->LevelOf(dst_params.addr),
         .src_rect = src_surface->GetScaledSubRect(dst_params),
         .dst_rect = dst_surface->GetScaledSubRect(dst_params),

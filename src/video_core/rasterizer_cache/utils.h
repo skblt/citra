@@ -17,8 +17,6 @@ constexpr std::size_t MAX_PICA_LEVELS = 8;
 
 using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
 
-class SurfaceParams;
-
 struct Offset {
     constexpr auto operator<=>(const Offset&) const noexcept = default;
 
@@ -46,6 +44,7 @@ union ClearValue {
 struct TextureClear {
     u32 texture_level;
     Rect2D texture_rect;
+    ClearValue value;
 };
 
 struct TextureCopy {
@@ -72,12 +71,6 @@ struct BufferTextureCopy {
     u32 buffer_size;
     Rect2D texture_rect;
     u32 texture_level;
-};
-
-struct BufferCopy {
-    u32 src_offset;
-    u32 dst_offset;
-    u32 size;
 };
 
 struct HostTextureTag {
@@ -111,7 +104,7 @@ struct TextureCubeConfig {
     }
 };
 
-[[nodiscard]] ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data);
+class SurfaceParams;
 
 u32 MipLevels(u32 width, u32 height, u32 max_level);
 

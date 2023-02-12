@@ -26,6 +26,9 @@ public:
     /// Returns the region of the biggest valid rectange within interval
     SurfaceInterval GetCopyableInterval(const SurfaceParams& params) const;
 
+    /// Returns the clear value used to validate another surface from this fill surface
+    ClearValue MakeClearValue(PAddr copy_addr, PixelFormat dst_format);
+
     /// Returns true when the region denoted by interval is valid
     bool IsRegionValid(SurfaceInterval interval) const {
         return (invalid_regions.find(interval) == invalid_regions.end());
@@ -41,6 +44,10 @@ public:
     void Validate(SurfaceInterval interval) {
         invalid_regions.erase(interval);
     }
+
+private:
+    /// Returns the fill buffer value starting from copy_addr
+    std::array<u8, 4> MakeFillBuffer(PAddr copy_addr);
 
 public:
     bool registered = false;

@@ -6,46 +6,8 @@
 #include "video_core/rasterizer_cache/surface_params.h"
 #include "video_core/rasterizer_cache/texture_codec.h"
 #include "video_core/rasterizer_cache/utils.h"
-#include "video_core/texture/texture_decode.h"
 
 namespace VideoCore {
-
-ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data) {
-    ClearValue result{};
-    switch (type) {
-    case SurfaceType::Color:
-    case SurfaceType::Texture:
-    case SurfaceType::Fill: {
-        Pica::Texture::TextureInfo tex_info{};
-        tex_info.format = static_cast<Pica::TexturingRegs::TextureFormat>(format);
-        const auto color = Pica::Texture::LookupTexture(fill_data, 0, 0, tex_info);
-        result.color = color / 255.f;
-        break;
-    }
-    case SurfaceType::Depth: {
-        u32 depth_uint = 0;
-        if (format == PixelFormat::D16) {
-            std::memcpy(&depth_uint, fill_data, 2);
-            result.depth = depth_uint / 65535.0f; // 2^16 - 1
-        } else if (format == PixelFormat::D24) {
-            std::memcpy(&depth_uint, fill_data, 3);
-            result.depth = depth_uint / 16777215.0f; // 2^24 - 1
-        }
-        break;
-    }
-    case SurfaceType::DepthStencil: {
-        u32 clear_value_uint;
-        std::memcpy(&clear_value_uint, fill_data, sizeof(u32));
-        result.depth = (clear_value_uint & 0xFFFFFF) / 16777215.0f; // 2^24 - 1
-        result.stencil = (clear_value_uint >> 24);
-        break;
-    }
-    default:
-        UNREACHABLE_MSG("Invalid surface type!");
-    }
-
-    return result;
-}
 
 void EncodeTexture(const SurfaceParams& surface_info, PAddr start_addr, PAddr end_addr,
                    std::span<u8> source, std::span<u8> dest, bool convert) {

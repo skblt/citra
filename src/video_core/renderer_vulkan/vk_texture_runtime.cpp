@@ -305,8 +305,7 @@ void TextureRuntime::Recycle(const HostTextureTag tag, ImageAlloc&& alloc) {
     texture_recycler.emplace(tag, std::move(alloc));
 }
 
-bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
-                                  VideoCore::ClearValue value) {
+bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClear& clear) {
     renderpass_cache.ExitRenderpass();
 
     const RecordParams params = {
@@ -317,7 +316,7 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
     };
 
     if (clear.texture_rect == surface.GetScaledRect()) {
-        scheduler.Record([params, clear, value](vk::CommandBuffer cmdbuf) {
+        scheduler.Record([params, clear](vk::CommandBuffer cmdbuf) {
             const vk::ImageSubresourceRange range = {
                 .aspectMask = params.aspect,
                 .baseMipLevel = clear.texture_level,
@@ -367,11 +366,11 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
                 static_cast<bool>(params.aspect & vk::ImageAspectFlagBits::eColor);
             if (is_color) {
                 cmdbuf.clearColorImage(params.src_image, vk::ImageLayout::eTransferDstOptimal,
-                                       MakeClearColorValue(value), range);
+                                       MakeClearColorValue(clear.value), range);
             } else {
                 cmdbuf.clearDepthStencilImage(params.src_image,
                                               vk::ImageLayout::eTransferDstOptimal,
-                                              MakeClearDepthStencilValue(value), range);
+                                              MakeClearDepthStencilValue(clear.value), range);
             }
 
             cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, params.pipeline_flags,
@@ -380,13 +379,12 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
         return true;
     }
 
-    ClearTextureWithRenderpass(surface, clear, value);
+    ClearTextureWithRenderpass(surface, clear);
     return true;
 }
 
 void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
-                                                const VideoCore::TextureClear& clear,
-                                                VideoCore::ClearValue value) {
+                                                const VideoCore::TextureClear& clear) {
     const bool is_color = surface.type != VideoCore::SurfaceType::Depth &&
                           surface.type != VideoCore::SurfaceType::DepthStencil;
 
@@ -449,7 +447,7 @@ void TextureRuntime::ClearTextureWithRenderpass(Surface& surface,
     };
 
     renderpass_cache.EnterRenderpass(color_surface, depth_surface, render_area, true,
-                                     MakeClearValue(value));
+                                     MakeClearValue(clear.value));
     renderpass_cache.ExitRenderpass();
 
     scheduler.Record([params, access_flag, pipeline_flags](vk::CommandBuffer cmdbuf) {

@@ -156,8 +156,7 @@ OGLTexture TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
     return texture;
 }
 
-bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
-                                  VideoCore::ClearValue value) {
+bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClear& clear) {
     OpenGLState prev_state = OpenGLState::GetCurState();
     SCOPE_EXIT({ prev_state.Apply(); });
 
@@ -187,7 +186,7 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
         state.color_mask.alpha_enabled = true;
         state.Apply();
 
-        glClearBufferfv(GL_COLOR, 0, value.color.AsArray());
+        glClearBufferfv(GL_COLOR, 0, clear.value.color.AsArray());
         break;
     case VideoCore::SurfaceType::Depth:
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
@@ -198,7 +197,7 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
         state.depth.write_mask = GL_TRUE;
         state.Apply();
 
-        glClearBufferfv(GL_DEPTH, 0, &value.depth);
+        glClearBufferfv(GL_DEPTH, 0, &clear.value.depth);
         break;
     case VideoCore::SurfaceType::DepthStencil:
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
@@ -209,7 +208,7 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
         state.stencil.write_mask = -1;
         state.Apply();
 
-        glClearBufferfi(GL_DEPTH_STENCIL, 0, value.depth, value.stencil);
+        glClearBufferfi(GL_DEPTH_STENCIL, 0, clear.value.depth, clear.value.stencil);
         break;
     default:
         UNREACHABLE_MSG("Invalid surface type!");
