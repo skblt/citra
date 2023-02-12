@@ -14,6 +14,10 @@
 
 namespace VideoCore {
 
+MICROPROFILE_DECLARE(RasterizerCache_CopySurface);
+MICROPROFILE_DECLARE(RasterizerCache_SurfaceLoad);
+MICROPROFILE_DECLARE(RasterizerCache_SurfaceFlush);
+
 template <class T>
 RasterizerCache<T>::RasterizerCache(Memory::MemorySystem& memory_, TextureRuntime& runtime_)
     : memory{memory_}, runtime{runtime_}, resolution_scale_factor{
@@ -258,7 +262,6 @@ auto RasterizerCache<T>::FindMatch(const SurfaceCache& surface_cache, const Surf
     return match_surface;
 }
 
-MICROPROFILE_DECLARE(RasterizerCache_CopySurface);
 template <class T>
 void RasterizerCache<T>::CopySurface(const Surface& src_surface, const Surface& dst_surface,
                                      SurfaceInterval copy_interval) {
@@ -759,7 +762,6 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
     surface->Validate(validate_interval);
 }
 
-MICROPROFILE_DECLARE(RasterizerCache_SurfaceLoad);
 template <class T>
 void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval interval) {
     const SurfaceParams load_info = surface->FromInterval(interval);
@@ -788,7 +790,6 @@ void RasterizerCache<T>::UploadSurface(const Surface& surface, SurfaceInterval i
     surface->Upload(upload, staging);
 }
 
-MICROPROFILE_DECLARE(RasterizerCache_SurfaceFlush);
 template <class T>
 void RasterizerCache<T>::DownloadSurface(const Surface& surface, SurfaceInterval interval) {
     const SurfaceParams flush_info = surface->FromInterval(interval);
