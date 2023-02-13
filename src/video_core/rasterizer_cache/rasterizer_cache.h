@@ -251,7 +251,7 @@ auto RasterizerCache<T>::GetSurface(const SurfaceParams& params, ScaleMatch matc
     ASSERT(!params.is_tiled || (params.width % 8 == 0 && params.height % 8 == 0));
 
     // Check for an exact match in existing surfaces
-    Surface surface = FindMatch<MatchFlags::Exact | MatchFlags::Invalid>(params, match_res_scale);
+    Surface surface = FindMatch<MatchFlags::Exact>(params, match_res_scale);
 
     if (!surface) {
         u16 target_res_scale = params.res_scale;
@@ -259,8 +259,7 @@ auto RasterizerCache<T>::GetSurface(const SurfaceParams& params, ScaleMatch matc
             // This surface may have a subrect of another surface with a higher res_scale, find
             // it to adjust our params
             SurfaceParams find_params = params;
-            Surface expandable =
-                FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(find_params, match_res_scale);
+            Surface expandable = FindMatch<MatchFlags::Expand>(find_params, match_res_scale);
             if (expandable && expandable->res_scale > target_res_scale) {
                 target_res_scale = expandable->res_scale;
             }
@@ -268,8 +267,7 @@ auto RasterizerCache<T>::GetSurface(const SurfaceParams& params, ScaleMatch matc
             // Keep res_scale when reinterpreting d24s8 -> rgba8
             if (params.pixel_format == PixelFormat::RGBA8) {
                 find_params.pixel_format = PixelFormat::D24S8;
-                expandable = FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(find_params,
-                                                                                 match_res_scale);
+                expandable = FindMatch<MatchFlags::Expand>(find_params, match_res_scale);
                 if (expandable && expandable->res_scale > target_res_scale) {
                     target_res_scale = expandable->res_scale;
                 }
@@ -297,14 +295,14 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
     }
 
     // Attempt to find encompassing surface
-    Surface surface = FindMatch<MatchFlags::SubRect | MatchFlags::Invalid>(params, match_res_scale);
+    Surface surface = FindMatch<MatchFlags::SubRect>(params, match_res_scale);
 
     // Check if FindMatch failed because of res scaling
     // If that's the case create a new surface with
     // the dimensions of the lower res_scale surface
     // to suggest it should not be used again
     if (!surface && match_res_scale != ScaleMatch::Ignore) {
-        surface = FindMatch<MatchFlags::SubRect | MatchFlags::Invalid>(params, ScaleMatch::Ignore);
+        surface = FindMatch<MatchFlags::SubRect>(params, ScaleMatch::Ignore);
         if (surface) {
             SurfaceParams new_params = *surface;
             new_params.res_scale = params.res_scale;
@@ -324,8 +322,7 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
 
     // Check for a surface we can expand before creating a new one
     if (!surface) {
-        surface =
-            FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(aligned_params, match_res_scale);
+        surface = FindMatch<MatchFlags::Expand>(aligned_params, match_res_scale);
         if (surface) {
             aligned_params.width = aligned_params.stride;
             aligned_params.UpdateParams();
@@ -659,8 +656,7 @@ template <class T>
 auto RasterizerCache<T>::GetTexCopySurface(const SurfaceParams& params) -> SurfaceRect_Tuple {
     Common::Rectangle<u32> rect{};
 
-    Surface match_surface =
-        FindMatch<MatchFlags::TexCopy | MatchFlags::Invalid>(params, ScaleMatch::Ignore);
+    Surface match_surface = FindMatch<MatchFlags::TexCopy>(params, ScaleMatch::Ignore);
 
     if (match_surface) {
         ValidateSurface(match_surface, params.addr, params.size);
@@ -1046,8 +1042,8 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, const Surface& r
 
     for (const auto& remove_surface : remove_surfaces) {
         if (remove_surface == region_owner) {
-            Surface expanded_surface = FindMatch<MatchFlags::SubRect | MatchFlags::Invalid>(
-                *region_owner, ScaleMatch::Ignore);
+            Surface expanded_surface =
+                FindMatch<MatchFlags::SubRect>(*region_owner, ScaleMatch::Ignore);
             ASSERT(expanded_surface);
 
             if ((region_owner->invalid_regions - expanded_surface->invalid_regions).empty()) {

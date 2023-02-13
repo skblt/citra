@@ -31,12 +31,11 @@ enum class ScaleMatch {
 };
 
 enum class MatchFlags {
-    Invalid = 1,      ///< Surface is allowed to be only partially valid
-    Exact = 1 << 1,   ///< Surface perfectly matches params
-    SubRect = 1 << 2, ///< Surface encompasses params
-    Copy = 1 << 3,    ///< Surface that can be used as a copy source
-    Expand = 1 << 4,  ///< Surface that can expand params
-    TexCopy = 1 << 5  ///< Surface that will match a display transfer "texture copy" parameters
+    Exact = 1 << 0,   ///< Surface perfectly matches params
+    SubRect = 1 << 1, ///< Surface encompasses params
+    Copy = 1 << 2,    ///< Surface that can be used as a copy source
+    Expand = 1 << 3,  ///< Surface that can expand params
+    TexCopy = 1 << 4  ///< Surface that will match a display transfer "texture copy" parameters
 };
 
 DECLARE_ENUM_FLAG_OPERATORS(MatchFlags);
