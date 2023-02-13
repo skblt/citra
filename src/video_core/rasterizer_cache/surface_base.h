@@ -52,6 +52,11 @@ public:
     SurfaceBase(const SurfaceParams& params) : SurfaceParams{params} {}
     virtual ~SurfaceBase() = default;
 
+    [[nodiscard]] bool Overlaps(PAddr overlap_addr, size_t overlap_size) const noexcept {
+        const PAddr overlap_end = overlap_addr + static_cast<PAddr>(overlap_size);
+        return addr < overlap_end && overlap_addr < end;
+    }
+
     /// Returns true when this surface can be used to fill the fill_interval of dest_surface
     bool CanFill(const SurfaceParams& dest_surface, SurfaceInterval fill_interval) const;
 
@@ -77,13 +82,14 @@ public:
     }
 
     /// Returns true when the entire surface is invalid
-    bool IsSurfaceFullyInvalid() const {
+    bool IsFullyInvalid() const {
         auto interval = GetInterval();
         return *invalid_regions.equal_range(interval).first == interval;
     }
 
 public:
     bool registered = false;
+    bool picked = false;
     SurfaceRegions invalid_regions;
     std::array<std::shared_ptr<Watcher>, 7> level_watchers;
     std::array<u8, 4> fill_data;

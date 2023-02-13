@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <boost/container/small_vector.hpp>
 #include "common/alignment.h"
 #include "common/logging/log.h"
 #include "common/microprofile.h"
@@ -28,92 +29,128 @@ RasterizerCache<T>::~RasterizerCache() {
 }
 
 template <class T>
+template <typename Func>
+void RasterizerCache<T>::ForEachSurfaceInRegion(PAddr addr, size_t size, Func&& func) {
+    using FuncReturn = typename std::invoke_result<Func, Surface>::type;
+    static constexpr bool BOOL_BREAK = std::is_same_v<FuncReturn, bool>;
+    boost::container::small_vector<Surface, 32> surfaces;
+    ForEachPage(addr, size, [this, &surfaces, addr, size, func](u64 page) {
+        const auto it = page_table.find(page);
+        if (it == page_table.end()) {
+            if constexpr (BOOL_BREAK) {
+                return false;
+            } else {
+                return;
+            }
+        }
+        for (const Surface& surface : it->second) {
+            if (surface->picked) {
+                continue;
+            }
+            if (!surface->Overlaps(addr, size)) {
+                continue;
+            }
+
+            surface->picked = true;
+            surfaces.push_back(surface);
+            if constexpr (BOOL_BREAK) {
+                if (func(surface)) {
+                    return true;
+                }
+            } else {
+                func(surface);
+            }
+        }
+        if constexpr (BOOL_BREAK) {
+            return false;
+        }
+    });
+    for (const Surface surface : surfaces) {
+        surface->picked = false;
+    }
+}
+
+template <class T>
 template <MatchFlags find_flags>
-auto RasterizerCache<T>::FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params,
-                                   ScaleMatch match_scale_type,
+auto RasterizerCache<T>::FindMatch(const SurfaceParams& params, ScaleMatch match_scale_type,
                                    std::optional<SurfaceInterval> validate_interval) -> Surface {
     Surface match_surface = nullptr;
     bool match_valid = false;
     u32 match_scale = 0;
     SurfaceInterval match_interval{};
 
-    for (const auto& pair : RangeFromInterval(surface_cache, params.GetInterval())) {
-        for (const auto& surface : pair.second) {
-            const bool res_scale_matched = match_scale_type == ScaleMatch::Exact
-                                               ? (params.res_scale == surface->res_scale)
-                                               : (params.res_scale <= surface->res_scale);
-            // validity will be checked in GetCopyableInterval
-            const bool is_valid =
-                True(find_flags & MatchFlags::Copy)
-                    ? true
-                    : surface->IsRegionValid(validate_interval.value_or(params.GetInterval()));
+    ForEachSurfaceInRegion(params.addr, params.size, [&](Surface surface) {
+        const bool res_scale_matched = match_scale_type == ScaleMatch::Exact
+                                           ? (params.res_scale == surface->res_scale)
+                                           : (params.res_scale <= surface->res_scale);
+        const bool is_valid =
+            True(find_flags & MatchFlags::Copy)
+                ? true
+                : surface->IsRegionValid(validate_interval.value_or(params.GetInterval()));
 
-            if (False(find_flags & MatchFlags::Invalid) && !is_valid) {
-                continue;
+        const auto IsMatch_Helper = [&](auto check_type, auto match_fn) {
+            if (False(find_flags & check_type))
+                return;
+
+            bool matched;
+            SurfaceInterval surface_interval;
+            std::tie(matched, surface_interval) = match_fn();
+            if (!matched)
+                return;
+
+            if (!res_scale_matched && match_scale_type != ScaleMatch::Ignore &&
+                surface->type != SurfaceType::Fill)
+                return;
+
+            // Found a match, update only if this is better than the previous one
+            const auto UpdateMatch = [&] {
+                match_surface = surface;
+                match_valid = is_valid;
+                match_scale = surface->res_scale;
+                match_interval = surface_interval;
+            };
+
+            if (surface->res_scale > match_scale) {
+                UpdateMatch();
+                return;
+            } else if (surface->res_scale < match_scale) {
+                return;
             }
 
-            auto IsMatch_Helper = [&](auto check_type, auto match_fn) {
-                if (False(find_flags & check_type))
-                    return;
+            if (is_valid && !match_valid) {
+                UpdateMatch();
+                return;
+            } else if (is_valid != match_valid) {
+                return;
+            }
 
-                bool matched;
-                SurfaceInterval surface_interval;
-                std::tie(matched, surface_interval) = match_fn();
-                if (!matched)
-                    return;
+            if (boost::icl::length(surface_interval) > boost::icl::length(match_interval)) {
+                UpdateMatch();
+            }
+        };
 
-                if (!res_scale_matched && match_scale_type != ScaleMatch::Ignore &&
-                    surface->type != SurfaceType::Fill)
-                    return;
+        IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::Exact>{}, [&] {
+            return std::make_pair(surface->ExactMatch(params), surface->GetInterval());
+        });
+        IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::SubRect>{}, [&] {
+            return std::make_pair(surface->CanSubRect(params), surface->GetInterval());
+        });
+        IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::Copy>{}, [&] {
+            ASSERT(validate_interval);
+            auto copy_interval =
+                surface->GetCopyableInterval(params.FromInterval(*validate_interval));
+            bool matched = boost::icl::length(copy_interval & *validate_interval) != 0 &&
+                           surface->CanCopy(params, copy_interval);
+            return std::make_pair(matched, copy_interval);
+        });
+        IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::Expand>{}, [&] {
+            return std::make_pair(surface->CanExpand(params), surface->GetInterval());
+        });
+        IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::TexCopy>{}, [&] {
+            return std::make_pair(surface->CanTexCopy(params), surface->GetInterval());
+        });
+    });
 
-                // Found a match, update only if this is better than the previous one
-                auto UpdateMatch = [&] {
-                    match_surface = surface;
-                    match_valid = is_valid;
-                    match_scale = surface->res_scale;
-                    match_interval = surface_interval;
-                };
-
-                if (surface->res_scale > match_scale) {
-                    UpdateMatch();
-                    return;
-                } else if (surface->res_scale < match_scale) {
-                    return;
-                }
-
-                if (is_valid && !match_valid) {
-                    UpdateMatch();
-                    return;
-                } else if (is_valid != match_valid) {
-                    return;
-                }
-
-                if (boost::icl::length(surface_interval) > boost::icl::length(match_interval)) {
-                    UpdateMatch();
-                }
-            };
-            IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::Exact>{}, [&] {
-                return std::make_pair(surface->ExactMatch(params), surface->GetInterval());
-            });
-            IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::SubRect>{}, [&] {
-                return std::make_pair(surface->CanSubRect(params), surface->GetInterval());
-            });
-            IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::Copy>{}, [&] {
-                ASSERT(validate_interval);
-                auto copy_interval =
-                    surface->GetCopyableInterval(params.FromInterval(*validate_interval));
-                bool matched = boost::icl::length(copy_interval & *validate_interval) != 0 &&
-                               surface->CanCopy(params, copy_interval);
-                return std::make_pair(matched, copy_interval);
-            });
-            IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::Expand>{}, [&] {
-                return std::make_pair(surface->CanExpand(params), surface->GetInterval());
-            });
-            IsMatch_Helper(std::integral_constant<MatchFlags, MatchFlags::TexCopy>{}, [&] {
-                return std::make_pair(surface->CanTexCopy(params), surface->GetInterval());
-            });
-        }
-    }
     return match_surface;
 }
 
@@ -214,8 +251,7 @@ auto RasterizerCache<T>::GetSurface(const SurfaceParams& params, ScaleMatch matc
     ASSERT(!params.is_tiled || (params.width % 8 == 0 && params.height % 8 == 0));
 
     // Check for an exact match in existing surfaces
-    Surface surface =
-        FindMatch<MatchFlags::Exact | MatchFlags::Invalid>(surface_cache, params, match_res_scale);
+    Surface surface = FindMatch<MatchFlags::Exact | MatchFlags::Invalid>(params, match_res_scale);
 
     if (!surface) {
         u16 target_res_scale = params.res_scale;
@@ -223,8 +259,8 @@ auto RasterizerCache<T>::GetSurface(const SurfaceParams& params, ScaleMatch matc
             // This surface may have a subrect of another surface with a higher res_scale, find
             // it to adjust our params
             SurfaceParams find_params = params;
-            Surface expandable = FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(
-                surface_cache, find_params, match_res_scale);
+            Surface expandable =
+                FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(find_params, match_res_scale);
             if (expandable && expandable->res_scale > target_res_scale) {
                 target_res_scale = expandable->res_scale;
             }
@@ -232,8 +268,8 @@ auto RasterizerCache<T>::GetSurface(const SurfaceParams& params, ScaleMatch matc
             // Keep res_scale when reinterpreting d24s8 -> rgba8
             if (params.pixel_format == PixelFormat::RGBA8) {
                 find_params.pixel_format = PixelFormat::D24S8;
-                expandable = FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(
-                    surface_cache, find_params, match_res_scale);
+                expandable = FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(find_params,
+                                                                                 match_res_scale);
                 if (expandable && expandable->res_scale > target_res_scale) {
                     target_res_scale = expandable->res_scale;
                 }
@@ -261,16 +297,14 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
     }
 
     // Attempt to find encompassing surface
-    Surface surface = FindMatch<MatchFlags::SubRect | MatchFlags::Invalid>(surface_cache, params,
-                                                                           match_res_scale);
+    Surface surface = FindMatch<MatchFlags::SubRect | MatchFlags::Invalid>(params, match_res_scale);
 
     // Check if FindMatch failed because of res scaling
     // If that's the case create a new surface with
     // the dimensions of the lower res_scale surface
     // to suggest it should not be used again
     if (!surface && match_res_scale != ScaleMatch::Ignore) {
-        surface = FindMatch<MatchFlags::SubRect | MatchFlags::Invalid>(surface_cache, params,
-                                                                       ScaleMatch::Ignore);
+        surface = FindMatch<MatchFlags::SubRect | MatchFlags::Invalid>(params, ScaleMatch::Ignore);
         if (surface) {
             SurfaceParams new_params = *surface;
             new_params.res_scale = params.res_scale;
@@ -290,8 +324,8 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
 
     // Check for a surface we can expand before creating a new one
     if (!surface) {
-        surface = FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(surface_cache, aligned_params,
-                                                                      match_res_scale);
+        surface =
+            FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(aligned_params, match_res_scale);
         if (surface) {
             aligned_params.width = aligned_params.stride;
             aligned_params.UpdateParams();
@@ -310,7 +344,7 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
             // Delete the expanded surface, this can't be done safely yet
             // because it may still be in use
             surface->UnlinkAllWatcher(); // unlink watchers as if this surface is already deleted
-            remove_surfaces.emplace(surface);
+            remove_surfaces.push_back(surface);
 
             surface = new_surface;
             RegisterSurface(new_surface);
@@ -518,12 +552,7 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
 
     if (resolution_scale_changed || texture_filter_changed) [[unlikely]] {
         resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
-        FlushAll();
-        while (!surface_cache.empty()) {
-            UnregisterSurface(*surface_cache.begin()->second.begin());
-        }
-
-        texture_cube_cache.clear();
+        UnregisterAll();
     }
 
     Common::Rectangle<u32> viewport_clamped{
@@ -630,8 +659,8 @@ template <class T>
 auto RasterizerCache<T>::GetTexCopySurface(const SurfaceParams& params) -> SurfaceRect_Tuple {
     Common::Rectangle<u32> rect{};
 
-    Surface match_surface = FindMatch<MatchFlags::TexCopy | MatchFlags::Invalid>(
-        surface_cache, params, ScaleMatch::Ignore);
+    Surface match_surface =
+        FindMatch<MatchFlags::TexCopy | MatchFlags::Invalid>(params, ScaleMatch::Ignore);
 
     if (match_surface) {
         ValidateSurface(match_surface, params.addr, params.size);
@@ -706,8 +735,7 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
         const auto interval = *it & validate_interval;
         SurfaceParams params = surface->FromInterval(interval);
 
-        Surface copy_surface =
-            FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
+        Surface copy_surface = FindMatch<MatchFlags::Copy>(params, ScaleMatch::Ignore, interval);
         if (copy_surface != nullptr) {
             SurfaceInterval copy_interval = copy_surface->GetCopyableInterval(params);
             CopySurface(copy_surface, surface, copy_interval);
@@ -853,7 +881,7 @@ bool RasterizerCache<T>::NoUnimplementedReinterpretations(const Surface& surface
             params.pixel_format = format;
             // This could potentially be expensive, although experimentally it hasn't been too bad
             Surface test_surface =
-                FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
+                FindMatch<MatchFlags::Copy>(params, ScaleMatch::Ignore, interval);
 
             if (test_surface) {
                 LOG_WARNING(HW_GPU, "Missing pixel_format reinterpreter: {} -> {}",
@@ -870,17 +898,17 @@ bool RasterizerCache<T>::NoUnimplementedReinterpretations(const Surface& surface
 template <class T>
 bool RasterizerCache<T>::IntervalHasInvalidPixelFormat(SurfaceParams& params,
                                                        SurfaceInterval interval) {
-    params.pixel_format = PixelFormat::Invalid;
-    for (const auto& set : RangeFromInterval(surface_cache, interval)) {
-        for (const auto& surface : set.second) {
-            if (surface->pixel_format == PixelFormat::Invalid) {
-                LOG_DEBUG(HW_GPU, "Surface {:#x} found with invalid pixel format", surface->addr);
-                return true;
-            }
+    bool invalid_format_found = false;
+    ForEachSurfaceInRegion(params.addr, params.end, [&](Surface surface) {
+        if (surface->pixel_format == PixelFormat::Invalid) {
+            LOG_DEBUG(HW_GPU, "Surface {:#x} found with invalid pixel format", surface->addr);
+            invalid_format_found = true;
+            return true;
         }
-    }
+        return false;
+    });
 
-    return false;
+    return invalid_format_found;
 }
 
 template <class T>
@@ -890,7 +918,7 @@ bool RasterizerCache<T>::ValidateByReinterpretation(const Surface& surface, Surf
     for (const auto& reinterpreter : runtime.GetPossibleReinterpretations(dest_format)) {
         params.pixel_format = reinterpreter->GetSourceFormat();
         Surface reinterpret_surface =
-            FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
+            FindMatch<MatchFlags::Copy>(params, ScaleMatch::Ignore, interval);
 
         if (reinterpret_surface) {
             auto reinterpret_interval = reinterpret_surface->GetCopyableInterval(params);
@@ -927,7 +955,7 @@ void RasterizerCache<T>::ClearAll(bool flush) {
     // Remove the whole cache without really looking at it.
     cached_pages -= flush_interval;
     dirty_regions -= SurfaceInterval(0x0, 0xFFFFFFFF);
-    surface_cache -= SurfaceInterval(0x0, 0xFFFFFFFF);
+    page_table.clear();
     remove_surfaces.clear();
 }
 
@@ -941,14 +969,15 @@ void RasterizerCache<T>::FlushRegion(PAddr addr, u32 size, Surface flush_surface
     SurfaceRegions flushed_intervals;
 
     for (auto& pair : RangeFromInterval(dirty_regions, flush_interval)) {
-        // small sizes imply that this most likely comes from the cpu, flush the entire region
+        // Small sizes imply that this most likely comes from the cpu, flush the entire region
         // the point is to avoid thousands of small writes every frame if the cpu decides to
         // access that region, anything higher than 8 you're guaranteed it comes from a service
         const auto interval = size <= 8 ? pair.first : pair.first & flush_interval;
         auto& surface = pair.second;
 
-        if (flush_surface != nullptr && surface != flush_surface)
+        if (flush_surface && surface != flush_surface) {
             continue;
+        }
 
         // Sanity check, this surface is the last one that marked this region dirty
         ASSERT(surface->IsRegionValid(interval));
@@ -986,41 +1015,39 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, const Surface& r
         region_owner->invalid_regions.erase(invalid_interval);
     }
 
-    for (const auto& pair : RangeFromInterval(surface_cache, invalid_interval)) {
-        for (const auto& cached_surface : pair.second) {
-            if (cached_surface == region_owner) {
-                continue;
-            }
-
-            // If cpu is invalidating this region we want to remove it
-            // to (likely) mark the memory pages as uncached
-            if (!region_owner && size <= 8) {
-                FlushRegion(cached_surface->addr, cached_surface->size, cached_surface);
-                remove_surfaces.emplace(cached_surface);
-                continue;
-            }
-
-            const auto interval = cached_surface->GetInterval() & invalid_interval;
-            cached_surface->invalid_regions.insert(interval);
-            cached_surface->InvalidateAllWatcher();
-
-            // If the surface has no salvageable data it should be removed from the cache to avoid
-            // clogging the data structure
-            if (cached_surface->IsSurfaceFullyInvalid()) {
-                remove_surfaces.emplace(cached_surface);
-            }
+    ForEachSurfaceInRegion(addr, size, [&](Surface surface) {
+        if (surface == region_owner) {
+            return;
         }
-    }
 
-    if (region_owner != nullptr)
+        // If the CPU is invalidating this region we want to remove it
+        // to (likely) mark the memory pages as uncached
+        if (!region_owner && size <= 8) {
+            FlushRegion(surface->addr, surface->size, surface);
+            remove_surfaces.push_back(surface);
+            return;
+        }
+
+        const SurfaceInterval interval = surface->GetInterval() & invalid_interval;
+        surface->invalid_regions.insert(interval);
+
+        // If the surface has no salvageable data it should be removed from the cache to avoid
+        // clogging the data structure
+        if (surface->IsFullyInvalid()) {
+            remove_surfaces.push_back(surface);
+        }
+    });
+
+    if (region_owner) {
         dirty_regions.set({invalid_interval, region_owner});
-    else
+    } else {
         dirty_regions.erase(invalid_interval);
+    }
 
     for (const auto& remove_surface : remove_surfaces) {
         if (remove_surface == region_owner) {
             Surface expanded_surface = FindMatch<MatchFlags::SubRect | MatchFlags::Invalid>(
-                surface_cache, *region_owner, ScaleMatch::Ignore);
+                *region_owner, ScaleMatch::Ignore);
             ASSERT(expanded_surface);
 
             if ((region_owner->invalid_regions - expanded_surface->invalid_regions).empty()) {
@@ -1031,7 +1058,6 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, const Surface& r
         }
         UnregisterSurface(remove_surface);
     }
-
     remove_surfaces.clear();
 }
 
@@ -1044,24 +1070,48 @@ auto RasterizerCache<T>::CreateSurface(SurfaceParams& params) -> Surface {
 
 template <class T>
 void RasterizerCache<T>::RegisterSurface(const Surface& surface) {
-    if (surface->registered) {
-        return;
-    }
+    ASSERT_MSG(!surface->registered, "Trying to register an already registered surface");
 
     surface->registered = true;
-    surface_cache.add({surface->GetInterval(), SurfaceSet{surface}});
     UpdatePagesCachedCount(surface->addr, surface->size, 1);
+    ForEachPage(surface->addr, surface->size,
+                [this, surface](u64 page) { page_table[page].push_back(surface); });
 }
 
 template <class T>
 void RasterizerCache<T>::UnregisterSurface(const Surface& surface) {
-    if (!surface->registered) {
-        return;
-    }
+    ASSERT_MSG(surface->registered, "Trying to unregister an already unregistered surface");
 
     surface->registered = false;
     UpdatePagesCachedCount(surface->addr, surface->size, -1);
-    surface_cache.subtract({surface->GetInterval(), SurfaceSet{surface}});
+
+    ForEachPage(surface->addr, surface->size, [this, surface](u64 page) {
+        const auto page_it = page_table.find(page);
+        if (page_it == page_table.end()) {
+            ASSERT_MSG(false, "Unregistering unregistered page=0x{:x}", page << CITRA_PAGEBITS);
+            return;
+        }
+        std::vector<Surface>& surfaces = page_it->second;
+        const auto vector_it = std::find(surfaces.begin(), surfaces.end(), surface);
+        if (vector_it == surfaces.end()) {
+            ASSERT_MSG(false, "Unregistering unregistered surface in page=0x{:x}",
+                       page << CITRA_PAGEBITS);
+            return;
+        }
+        surfaces.erase(vector_it);
+    });
+}
+
+template <class T>
+void RasterizerCache<T>::UnregisterAll() {
+    FlushAll();
+    for (auto& [page, surfaces] : page_table) {
+        while (!surfaces.empty()) {
+            UnregisterSurface(surfaces.back());
+        }
+    }
+    texture_cube_cache.clear();
+    remove_surfaces.clear();
 }
 
 template <class T>

@@ -45,26 +45,17 @@ class RasterizerAccelerated;
 
 template <class T>
 class RasterizerCache : NonCopyable {
-public:
+    /// Address shift for caching surfaces into a hash table
+    static constexpr u64 CITRA_PAGEBITS = 18;
+
     using TextureRuntime = typename T::RuntimeType;
     using Surface = std::shared_ptr<typename T::SurfaceType>;
     using Watcher = SurfaceWatcher<typename T::SurfaceType>;
 
-private:
     /// Declare rasterizer interval types
-    using SurfaceSet = std::set<Surface>;
     using SurfaceMap = boost::icl::interval_map<PAddr, Surface, boost::icl::partial_absorber,
                                                 std::less, boost::icl::inplace_plus,
                                                 boost::icl::inter_section, SurfaceInterval>;
-    using SurfaceCache = boost::icl::interval_map<PAddr, SurfaceSet, boost::icl::partial_absorber,
-                                                  std::less, boost::icl::inplace_plus,
-                                                  boost::icl::inter_section, SurfaceInterval>;
-
-    static_assert(
-        std::is_same<SurfaceRegions::interval_type, typename SurfaceCache::interval_type>() &&
-            std::is_same<typename SurfaceMap::interval_type,
-                         typename SurfaceCache::interval_type>(),
-        "Incorrect interval types");
 
     using SurfaceRect_Tuple = std::tuple<Surface, Common::Rectangle<u32>>;
     using SurfaceSurfaceRect_Tuple = std::tuple<Surface, Surface, Common::Rectangle<u32>>;
@@ -73,12 +64,6 @@ private:
 public:
     RasterizerCache(Memory::MemorySystem& memory, TextureRuntime& runtime);
     ~RasterizerCache();
-
-    /// Get the best surface match (and its match type) for the given flags
-    template <MatchFlags find_flags>
-    Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params,
-                      ScaleMatch match_scale_type,
-                      std::optional<SurfaceInterval> validate_interval = std::nullopt);
 
     /// Blit one surface's texture to another
     bool BlitSurfaces(const Surface& src_surface, Common::Rectangle<u32> src_rect,
@@ -127,6 +112,32 @@ public:
     void ClearAll(bool flush);
 
 private:
+    /// Iterate over all page indices in a range
+    template <typename Func>
+    void ForEachPage(PAddr addr, size_t size, Func&& func) {
+        static constexpr bool RETURNS_BOOL = std::is_same_v<std::invoke_result<Func, u64>, bool>;
+        const u64 page_end = (addr + size - 1) >> CITRA_PAGEBITS;
+        for (u64 page = addr >> CITRA_PAGEBITS; page <= page_end; ++page) {
+            if constexpr (RETURNS_BOOL) {
+                if (func(page)) {
+                    break;
+                }
+            } else {
+                func(page);
+            }
+        }
+    }
+
+    /// Iterates over all the surfaces in a region calling func
+    template <typename Func>
+    void ForEachSurfaceInRegion(PAddr addr, size_t size, Func&& func);
+
+    /// Get the best surface match (and its match type) for the given flags
+    template <MatchFlags find_flags>
+    Surface FindMatch(const SurfaceParams& params, ScaleMatch match_scale_type,
+                      std::optional<SurfaceInterval> validate_interval = std::nullopt);
+
+    /// Duplicates src_surface contents to dest_surface
     void DuplicateSurface(const Surface& src_surface, const Surface& dest_surface);
 
     /// Update surface's texture for given region when necessary
@@ -161,18 +172,25 @@ private:
     /// Remove surface from the cache
     void UnregisterSurface(const Surface& surface);
 
+    /// Unregisters all surfaces from the cache
+    void UnregisterAll();
+
     /// Increase/decrease the number of surface in pages touching the specified region
     void UpdatePagesCachedCount(PAddr addr, u32 size, int delta);
 
 private:
     Memory::MemorySystem& memory;
     TextureRuntime& runtime;
-    SurfaceCache surface_cache;
     PageMap cached_pages;
     SurfaceMap dirty_regions;
-    SurfaceSet remove_surfaces;
+    std::vector<Surface> remove_surfaces;
     u16 resolution_scale_factor;
     std::unordered_map<TextureCubeConfig, Surface> texture_cube_cache;
+
+    // The internal surface cache is based on buckets of 256KB.
+    // This fits better for the purpose of this cache as textures are normaly
+    // large in size.
+    std::unordered_map<u64, std::vector<Surface>, Common::IdentityHash<u64>> page_table;
 };
 
 } // namespace VideoCore
