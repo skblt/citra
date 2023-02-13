@@ -123,7 +123,7 @@ private:
     void SyncAndUploadLUTsLF();
 
     /// Syncs all enabled PICA texture units
-    void SyncTextureUnits(Surface* const color_surface);
+    void SyncTextureUnits();
 
     /// Upload the uniform blocks to the uniform buffer object
     void UploadUniforms(bool accelerate_draw);
@@ -152,11 +152,12 @@ private:
     /// Creates the vertex layout struct used for software shader pipelines
     void MakeSoftwareVertexLayout();
 
-    /// Binds a sampler to the specified texture unit
-    void BindSampler(u32 unit, SamplerInfo& info, const Pica::TexturingRegs::TextureConfig& config);
+    /// Bind a texture/shadow cube to texture unit 0
+    void BindTextureCube(const Pica::TexturingRegs::FullTextureConfig& config);
+    void BindShadowCube(const Pica::TexturingRegs::FullTextureConfig& config);
 
-    /// Creates a new sampler object
-    vk::Sampler CreateSampler(const SamplerInfo& info);
+    /// Special case when a texture is both bound and a framebuffer
+    void HandleFeedbackLoop(u32 unit, Surface& color_surface);
 
 private:
     const Instance& instance;
@@ -171,13 +172,6 @@ private:
     std::array<u32, 16> binding_offsets{};
     std::array<bool, 16> enable_attributes{};
     std::array<vk::Buffer, 16> vertex_buffers;
-    vk::Sampler default_sampler;
-    Surface null_surface;
-    Surface null_storage_surface;
-
-    std::array<SamplerInfo, 3> texture_samplers;
-    SamplerInfo texture_cube_sampler;
-    std::unordered_map<SamplerInfo, vk::Sampler> samplers;
     PipelineInfo pipeline_info;
 
     StreamBuffer stream_buffer;     ///< Vertex+Index+Uniform buffer

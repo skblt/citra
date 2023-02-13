@@ -10,10 +10,19 @@
 #include "common/math_util.h"
 #include "common/vector_math.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
+#include "video_core/rasterizer_cache/slot_vector.h"
 
 namespace VideoCore {
 
 constexpr std::size_t MAX_PICA_LEVELS = 8;
+
+using SurfaceId = SlotId;
+using SamplerId = SlotId;
+
+/// Fake surface ID for null surfaces
+constexpr SurfaceId NULL_SURFACE_ID{0};
+/// Fake sampler ID for null samplers
+constexpr SamplerId NULL_SAMPLER_ID{0};
 
 using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
 

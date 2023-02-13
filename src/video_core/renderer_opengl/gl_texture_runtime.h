@@ -6,6 +6,7 @@
 
 #include <set>
 #include <span>
+#include "video_core/rasterizer_cache/framebuffer_base.h"
 #include "video_core/rasterizer_cache/rasterizer_cache_base.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
@@ -36,10 +37,11 @@ class Surface;
  */
 class TextureRuntime {
     friend class Surface;
+    friend class Framebuffer;
 
 public:
-    TextureRuntime(Driver& driver);
-    ~TextureRuntime() = default;
+    explicit TextureRuntime(Driver& driver);
+    ~TextureRuntime();
 
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
     StagingData FindStaging(u32 size, bool upload);
@@ -76,7 +78,7 @@ public:
 private:
     /// Returns the framebuffer used for texture downloads
     void BindFramebuffer(GLenum target, GLint level, GLenum textarget, VideoCore::SurfaceType type,
-                         OGLTexture& texture) const;
+                         GLuint handle) const;
 
     /// Returns the OpenGL driver class
     const Driver& GetDriver() const {
@@ -93,6 +95,7 @@ private:
     TextureFilterer filterer;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
     std::unordered_multimap<VideoCore::HostTextureTag, OGLTexture> texture_recycler;
+    std::unordered_map<u64, OGLFramebuffer, Common::IdentityHash<u64>> framebuffer_cache;
     StreamBuffer upload_buffer;
     std::vector<u8> download_buffer;
     OGLFramebuffer read_fbo, draw_fbo;
@@ -100,8 +103,14 @@ private:
 
 class Surface : public VideoCore::SurfaceBase {
 public:
-    Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
+    explicit Surface(TextureRuntime& runtime, const VideoCore::SurfaceParams& params);
     ~Surface() override;
+
+    Surface(const Surface&) noexcept = delete;
+    Surface& operator=(const Surface&) noexcept = delete;
+
+    Surface(Surface&&) noexcept = default;
+    Surface& operator=(Surface&&) noexcept = default;
 
     /// Returns the surface image handle
     GLuint Handle() const noexcept {
@@ -127,16 +136,59 @@ private:
     void ScaledDownload(const VideoCore::BufferTextureCopy& download, const StagingData& staging);
 
 private:
-    TextureRuntime& runtime;
-    const Driver& driver;
-
-public:
+    TextureRuntime* runtime;
+    const Driver* driver;
     OGLTexture texture{};
 };
 
+class Framebuffer : public VideoCore::FramebufferBase {
+public:
+    explicit Framebuffer(TextureRuntime& runtime, Surface* const color,
+                         Surface* const depth_stencil, const Pica::Regs& regs,
+                         Common::Rectangle<u32> surfaces_rect);
+    ~Framebuffer();
+
+    [[nodiscard]] GLuint Handle() const noexcept {
+        return handle;
+    }
+
+    [[nodiscard]] GLuint Attachment(VideoCore::SurfaceType type) const noexcept {
+        return attachments[Index(type)];
+    }
+
+    bool HasAttachment(VideoCore::SurfaceType type) const noexcept {
+        return static_cast<bool>(attachments[Index(type)]);
+    }
+
+private:
+    std::array<GLuint, 2> attachments{};
+    GLuint handle{};
+};
+
+class Sampler {
+public:
+    explicit Sampler(TextureRuntime& runtime, VideoCore::SamplerParams params);
+    ~Sampler();
+
+    Sampler(const Sampler&) = delete;
+    Sampler& operator=(const Sampler&) = delete;
+
+    Sampler(Sampler&&) = default;
+    Sampler& operator=(Sampler&&) = default;
+
+    [[nodiscard]] GLuint Handle() const noexcept {
+        return sampler.handle;
+    }
+
+private:
+    OGLSampler sampler;
+};
+
 struct Traits {
-    using RuntimeType = TextureRuntime;
-    using SurfaceType = Surface;
+    using Runtime = TextureRuntime;
+    using Surface = Surface;
+    using Framebuffer = Framebuffer;
+    using Sampler = Sampler;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;

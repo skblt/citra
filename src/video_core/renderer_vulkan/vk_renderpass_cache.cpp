@@ -11,6 +11,9 @@
 
 namespace Vulkan {
 
+using VideoCore::PixelFormat;
+using VideoCore::SurfaceType;
+
 RenderpassCache::RenderpassCache(const Instance& instance, Scheduler& scheduler)
     : instance{instance}, scheduler{scheduler}, dynamic_rendering{
                                                     instance.IsDynamicRenderingSupported()} {}
@@ -38,52 +41,36 @@ RenderpassCache::~RenderpassCache() {
 
 void RenderpassCache::EnterRenderpass(Surface* const color, Surface* const depth_stencil,
                                       vk::Rect2D render_area, bool do_clear, vk::ClearValue clear) {
-    ASSERT(color || depth_stencil);
+    return EnterRenderpass(Framebuffer{color, depth_stencil, render_area}, do_clear, clear);
+}
 
+void RenderpassCache::EnterRenderpass(const Framebuffer& framebuffer, bool do_clear,
+                                      vk::ClearValue clear) {
     if (dynamic_rendering) {
-        return BeginRendering(color, depth_stencil, render_area, do_clear, clear);
+        return BeginRendering(framebuffer, do_clear, clear);
     }
 
-    u32 width = UINT32_MAX;
-    u32 height = UINT32_MAX;
-    u32 cursor = 0;
-    std::array<VideoCore::PixelFormat, 2> formats{};
-    std::array<vk::Image, 2> images{};
-    std::array<vk::ImageView, 2> views{};
-
-    const auto Prepare = [&](Surface* const surface) {
-        if (!surface) {
-            formats[cursor++] = VideoCore::PixelFormat::Invalid;
-            return;
-        }
-
-        width = std::min(width, surface->GetScaledWidth());
-        height = std::min(height, surface->GetScaledHeight());
-        formats[cursor] = surface->pixel_format;
-        images[cursor] = surface->Image();
-        views[cursor++] = surface->FramebufferView();
-    };
-
-    Prepare(color);
-    Prepare(depth_stencil);
-
-    const RenderingInfo new_info = {
-        .color =
-            RenderTarget{
-                .aspect = vk::ImageAspectFlagBits::eColor,
-                .image = images[0],
-                .image_view = views[0],
-            },
-        .depth =
-            RenderTarget{
-                .aspect = depth_stencil ? depth_stencil->Aspect() : vk::ImageAspectFlagBits::eDepth,
-                .image = images[1],
-                .image_view = views[1],
-            },
-        .render_area = render_area,
+    RenderingInfo new_info = {
+        .color{
+            .aspect = vk::ImageAspectFlagBits::eColor,
+            .image = framebuffer.Image(SurfaceType::Color),
+            .image_view = framebuffer.ImageView(SurfaceType::Color),
+        },
+        .depth{
+            .aspect = vk::ImageAspectFlagBits::eDepth,
+            .image = framebuffer.Image(SurfaceType::DepthStencil),
+            .image_view = framebuffer.ImageView(SurfaceType::Color),
+        },
+        .render_area = framebuffer.RenderArea(),
         .clear = clear,
         .do_clear = do_clear,
     };
+
+    const PixelFormat color_format = framebuffer.Format(SurfaceType::Color);
+    const PixelFormat depth_format = framebuffer.Format(SurfaceType::DepthStencil);
+    if (depth_format == PixelFormat::D24S8) {
+        new_info.depth.aspect |= vk::ImageAspectFlagBits::eStencil;
+    }
 
     const bool is_dirty = scheduler.IsStateDirty(StateFlags::Renderpass);
     if (info == new_info && rendering && !is_dirty) {
@@ -91,13 +78,13 @@ void RenderpassCache::EnterRenderpass(Surface* const color, Surface* const depth
         return;
     }
 
-    const vk::RenderPass renderpass = GetRenderpass(formats[0], formats[1], do_clear);
+    const vk::RenderPass renderpass = GetRenderpass(color_format, depth_format, do_clear);
 
     const FramebufferInfo framebuffer_info = {
-        .color = views[0],
-        .depth = views[1],
-        .width = width,
-        .height = height,
+        .color = new_info.color.image_view,
+        .depth = new_info.depth.image_view,
+        .width = framebuffer.Width(),
+        .height = framebuffer.Height(),
     };
 
     auto [it, new_framebuffer] = framebuffers.try_emplace(framebuffer_info);
@@ -108,18 +95,18 @@ void RenderpassCache::EnterRenderpass(Surface* const color, Surface* const depth
     if (rendering) {
         ExitRenderpass();
     }
-    scheduler.Record(
-        [render_area, clear, renderpass, framebuffer = it->second](vk::CommandBuffer cmdbuf) {
-            const vk::RenderPassBeginInfo renderpass_begin_info = {
-                .renderPass = renderpass,
-                .framebuffer = framebuffer,
-                .renderArea = render_area,
-                .clearValueCount = 1,
-                .pClearValues = &clear,
-            };
+    scheduler.Record([render_area = new_info.render_area, clear, renderpass,
+                      framebuffer = it->second](vk::CommandBuffer cmdbuf) {
+        const vk::RenderPassBeginInfo renderpass_begin_info = {
+            .renderPass = renderpass,
+            .framebuffer = framebuffer,
+            .renderArea = render_area,
+            .clearValueCount = 1,
+            .pClearValues = &clear,
+        };
 
-            cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
-        });
+        cmdbuf.beginRenderPass(renderpass_begin_info, vk::SubpassContents::eInline);
+    });
 
     scheduler.MarkStateNonDirty(StateFlags::Renderpass);
     info = new_info;
@@ -200,27 +187,27 @@ void RenderpassCache::ExitRenderpass() {
     }
 }
 
-void RenderpassCache::BeginRendering(Surface* const color, Surface* const depth_stencil,
-                                     vk::Rect2D render_area, bool do_clear, vk::ClearValue clear) {
+void RenderpassCache::BeginRendering(const Framebuffer& framebuffer, bool do_clear,
+                                     vk::ClearValue clear) {
     RenderingInfo new_info = {
-        .render_area = render_area,
+        .color{
+            .aspect = vk::ImageAspectFlagBits::eColor,
+            .image = framebuffer.Image(SurfaceType::Color),
+            .image_view = framebuffer.ImageView(SurfaceType::Color),
+        },
+        .depth{
+            .aspect = vk::ImageAspectFlagBits::eDepth,
+            .image = framebuffer.Image(SurfaceType::DepthStencil),
+            .image_view = framebuffer.ImageView(SurfaceType::DepthStencil),
+        },
+        .render_area = framebuffer.RenderArea(),
         .clear = clear,
         .do_clear = do_clear,
     };
 
-    if (color) {
-        new_info.color = RenderTarget{
-            .aspect = vk::ImageAspectFlagBits::eColor,
-            .image = color->Image(),
-            .image_view = color->FramebufferView(),
-        };
-    }
-    if (depth_stencil) {
-        new_info.depth = RenderTarget{
-            .aspect = depth_stencil->Aspect(),
-            .image = depth_stencil->Image(),
-            .image_view = depth_stencil->FramebufferView(),
-        };
+    const bool has_stencil = framebuffer.Format(SurfaceType::DepthStencil) == PixelFormat::D24S8;
+    if (has_stencil) {
+        new_info.depth.aspect |= vk::ImageAspectFlagBits::eStencil;
     }
 
     const bool is_dirty = scheduler.IsStateDirty(StateFlags::Renderpass);
@@ -228,9 +215,6 @@ void RenderpassCache::BeginRendering(Surface* const color, Surface* const depth_
         cmd_count++;
         return;
     }
-
-    const bool has_stencil =
-        depth_stencil && depth_stencil->type == VideoCore::SurfaceType::DepthStencil;
 
     if (rendering) {
         ExitRenderpass();

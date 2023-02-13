@@ -16,7 +16,16 @@
 #include "video_core/renderer_opengl/pica_to_gl.h"
 #include "video_core/renderer_opengl/renderer_opengl.h"
 
+MICROPROFILE_DEFINE(OpenGL_VAO, "OpenGL", "Vertex Array Setup", MP_RGB(255, 128, 0));
+MICROPROFILE_DEFINE(OpenGL_VS, "OpenGL", "Vertex Shader Setup", MP_RGB(192, 128, 128));
+MICROPROFILE_DEFINE(OpenGL_GS, "OpenGL", "Geometry Shader Setup", MP_RGB(128, 192, 128));
+MICROPROFILE_DEFINE(OpenGL_Drawing, "OpenGL", "Drawing", MP_RGB(128, 128, 192));
+MICROPROFILE_DEFINE(OpenGL_CacheManagement, "OpenGL", "Cache Mgmt", MP_RGB(100, 255, 100));
+MICROPROFILE_DEFINE(OpenGL_Blits, "OpenGL", "Blits", MP_RGB(100, 100, 255));
+
 namespace OpenGL {
+
+using VideoCore::SurfaceType;
 
 constexpr std::size_t VERTEX_BUFFER_SIZE = 16 * 1024 * 1024;
 constexpr std::size_t INDEX_BUFFER_SIZE = 1 * 1024 * 1024;
@@ -35,23 +44,6 @@ RasterizerOpenGL::RasterizerOpenGL(Memory::MemorySystem& memory_, Frontend::EmuW
 
     // Clipping plane 0 is always enabled for PICA fixed clip plane z <= 0
     state.clip_distance[0] = true;
-
-    // Create a 1x1 clear texture to use in the NULL case,
-    // instead of OpenGL's default of solid black
-    default_texture.Create();
-    // For some reason alpha 0 wraps around to 1.0, so use 1/255 instead
-    u8 framebuffer_data[4] = {0, 0, 0, 1};
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, framebuffer_data);
-
-    // Create sampler objects
-    for (std::size_t i = 0; i < texture_samplers.size(); ++i) {
-        texture_samplers[i].Create();
-        state.texture_units[i].sampler = texture_samplers[i].sampler.handle;
-    }
-
-    // Create cubemap texture and sampler objects
-    texture_cube_sampler.Create();
-    state.texture_cube_unit.sampler = texture_cube_sampler.sampler.handle;
 
     // Generate VAO
     sw_vao.Create();
@@ -97,9 +89,6 @@ RasterizerOpenGL::RasterizerOpenGL(Memory::MemorySystem& memory_, Frontend::EmuW
     glVertexAttribPointer(ATTRIBUTE_VIEW, 3, GL_FLOAT, GL_FALSE, sizeof(HardwareVertex),
                           (GLvoid*)offsetof(HardwareVertex, view));
     glEnableVertexAttribArray(ATTRIBUTE_VIEW);
-
-    // Create render framebuffer
-    framebuffer.Create();
 
     // Allocate and bind texture buffer lut textures
     texture_buffer_lut_lf.Create();
@@ -149,14 +138,19 @@ void RasterizerOpenGL::SyncFixedState() {
     SyncDepthWriteMask();
 }
 
-static constexpr std::array<GLenum, 4> vs_attrib_types{
-    GL_BYTE,          // VertexAttributeFormat::BYTE
-    GL_UNSIGNED_BYTE, // VertexAttributeFormat::UBYTE
-    GL_SHORT,         // VertexAttributeFormat::SHORT
-    GL_FLOAT          // VertexAttributeFormat::FLOAT
-};
+GLenum MakeAttribType(Pica::PipelineRegs::VertexAttributeFormat format) {
+    switch (format) {
+    case Pica::PipelineRegs::VertexAttributeFormat::BYTE:
+        return GL_BYTE;
+    case Pica::PipelineRegs::VertexAttributeFormat::UBYTE:
+        return GL_UNSIGNED_BYTE;
+    case Pica::PipelineRegs::VertexAttributeFormat::SHORT:
+        return GL_SHORT;
+    case Pica::PipelineRegs::VertexAttributeFormat::FLOAT:
+        return GL_FLOAT;
+    }
+}
 
-MICROPROFILE_DEFINE(OpenGL_VAO, "OpenGL", "Vertex Array Setup", MP_RGB(255, 128, 0));
 void RasterizerOpenGL::SetupVertexArray(u8* array_ptr, GLintptr buffer_offset,
                                         GLuint vs_input_index_min, GLuint vs_input_index_max) {
     MICROPROFILE_SCOPE(OpenGL_VAO);
@@ -182,11 +176,11 @@ void RasterizerOpenGL::SetupVertexArray(u8* array_ptr, GLintptr buffer_offset,
                     offset = Common::AlignUp(
                         offset, vertex_attributes.GetElementSizeInBytes(attribute_index));
 
-                    u32 input_reg = regs.vs.GetRegisterForAttribute(attribute_index);
-                    GLint size = vertex_attributes.GetNumElements(attribute_index);
-                    GLenum type = vs_attrib_types[static_cast<u32>(
-                        vertex_attributes.GetFormat(attribute_index))];
-                    GLsizei stride = loader.byte_count;
+                    const u32 input_reg = regs.vs.GetRegisterForAttribute(attribute_index);
+                    const GLint size = vertex_attributes.GetNumElements(attribute_index);
+                    const GLenum type =
+                        MakeAttribType(vertex_attributes.GetFormat(attribute_index));
+                    const GLsizei stride = loader.byte_count;
                     glVertexAttribPointer(input_reg, size, type, GL_FALSE, stride,
                                           reinterpret_cast<GLvoid*>(buffer_offset + offset));
                     enable_attributes[input_reg] = true;
@@ -207,7 +201,7 @@ void RasterizerOpenGL::SetupVertexArray(u8* array_ptr, GLintptr buffer_offset,
         u32 vertex_num = vs_input_index_max - vs_input_index_min + 1;
         u32 data_size = loader.byte_count * vertex_num;
 
-        res_cache.FlushRegion(data_addr, data_size, nullptr);
+        res_cache.FlushRegion(data_addr, data_size);
         std::memcpy(array_ptr, memory.GetPhysicalPointer(data_addr), data_size);
 
         array_ptr += data_size;
@@ -235,13 +229,11 @@ void RasterizerOpenGL::SetupVertexArray(u8* array_ptr, GLintptr buffer_offset,
     }
 }
 
-MICROPROFILE_DEFINE(OpenGL_VS, "OpenGL", "Vertex Shader Setup", MP_RGB(192, 128, 128));
 bool RasterizerOpenGL::SetupVertexShader() {
     MICROPROFILE_SCOPE(OpenGL_VS);
     return shader_program_manager.UseProgrammableVertexShader(regs, Pica::g_state.vs);
 }
 
-MICROPROFILE_DEFINE(OpenGL_GS, "OpenGL", "Geometry Shader Setup", MP_RGB(128, 192, 128));
 bool RasterizerOpenGL::SetupGeometryShader() {
     MICROPROFILE_SCOPE(OpenGL_GS);
 
@@ -342,7 +334,6 @@ void RasterizerOpenGL::DrawTriangles() {
     Draw(false, false);
 }
 
-MICROPROFILE_DEFINE(OpenGL_Drawing, "OpenGL", "Drawing", MP_RGB(128, 128, 192));
 bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
     MICROPROFILE_SCOPE(OpenGL_Drawing);
 
@@ -365,95 +356,36 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         (write_depth_fb || regs.framebuffer.output_merger.depth_test_enable != 0 ||
          (has_stencil && state.stencil.test_enabled));
 
-    const Common::Rectangle viewport_rect_unscaled = regs.rasterizer.GetViewportRect();
-
-    const auto [color_surface, depth_surface, surfaces_rect] =
-        res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb, viewport_rect_unscaled);
-
-    const u16 res_scale = color_surface != nullptr
-                              ? color_surface->res_scale
-                              : (depth_surface == nullptr ? 1u : depth_surface->res_scale);
-
-    const Common::Rectangle draw_rect{
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.left) +
-                                             viewport_rect_unscaled.left * res_scale,
-                                         surfaces_rect.left, surfaces_rect.right)), // Left
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.bottom) +
-                                             viewport_rect_unscaled.top * res_scale,
-                                         surfaces_rect.bottom, surfaces_rect.top)), // Top
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.left) +
-                                             viewport_rect_unscaled.right * res_scale,
-                                         surfaces_rect.left, surfaces_rect.right)), // Right
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.bottom) +
-                                             viewport_rect_unscaled.bottom * res_scale,
-                                         surfaces_rect.bottom, surfaces_rect.top))}; // Bottom
-
-    // Bind the framebuffer surfaces
-    state.draw.draw_framebuffer = framebuffer.handle;
-    state.Apply();
-
-    if (shadow_rendering) {
-        if (color_surface == nullptr) {
-            return true;
-        }
-
-        glFramebufferParameteri(GL_DRAW_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_WIDTH,
-                                color_surface->width * color_surface->res_scale);
-        glFramebufferParameteri(GL_DRAW_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_HEIGHT,
-                                color_surface->height * color_surface->res_scale);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
-                               0);
-        state.image_shadow_buffer = color_surface->texture.handle;
-    } else {
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                               color_surface != nullptr ? color_surface->texture.handle : 0, 0);
-        if (depth_surface != nullptr) {
-            if (has_stencil) {
-                // attach both depth and stencil
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                                       GL_TEXTURE_2D, depth_surface->texture.handle, 0);
-            } else {
-                // attach depth
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
-                                       depth_surface->texture.handle, 0);
-                // clear stencil attachment
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
-                                       0);
-            }
-        } else {
-            // clear both depth and stencil attachment
-            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D,
-                                   0, 0);
-        }
+    const Framebuffer framebuffer =
+        res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb);
+    const bool has_color = framebuffer.HasAttachment(SurfaceType::Color);
+    const bool has_depth_stencil = framebuffer.HasAttachment(SurfaceType::DepthStencil);
+    if (!has_color && (shadow_rendering || !has_depth_stencil)) {
+        return true;
     }
 
-    // Sync the viewport
-    state.viewport.x =
-        static_cast<GLint>(surfaces_rect.left) + viewport_rect_unscaled.left * res_scale;
-    state.viewport.y =
-        static_cast<GLint>(surfaces_rect.bottom) + viewport_rect_unscaled.bottom * res_scale;
-    state.viewport.width = static_cast<GLsizei>(viewport_rect_unscaled.GetWidth() * res_scale);
-    state.viewport.height = static_cast<GLsizei>(viewport_rect_unscaled.GetHeight() * res_scale);
+    // Bind the framebuffer surfaces
+    if (shadow_rendering) {
+        state.image_shadow_buffer = framebuffer.Attachment(SurfaceType::Color);
+    }
+    state.draw.draw_framebuffer = framebuffer.Handle();
+    state.Apply();
 
+    // Sync the viewport
+    const auto viewport = framebuffer.Viewport();
+    state.viewport.x = viewport.x;
+    state.viewport.y = viewport.y;
+    state.viewport.width = viewport.width;
+    state.viewport.height = viewport.height;
+
+    const u32 res_scale = framebuffer.ResolutionScale();
     if (uniform_block_data.data.framebuffer_scale != res_scale) {
         uniform_block_data.data.framebuffer_scale = res_scale;
         uniform_block_data.dirty = true;
     }
 
-    // Scissor checks are window-, not viewport-relative, which means that if the cached texture
-    // sub-rect changes, the scissor bounds also need to be updated.
-    GLint scissor_x1 =
-        static_cast<GLint>(surfaces_rect.left + regs.rasterizer.scissor_test.x1 * res_scale);
-    GLint scissor_y1 =
-        static_cast<GLint>(surfaces_rect.bottom + regs.rasterizer.scissor_test.y1 * res_scale);
-    // x2, y2 have +1 added to cover the entire pixel area, otherwise you might get cracks when
-    // scaling or doing multisampling.
-    GLint scissor_x2 =
-        static_cast<GLint>(surfaces_rect.left + (regs.rasterizer.scissor_test.x2 + 1) * res_scale);
-    GLint scissor_y2 = static_cast<GLint>(surfaces_rect.bottom +
-                                          (regs.rasterizer.scissor_test.y2 + 1) * res_scale);
-
+    // Update scissor uniforms
+    const auto [scissor_x1, scissor_y2, scissor_x2, scissor_y1] = framebuffer.Scissor();
     if (uniform_block_data.data.scissor_x1 != scissor_x1 ||
         uniform_block_data.data.scissor_x2 != scissor_x2 ||
         uniform_block_data.data.scissor_y1 != scissor_y1 ||
@@ -466,130 +398,8 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         uniform_block_data.dirty = true;
     }
 
-    bool need_duplicate_texture = false;
-    auto CheckBarrier = [&need_duplicate_texture, &color_surface = color_surface](GLuint handle) {
-        if (color_surface && color_surface->texture.handle == handle) {
-            need_duplicate_texture = true;
-        }
-    };
-
-    const auto BindCubeFace = [&](GLuint& target, Pica::TexturingRegs::CubeFace face,
-                                  Pica::Texture::TextureInfo& info) {
-        info.physical_address = regs.texturing.GetCubePhysicalAddress(face);
-        auto surface = res_cache.GetTextureSurface(info);
-
-        if (surface != nullptr) {
-            CheckBarrier(target = surface->texture.handle);
-        } else {
-            target = 0;
-        }
-    };
-
     // Sync and bind the texture surfaces
-    const auto pica_textures = regs.texturing.GetTextures();
-    for (unsigned texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
-        const auto& texture = pica_textures[texture_index];
-
-        if (texture.enabled) {
-            if (texture_index == 0) {
-                using TextureType = Pica::TexturingRegs::TextureConfig::TextureType;
-                switch (texture.config.type.Value()) {
-                case TextureType::Shadow2D: {
-                    const auto surface = res_cache.GetTextureSurface(texture);
-                    if (surface) {
-                        CheckBarrier(state.image_shadow_texture_px = surface->texture.handle);
-                    } else {
-                        state.image_shadow_texture_px = 0;
-                    }
-                    continue;
-                }
-                case TextureType::ShadowCube: {
-                    using CubeFace = Pica::TexturingRegs::CubeFace;
-                    auto info = Pica::Texture::TextureInfo::FromPicaRegister(texture.config,
-                                                                             texture.format);
-                    BindCubeFace(state.image_shadow_texture_px, CubeFace::PositiveX, info);
-                    BindCubeFace(state.image_shadow_texture_nx, CubeFace::NegativeX, info);
-                    BindCubeFace(state.image_shadow_texture_py, CubeFace::PositiveY, info);
-                    BindCubeFace(state.image_shadow_texture_ny, CubeFace::NegativeY, info);
-                    BindCubeFace(state.image_shadow_texture_pz, CubeFace::PositiveZ, info);
-                    BindCubeFace(state.image_shadow_texture_nz, CubeFace::NegativeZ, info);
-                    continue;
-                }
-                case TextureType::TextureCube: {
-                    using CubeFace = Pica::TexturingRegs::CubeFace;
-                    const VideoCore::TextureCubeConfig config = {
-                        .px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX),
-                        .nx = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX),
-                        .py = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY),
-                        .ny = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY),
-                        .pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ),
-                        .nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ),
-                        .width = texture.config.width,
-                        .format = texture.format};
-
-                    state.texture_cube_unit.texture_cube =
-                        res_cache.GetTextureCube(config)->texture.handle;
-
-                    texture_cube_sampler.SyncWithConfig(texture.config);
-                    state.texture_units[texture_index].texture_2d = 0;
-                    continue; // Texture unit 0 setup finished. Continue to next unit
-                }
-                default:
-                    break;
-                }
-
-                state.texture_cube_unit.texture_cube = 0;
-            }
-
-            texture_samplers[texture_index].SyncWithConfig(texture.config);
-            auto surface = res_cache.GetTextureSurface(texture);
-            if (surface != nullptr) {
-                CheckBarrier(state.texture_units[texture_index].texture_2d =
-                                 surface->texture.handle);
-            } else {
-                // Can occur when texture addr is null or its memory is unmapped/invalid
-                // HACK: In this case, the correct behaviour for the PICA is to use the last
-                // rendered colour. But because this would be impractical to implement, the
-                // next best alternative is to use a clear texture, essentially skipping
-                // the geometry in question.
-                // For example: a bug in Pokemon X/Y causes NULL-texture squares to be drawn
-                // on the male character's face, which in the OpenGL default appear black.
-                state.texture_units[texture_index].texture_2d = default_texture.handle;
-            }
-        } else {
-            state.texture_units[texture_index].texture_2d = 0;
-        }
-    }
-
-    // The game is trying to use a surface as a texture and framebuffer at the same time
-    // which causes unpredictable behavior on the host.
-    // Making a copy to sample from eliminates this issue and seems to be fairly cheap.
-    if (need_duplicate_texture) {
-        Surface temp{*color_surface, runtime};
-        const VideoCore::TextureCopy copy = {
-            .src_level = 0,
-            .dst_level = 0,
-            .src_layer = 0,
-            .dst_layer = 0,
-            .src_offset = {0, 0},
-            .dst_offset = {0, 0},
-            .extent = {temp.GetScaledWidth(), temp.GetScaledHeight()},
-        };
-        runtime.CopyTextures(*color_surface, temp, copy);
-
-        for (auto& unit : state.texture_units) {
-            if (unit.texture_2d == color_surface->texture.handle) {
-                unit.texture_2d = temp.Handle();
-            }
-        }
-        for (auto shadow_unit : {&state.image_shadow_texture_nx, &state.image_shadow_texture_ny,
-                                 &state.image_shadow_texture_nz, &state.image_shadow_texture_px,
-                                 &state.image_shadow_texture_py, &state.image_shadow_texture_pz}) {
-            if (*shadow_unit == color_surface->texture.handle) {
-                *shadow_unit = temp.Handle();
-            }
-        }
-    }
+    SyncTextureUnits();
 
     // Sync and bind the shader
     if (shader_dirty) {
@@ -604,10 +414,9 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
     // Sync the uniform data
     UploadUniforms(accelerate);
 
-    // Viewport can have negative offsets or larger
-    // dimensions than our framebuffer sub-rect.
-    // Enable scissor test to prevent drawing
-    // outside of the framebuffer region
+    // Viewport can have negative offsets or larger dimensions than our framebuffer sub-rect.
+    // Enable scissor test to prevent drawing outside of the framebuffer region
+    const auto draw_rect = framebuffer.DrawRect();
     state.scissor.enabled = true;
     state.scissor.x = draw_rect.left;
     state.scissor.y = draw_rect.bottom;
@@ -644,39 +453,117 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
 
     vertex_batch.clear();
 
-    // Reset textures in rasterizer state context because the rasterizer cache might delete them
-    for (u32 texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
-        state.texture_units[texture_index].texture_2d = 0;
-    }
-    state.texture_cube_unit.texture_cube = 0;
-    state.image_shadow_texture_px = 0;
-    state.image_shadow_texture_nx = 0;
-    state.image_shadow_texture_py = 0;
-    state.image_shadow_texture_ny = 0;
-    state.image_shadow_texture_pz = 0;
-    state.image_shadow_texture_nz = 0;
-    state.image_shadow_buffer = 0;
-    state.Apply();
-
     if (shadow_rendering) {
         glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT |
                         GL_TEXTURE_UPDATE_BARRIER_BIT | GL_FRAMEBUFFER_BARRIER_BIT);
     }
 
-    // Mark framebuffer surfaces as dirty
-    const Common::Rectangle draw_rect_unscaled{draw_rect / res_scale};
-    if (color_surface && write_color_fb) {
-        auto interval = color_surface->GetSubRectInterval(draw_rect_unscaled);
-        res_cache.InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
-                                   color_surface);
-    }
-    if (depth_surface && write_depth_fb) {
-        auto interval = depth_surface->GetSubRectInterval(draw_rect_unscaled);
-        res_cache.InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
-                                   depth_surface);
-    }
-
     return succeeded;
+}
+
+void RasterizerOpenGL::SyncTextureUnits() {
+    const auto pica_textures = regs.texturing.GetTextures();
+    for (unsigned texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
+        const auto& texture = pica_textures[texture_index];
+
+        if (texture.enabled) {
+            const Sampler& sampler = res_cache.GetSampler(texture.config);
+            if (texture_index == 0) {
+                using TextureType = Pica::TexturingRegs::TextureConfig::TextureType;
+                switch (texture.config.type.Value()) {
+                case TextureType::Shadow2D: {
+                    const Surface& surface = res_cache.GetTextureSurface(texture);
+                    state.image_shadow_texture_px = surface.Handle();
+                    continue;
+                }
+                case TextureType::ShadowCube: {
+                    BindShadowCube(texture);
+                    continue;
+                }
+                case TextureType::TextureCube: {
+                    BindTextureCube(texture);
+                    continue;
+                }
+                default:
+                    break;
+                }
+
+                state.texture_cube_unit.texture_cube = 0;
+            }
+
+            state.texture_units[texture_index].sampler = sampler.Handle();
+
+            Surface& surface = res_cache.GetTextureSurface(texture);
+            state.texture_units[texture_index].texture_2d = surface.Handle();
+        } else {
+            state.texture_units[texture_index].texture_2d = 0;
+        }
+    }
+}
+
+void RasterizerOpenGL::BindTextureCube(const Pica::TexturingRegs::FullTextureConfig& texture) {
+    using CubeFace = Pica::TexturingRegs::CubeFace;
+    const VideoCore::TextureCubeConfig config = {
+        .px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX),
+        .nx = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX),
+        .py = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY),
+        .ny = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY),
+        .pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ),
+        .nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ),
+        .width = texture.config.width,
+        .format = texture.format,
+    };
+
+    const Surface& cube = res_cache.GetTextureCube(config);
+    const Sampler& sampler = res_cache.GetSampler(texture.config);
+    state.texture_cube_unit.texture_cube = cube.Handle();
+    state.texture_cube_unit.sampler = sampler.Handle();
+    state.texture_units[0].texture_2d = 0;
+}
+
+void RasterizerOpenGL::BindShadowCube(const Pica::TexturingRegs::FullTextureConfig& texture) {
+    using CubeFace = Pica::TexturingRegs::CubeFace;
+
+    constexpr std::array faces = {
+        CubeFace::PositiveX, CubeFace::NegativeX, CubeFace::PositiveY,
+        CubeFace::NegativeY, CubeFace::PositiveZ, CubeFace::NegativeZ,
+    };
+    auto info = Pica::Texture::TextureInfo::FromPicaRegister(texture.config, texture.format);
+    for (CubeFace face : faces) {
+        const u32 binding = static_cast<u32>(face);
+        info.physical_address = regs.texturing.GetCubePhysicalAddress(face);
+
+        const Surface& surface = res_cache.GetTextureSurface(info);
+        state.image_shadow_textures[binding] = surface.Handle();
+    }
+}
+
+void RasterizerOpenGL::HandleFeedbackLoop(u32 unit, Surface& color_surface) {
+    // The game is trying to use a surface as a texture and framebuffer at the same time
+    // which causes unpredictable behavior on the host.
+    // Making a copy to sample from eliminates this issue and seems to be fairly cheap.
+    Surface temp{runtime, color_surface};
+    const VideoCore::TextureCopy copy = {
+        .src_level = 0,
+        .dst_level = 0,
+        .src_layer = 0,
+        .dst_layer = 0,
+        .src_offset = {0, 0},
+        .dst_offset = {0, 0},
+        .extent = {temp.GetScaledWidth(), temp.GetScaledHeight()},
+    };
+    runtime.CopyTextures(color_surface, temp, copy);
+
+    for (auto& unit : state.texture_units) {
+        if (unit.texture_2d == color_surface.Handle()) {
+            unit.texture_2d = temp.Handle();
+        }
+    }
+    for (auto& shadow_unit : state.image_shadow_textures) {
+        if (shadow_unit == color_surface.Handle()) {
+            shadow_unit = temp.Handle();
+        }
+    }
 }
 
 void RasterizerOpenGL::NotifyFixedFunctionPicaRegisterChanged(u32 id) {
@@ -746,7 +633,6 @@ void RasterizerOpenGL::NotifyFixedFunctionPicaRegisterChanged(u32 id) {
     }
 }
 
-MICROPROFILE_DEFINE(OpenGL_CacheManagement, "OpenGL", "Cache Mgmt", MP_RGB(100, 255, 100));
 void RasterizerOpenGL::FlushAll() {
     MICROPROFILE_SCOPE(OpenGL_CacheManagement);
     res_cache.FlushAll();
@@ -759,20 +645,19 @@ void RasterizerOpenGL::FlushRegion(PAddr addr, u32 size) {
 
 void RasterizerOpenGL::InvalidateRegion(PAddr addr, u32 size) {
     MICROPROFILE_SCOPE(OpenGL_CacheManagement);
-    res_cache.InvalidateRegion(addr, size, nullptr);
+    res_cache.InvalidateRegion(addr, size);
 }
 
 void RasterizerOpenGL::FlushAndInvalidateRegion(PAddr addr, u32 size) {
     MICROPROFILE_SCOPE(OpenGL_CacheManagement);
     res_cache.FlushRegion(addr, size);
-    res_cache.InvalidateRegion(addr, size, nullptr);
+    res_cache.InvalidateRegion(addr, size);
 }
 
 void RasterizerOpenGL::ClearAll(bool flush) {
     res_cache.ClearAll(flush);
 }
 
-MICROPROFILE_DEFINE(OpenGL_Blits, "OpenGL", "Blits", MP_RGB(100, 100, 255));
 bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config) {
     MICROPROFILE_SCOPE(OpenGL_Blits);
     return res_cache.AccelerateDisplayTransfer(config);
@@ -783,12 +668,7 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
 }
 
 bool RasterizerOpenGL::AccelerateFill(const GPU::Regs::MemoryFillConfig& config) {
-    auto dst_surface = res_cache.GetFillSurface(config);
-    if (dst_surface == nullptr)
-        return false;
-
-    res_cache.InvalidateRegion(dst_surface->addr, dst_surface->size, dst_surface);
-    return true;
+    return res_cache.AccelerateFill(config);
 }
 
 bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& config,
@@ -808,92 +688,24 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
     src_params.pixel_format = VideoCore::PixelFormatFromGPUPixelFormat(config.color_format);
     src_params.UpdateParams();
 
-    const auto [src_surface, src_rect] =
+    const auto [surface_id, src_rect] =
         res_cache.GetSurfaceSubRect(src_params, VideoCore::ScaleMatch::Ignore, true);
 
-    if (src_surface == nullptr) {
+    if (!surface_id) {
         return false;
     }
 
-    u32 scaled_width = src_surface->GetScaledWidth();
-    u32 scaled_height = src_surface->GetScaledHeight();
+    const Surface& surface = res_cache.GetSurface(surface_id);
+    const u32 scaled_width = surface.GetScaledWidth();
+    const u32 scaled_height = surface.GetScaledHeight();
 
     screen_info.display_texcoords = Common::Rectangle<float>(
         (float)src_rect.bottom / (float)scaled_height, (float)src_rect.left / (float)scaled_width,
         (float)src_rect.top / (float)scaled_height, (float)src_rect.right / (float)scaled_width);
 
-    screen_info.display_texture = src_surface->texture.handle;
+    screen_info.display_texture = surface.Handle();
 
     return true;
-}
-
-void RasterizerOpenGL::SamplerInfo::Create() {
-    sampler.Create();
-    mag_filter = min_filter = mip_filter = TextureConfig::Linear;
-    wrap_s = wrap_t = TextureConfig::Repeat;
-    border_color = 0;
-    lod_min = lod_max = 0;
-
-    // default is 1000 and -1000
-    // Other attributes have correct defaults
-    glSamplerParameterf(sampler.handle, GL_TEXTURE_MAX_LOD, static_cast<float>(lod_max));
-    glSamplerParameterf(sampler.handle, GL_TEXTURE_MIN_LOD, static_cast<float>(lod_min));
-}
-
-void RasterizerOpenGL::SamplerInfo::SyncWithConfig(
-    const Pica::TexturingRegs::TextureConfig& config) {
-
-    GLuint s = sampler.handle;
-
-    if (mag_filter != config.mag_filter) {
-        mag_filter = config.mag_filter;
-        glSamplerParameteri(s, GL_TEXTURE_MAG_FILTER, PicaToGL::TextureMagFilterMode(mag_filter));
-    }
-
-    // TODO(wwylele): remove new_supress_mipmap_for_cube logic once mipmap for cube is implemented
-    bool new_supress_mipmap_for_cube =
-        config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
-    if (min_filter != config.min_filter || mip_filter != config.mip_filter ||
-        supress_mipmap_for_cube != new_supress_mipmap_for_cube) {
-        min_filter = config.min_filter;
-        mip_filter = config.mip_filter;
-        supress_mipmap_for_cube = new_supress_mipmap_for_cube;
-        if (new_supress_mipmap_for_cube) {
-            // HACK: use mag filter converter for min filter because they are the same anyway
-            glSamplerParameteri(s, GL_TEXTURE_MIN_FILTER,
-                                PicaToGL::TextureMagFilterMode(min_filter));
-        } else {
-            glSamplerParameteri(s, GL_TEXTURE_MIN_FILTER,
-                                PicaToGL::TextureMinFilterMode(min_filter, mip_filter));
-        }
-    }
-
-    if (wrap_s != config.wrap_s) {
-        wrap_s = config.wrap_s;
-        glSamplerParameteri(s, GL_TEXTURE_WRAP_S, PicaToGL::WrapMode(wrap_s));
-    }
-    if (wrap_t != config.wrap_t) {
-        wrap_t = config.wrap_t;
-        glSamplerParameteri(s, GL_TEXTURE_WRAP_T, PicaToGL::WrapMode(wrap_t));
-    }
-
-    if (wrap_s == TextureConfig::ClampToBorder || wrap_t == TextureConfig::ClampToBorder) {
-        if (border_color != config.border_color.raw) {
-            border_color = config.border_color.raw;
-            auto gl_color = PicaToGL::ColorRGBA8(border_color);
-            glSamplerParameterfv(s, GL_TEXTURE_BORDER_COLOR, gl_color.AsArray());
-        }
-    }
-
-    if (lod_min != config.lod.min_level) {
-        lod_min = config.lod.min_level;
-        glSamplerParameterf(s, GL_TEXTURE_MIN_LOD, static_cast<float>(lod_min));
-    }
-
-    if (lod_max != config.lod.max_level) {
-        lod_max = config.lod.max_level;
-        glSamplerParameterf(s, GL_TEXTURE_MAX_LOD, static_cast<float>(lod_max));
-    }
 }
 
 void RasterizerOpenGL::SetShader() {

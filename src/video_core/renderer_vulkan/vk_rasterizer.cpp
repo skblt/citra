@@ -10,7 +10,6 @@
 #include "video_core/regs_framebuffer.h"
 #include "video_core/regs_pipeline.h"
 #include "video_core/regs_rasterizer.h"
-#include "video_core/renderer_vulkan/pica_to_vk.h"
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
@@ -24,6 +23,7 @@ MICROPROFILE_DEFINE(Vulkan_Blits, "Vulkan", "Blits", MP_RGB(100, 100, 255));
 
 namespace Vulkan {
 
+using VideoCore::SurfaceType;
 using TriangleTopology = Pica::PipelineRegs::TriangleTopology;
 
 constexpr u64 STREAM_BUFFER_SIZE = 128 * 1024 * 1024;
@@ -71,10 +71,6 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory_, Frontend::EmuW
     : RasterizerAccelerated{memory_}, instance{instance}, scheduler{scheduler}, runtime{runtime},
       renderpass_cache{renderpass_cache}, desc_manager{desc_manager}, res_cache{memory, runtime},
       pipeline_cache{instance, scheduler, renderpass_cache, desc_manager},
-      null_surface{NULL_PARAMS, vk::Format::eR8G8B8A8Unorm, NULL_USAGE,
-                   vk::ImageAspectFlagBits::eColor, runtime},
-      null_storage_surface{NULL_PARAMS, vk::Format::eR32Uint, NULL_STORAGE_USAGE,
-                           vk::ImageAspectFlagBits::eColor, runtime},
       stream_buffer{instance, scheduler, BUFFER_USAGE, STREAM_BUFFER_SIZE},
       texture_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)},
       texture_lf_buffer{instance, scheduler, TEX_BUFFER_USAGE, TextureBufferSize(instance)},
@@ -91,16 +87,6 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory_, Frontend::EmuW
     // Define vertex layout for software shaders
     MakeSoftwareVertexLayout();
     pipeline_info.vertex_layout = software_layout;
-
-    const SamplerInfo default_sampler_info = {
-        .mag_filter = Pica::TexturingRegs::TextureConfig::TextureFilter::Linear,
-        .min_filter = Pica::TexturingRegs::TextureConfig::TextureFilter::Linear,
-        .mip_filter = Pica::TexturingRegs::TextureConfig::TextureFilter::Linear,
-        .wrap_s = Pica::TexturingRegs::TextureConfig::WrapMode::ClampToBorder,
-        .wrap_t = Pica::TexturingRegs::TextureConfig::WrapMode::ClampToBorder,
-    };
-
-    default_sampler = CreateSampler(default_sampler_info);
 
     const vk::Device device = instance.GetDevice();
     texture_lf_view = device.createBufferView({
@@ -130,13 +116,14 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory_, Frontend::EmuW
     pipeline_cache.BindTexelBuffer(3, texture_rg_view);
     pipeline_cache.BindTexelBuffer(4, texture_rgba_view);
 
+    Surface& null_surface = res_cache.GetSurface(VideoCore::NULL_SURFACE_ID);
+    Sampler& null_sampler = res_cache.GetSampler(VideoCore::NULL_SAMPLER_ID);
     for (u32 i = 0; i < 4; i++) {
         pipeline_cache.BindTexture(i, null_surface.ImageView());
-        pipeline_cache.BindSampler(i, default_sampler);
+        pipeline_cache.BindSampler(i, null_sampler.Handle());
     }
-
     for (u32 i = 0; i < 7; i++) {
-        pipeline_cache.BindStorageImage(i, null_storage_surface.ImageView());
+        pipeline_cache.BindStorageImage(i, null_surface.StorageView());
     }
 
     // Explicitly call the derived version to avoid warnings about calling virtual
@@ -148,11 +135,6 @@ RasterizerVulkan::~RasterizerVulkan() {
     scheduler.Finish();
     const vk::Device device = instance.GetDevice();
 
-    for (auto& [key, sampler] : samplers) {
-        device.destroySampler(sampler);
-    }
-
-    device.destroySampler(default_sampler);
     device.destroyBufferView(texture_lf_view);
     device.destroyBufferView(texture_rg_view);
     device.destroyBufferView(texture_rgba_view);
@@ -475,57 +457,26 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
         (write_depth_fb || regs.framebuffer.output_merger.depth_test_enable != 0 ||
          (has_stencil && pipeline_info.depth_stencil.stencil_test_enable));
 
-    const Common::Rectangle viewport_rect_unscaled = regs.rasterizer.GetViewportRect();
-
-    const auto [color_surface, depth_surface, surfaces_rect] =
-        res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb, viewport_rect_unscaled);
-
-    if (!color_surface && (shadow_rendering || !depth_surface)) {
+    const Framebuffer framebuffer =
+        res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb);
+    const bool has_color = framebuffer.HasView(SurfaceType::Color);
+    const bool has_depth_stencil = framebuffer.HasView(SurfaceType::DepthStencil);
+    if (!has_color && (shadow_rendering || !has_depth_stencil)) {
         return true;
     }
 
-    pipeline_info.attachments.color_format =
-        color_surface ? color_surface->pixel_format : VideoCore::PixelFormat::Invalid;
-    pipeline_info.attachments.depth_format =
-        depth_surface ? depth_surface->pixel_format : VideoCore::PixelFormat::Invalid;
+    // Update pipeline rendering attachments
+    pipeline_info.attachments.color_format = framebuffer.Format(SurfaceType::Color);
+    pipeline_info.attachments.depth_format = framebuffer.Format(SurfaceType::DepthStencil);
 
-    const u16 res_scale = color_surface != nullptr
-                              ? color_surface->res_scale
-                              : (depth_surface == nullptr ? 1u : depth_surface->res_scale);
-
-    const VideoCore::Rect2D draw_rect = {
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.left) +
-                                             viewport_rect_unscaled.left * res_scale,
-                                         surfaces_rect.left, surfaces_rect.right)), // Left
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.bottom) +
-                                             viewport_rect_unscaled.top * res_scale,
-                                         surfaces_rect.bottom, surfaces_rect.top)), // Top
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.left) +
-                                             viewport_rect_unscaled.right * res_scale,
-                                         surfaces_rect.left, surfaces_rect.right)), // Right
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.bottom) +
-                                             viewport_rect_unscaled.bottom * res_scale,
-                                         surfaces_rect.bottom, surfaces_rect.top))};
-
+    const u32 res_scale = framebuffer.ResolutionScale();
     if (uniform_block_data.data.framebuffer_scale != res_scale) {
         uniform_block_data.data.framebuffer_scale = res_scale;
         uniform_block_data.dirty = true;
     }
 
-    // Scissor checks are window-, not viewport-relative, which means that if the cached texture
-    // sub-rect changes, the scissor bounds also need to be updated.
-    int scissor_x1 =
-        static_cast<int>(surfaces_rect.left + regs.rasterizer.scissor_test.x1 * res_scale);
-    int scissor_y1 =
-        static_cast<int>(surfaces_rect.bottom + regs.rasterizer.scissor_test.y1 * res_scale);
-
-    // x2, y2 have +1 added to cover the entire pixel area, otherwise you might get cracks when
-    // scaling or doing multisampling.
-    int scissor_x2 =
-        static_cast<int>(surfaces_rect.left + (regs.rasterizer.scissor_test.x2 + 1) * res_scale);
-    int scissor_y2 =
-        static_cast<int>(surfaces_rect.bottom + (regs.rasterizer.scissor_test.y2 + 1) * res_scale);
-
+    // Update scissor uniforms
+    const auto [scissor_x1, scissor_y2, scissor_x2, scissor_y1] = framebuffer.Scissor();
     if (uniform_block_data.data.scissor_x1 != scissor_x1 ||
         uniform_block_data.data.scissor_x2 != scissor_x2 ||
         uniform_block_data.data.scissor_y1 != scissor_y1 ||
@@ -540,14 +491,8 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     // Sync and bind the texture surfaces
     // NOTE: From here onwards its a safe zone to set the draw state, doing that any earlier will
-    // cause issues as the rasterizer cache might cause a scheduler switch and invalidate our state
-    SyncTextureUnits(color_surface.get());
-
-    const vk::Rect2D render_area = {
-        .offset{static_cast<s32>(draw_rect.left), static_cast<s32>(draw_rect.bottom)},
-        .extent{draw_rect.GetWidth(), draw_rect.GetHeight()},
-    };
-    renderpass_cache.EnterRenderpass(color_surface.get(), depth_surface.get(), render_area);
+    // cause issues as the rasterizer cache might cause a scheduler flush and invalidate our state
+    SyncTextureUnits();
 
     // Sync and bind the shader
     if (shader_dirty) {
@@ -562,16 +507,26 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     // Sync the uniform data
     UploadUniforms(accelerate);
 
-    // Sync the viewport
-    pipeline_cache.SetViewport(surfaces_rect.left + viewport_rect_unscaled.left * res_scale,
-                               surfaces_rect.bottom + viewport_rect_unscaled.bottom * res_scale,
-                               viewport_rect_unscaled.GetWidth() * res_scale,
-                               viewport_rect_unscaled.GetHeight() * res_scale);
+    // Begin the renderpass
+    renderpass_cache.EnterRenderpass(framebuffer);
 
+    // Sync the viewport
     // Viewport can have negative offsets or larger dimensions than our framebuffer sub-rect.
     // Enable scissor test to prevent drawing outside of the framebuffer region
-    pipeline_cache.SetScissor(draw_rect.left, draw_rect.bottom, draw_rect.GetWidth(),
-                              draw_rect.GetHeight());
+    scheduler.Record([viewport = framebuffer.Viewport(),
+                      scissor = framebuffer.RenderArea()](vk::CommandBuffer cmdbuf) {
+        const vk::Viewport vk_viewport = {
+            .x = viewport.x,
+            .y = viewport.y,
+            .width = viewport.width,
+            .height = viewport.height,
+            .minDepth = 0.f,
+            .maxDepth = 1.f,
+        };
+
+        cmdbuf.setViewport(0, vk_viewport);
+        cmdbuf.setScissor(0, scissor);
+    });
 
     // Draw the vertex batch
     bool succeeded = true;
@@ -595,20 +550,6 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
 
     vertex_batch.clear();
 
-    // Mark framebuffer surfaces as dirty
-    const Common::Rectangle draw_rect_unscaled{draw_rect / res_scale};
-    if (color_surface && write_color_fb) {
-        auto interval = color_surface->GetSubRectInterval(draw_rect_unscaled);
-        res_cache.InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
-                                   color_surface);
-    }
-
-    if (depth_surface && write_depth_fb) {
-        auto interval = depth_surface->GetSubRectInterval(draw_rect_unscaled);
-        res_cache.InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
-                                   depth_surface);
-    }
-
     static int counter = 20;
     counter--;
     if (counter == 0) {
@@ -619,108 +560,98 @@ bool RasterizerVulkan::Draw(bool accelerate, bool is_indexed) {
     return succeeded;
 }
 
-void RasterizerVulkan::SyncTextureUnits(Surface* const color_surface) {
+void RasterizerVulkan::SyncTextureUnits() {
+    using TextureType = Pica::TexturingRegs::TextureConfig::TextureType;
+
     const auto pica_textures = regs.texturing.GetTextures();
     for (u32 texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
         const auto& texture = pica_textures[texture_index];
 
         if (texture.enabled) {
+            const Sampler& sampler = res_cache.GetSampler(texture.config);
             if (texture_index == 0) {
-                using TextureType = Pica::TexturingRegs::TextureConfig::TextureType;
                 switch (texture.config.type.Value()) {
                 case TextureType::Shadow2D: {
-                    auto surface = res_cache.GetTextureSurface(texture);
-                    if (surface) {
-                        pipeline_cache.BindStorageImage(0, surface->StorageView());
-                    } else {
-                        pipeline_cache.BindStorageImage(0, null_storage_surface.ImageView());
-                    }
+                    Surface& surface = res_cache.GetTextureSurface(texture);
+                    pipeline_cache.BindStorageImage(0, surface.StorageView());
                     continue;
                 }
                 case TextureType::ShadowCube: {
-                    using CubeFace = Pica::TexturingRegs::CubeFace;
-                    auto info = Pica::Texture::TextureInfo::FromPicaRegister(texture.config,
-                                                                             texture.format);
-                    for (CubeFace face :
-                         {CubeFace::PositiveX, CubeFace::NegativeX, CubeFace::PositiveY,
-                          CubeFace::NegativeY, CubeFace::PositiveZ, CubeFace::NegativeZ}) {
-                        info.physical_address = regs.texturing.GetCubePhysicalAddress(face);
-                        auto surface = res_cache.GetTextureSurface(info);
-
-                        const u32 binding = static_cast<u32>(face);
-                        if (surface) {
-                            pipeline_cache.BindStorageImage(binding, surface->ImageView());
-                        } else {
-                            pipeline_cache.BindStorageImage(binding,
-                                                            null_storage_surface.ImageView());
-                        }
-                    }
+                    BindShadowCube(texture);
                     continue;
                 }
                 case TextureType::TextureCube: {
-                    using CubeFace = Pica::TexturingRegs::CubeFace;
-                    const VideoCore::TextureCubeConfig config = {
-                        .px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX),
-                        .nx = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX),
-                        .py = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY),
-                        .ny = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY),
-                        .pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ),
-                        .nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ),
-                        .width = texture.config.width,
-                        .format = texture.format};
-
-                    auto surface = res_cache.GetTextureCube(config);
-                    if (surface) {
-                        pipeline_cache.BindTexture(3, surface->ImageView());
-                    } else {
-                        pipeline_cache.BindTexture(3, null_surface.ImageView());
-                    }
-
-                    BindSampler(3, texture_cube_sampler, texture.config);
-                    continue; // Texture unit 0 setup finished. Continue to next unit
+                    BindTextureCube(texture);
+                    continue;
                 }
                 default:
                     break;
                 }
             }
 
-            // Update sampler key
-            BindSampler(texture_index, texture_samplers[texture_index], texture.config);
+            pipeline_cache.BindSampler(texture_index, sampler.Handle());
 
-            auto surface = res_cache.GetTextureSurface(texture);
-            if (surface) {
-                if (color_surface && color_surface->ImageView() == surface->ImageView()) {
-                    Surface temp{*color_surface, runtime};
-                    const VideoCore::TextureCopy copy = {
-                        .src_level = 0,
-                        .dst_level = 0,
-                        .src_layer = 0,
-                        .dst_layer = 0,
-                        .src_offset = {0, 0},
-                        .dst_offset = {0, 0},
-                        .extent = {temp.GetScaledWidth(), temp.GetScaledHeight()},
-                    };
-                    runtime.CopyTextures(*color_surface, temp, copy);
-                    pipeline_cache.BindTexture(texture_index, temp.ImageView());
-                } else {
-                    pipeline_cache.BindTexture(texture_index, surface->ImageView());
-                }
-
-            } else {
-                // Can occur when texture addr is null or its memory is unmapped/invalid
-                // HACK: In this case, the correct behaviour for the PICA is to use the last
-                // rendered colour. But because this would be impractical to implement, the
-                // next best alternative is to use a clear texture, essentially skipping
-                // the geometry in question.
-                // For example: a bug in Pokemon X/Y causes NULL-texture squares to be drawn
-                // on the male character's face, which in the OpenGL default appear black.
-                pipeline_cache.BindTexture(texture_index, null_surface.ImageView());
-            }
+            Surface& surface = res_cache.GetTextureSurface(texture);
+            pipeline_cache.BindTexture(texture_index, surface.ImageView());
         } else {
+            const Surface& null_surface = res_cache.GetSurface(VideoCore::NULL_SURFACE_ID);
+            const Sampler& null_sampler = res_cache.GetSampler(VideoCore::NULL_SAMPLER_ID);
             pipeline_cache.BindTexture(texture_index, null_surface.ImageView());
-            pipeline_cache.BindSampler(texture_index, default_sampler);
+            pipeline_cache.BindSampler(texture_index, null_sampler.Handle());
         }
     }
+}
+
+void RasterizerVulkan::BindTextureCube(const Pica::TexturingRegs::FullTextureConfig& texture) {
+    using CubeFace = Pica::TexturingRegs::CubeFace;
+    const VideoCore::TextureCubeConfig config = {
+        .px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX),
+        .nx = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX),
+        .py = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY),
+        .ny = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY),
+        .pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ),
+        .nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ),
+        .width = texture.config.width,
+        .format = texture.format,
+    };
+
+    const Surface& surface = res_cache.GetTextureCube(config);
+    const Sampler& sampler = res_cache.GetSampler(texture.config);
+    pipeline_cache.BindTexture(3, surface.ImageView());
+    pipeline_cache.BindSampler(3, sampler.Handle());
+}
+
+void RasterizerVulkan::BindShadowCube(const Pica::TexturingRegs::FullTextureConfig& texture) {
+    using CubeFace = Pica::TexturingRegs::CubeFace;
+
+    constexpr std::array faces = {
+        CubeFace::PositiveX, CubeFace::NegativeX, CubeFace::PositiveY,
+        CubeFace::NegativeY, CubeFace::PositiveZ, CubeFace::NegativeZ,
+    };
+    auto info = Pica::Texture::TextureInfo::FromPicaRegister(texture.config, texture.format);
+    for (CubeFace face : faces) {
+        const u32 binding = static_cast<u32>(face);
+        info.physical_address = regs.texturing.GetCubePhysicalAddress(face);
+
+        Surface& surface = res_cache.GetTextureSurface(info);
+        pipeline_cache.BindStorageImage(binding, surface.StorageView());
+    }
+}
+
+void RasterizerVulkan::HandleFeedbackLoop(u32 unit, Surface& color_surface) {
+    Surface temp{runtime, color_surface};
+    const VideoCore::TextureCopy copy = {
+        .src_level = 0,
+        .dst_level = 0,
+        .src_layer = 0,
+        .dst_layer = 0,
+        .src_offset = {0, 0},
+        .dst_offset = {0, 0},
+        .extent = {temp.GetScaledWidth(), temp.GetScaledHeight()},
+    };
+    runtime.CopyTextures(color_surface, temp, copy);
+
+    pipeline_cache.BindTexture(unit, temp.ImageView());
 }
 
 void RasterizerVulkan::NotifyFixedFunctionPicaRegisterChanged(u32 id) {
@@ -802,13 +733,13 @@ void RasterizerVulkan::FlushRegion(PAddr addr, u32 size) {
 
 void RasterizerVulkan::InvalidateRegion(PAddr addr, u32 size) {
     MICROPROFILE_SCOPE(Vulkan_CacheManagement);
-    res_cache.InvalidateRegion(addr, size, nullptr);
+    res_cache.InvalidateRegion(addr, size);
 }
 
 void RasterizerVulkan::FlushAndInvalidateRegion(PAddr addr, u32 size) {
     MICROPROFILE_SCOPE(Vulkan_CacheManagement);
     res_cache.FlushRegion(addr, size);
-    res_cache.InvalidateRegion(addr, size, nullptr);
+    res_cache.InvalidateRegion(addr, size);
 }
 
 void RasterizerVulkan::ClearAll(bool flush) {
@@ -825,12 +756,7 @@ bool RasterizerVulkan::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
 }
 
 bool RasterizerVulkan::AccelerateFill(const GPU::Regs::MemoryFillConfig& config) {
-    auto dst_surface = res_cache.GetFillSurface(config);
-    if (dst_surface == nullptr)
-        return false;
-
-    res_cache.InvalidateRegion(dst_surface->addr, dst_surface->size, dst_surface);
-    return true;
+    return res_cache.AccelerateFill(config);
 }
 
 bool RasterizerVulkan::AccelerateDisplay(const GPU::Regs::FramebufferConfig& config,
@@ -850,21 +776,23 @@ bool RasterizerVulkan::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
     src_params.pixel_format = VideoCore::PixelFormatFromGPUPixelFormat(config.color_format);
     src_params.UpdateParams();
 
-    const auto [src_surface, src_rect] =
+    const auto [surface_id, src_rect] =
         res_cache.GetSurfaceSubRect(src_params, VideoCore::ScaleMatch::Ignore, true);
 
-    if (src_surface == nullptr) {
+    if (!surface_id) {
         return false;
     }
 
-    const u32 scaled_width = src_surface->GetScaledWidth();
-    const u32 scaled_height = src_surface->GetScaledHeight();
+    const Surface& surface = res_cache.GetSurface(surface_id);
+    const u32 scaled_width = surface.GetScaledWidth();
+    const u32 scaled_height = surface.GetScaledHeight();
 
-    screen_info.texcoords = Common::Rectangle<f32>(
-        (float)src_rect.bottom / (float)scaled_height, (float)src_rect.left / (float)scaled_width,
-        (float)src_rect.top / (float)scaled_height, (float)src_rect.right / (float)scaled_width);
-
-    screen_info.image_view = src_surface->ImageView();
+    screen_info.image_view = surface.ImageView();
+    screen_info.texcoords =
+        Common::Rectangle<f32>(static_cast<f32>(src_rect.bottom) / static_cast<f32>(scaled_height),
+                               static_cast<f32>(src_rect.left) / static_cast<f32>(scaled_width),
+                               static_cast<f32>(src_rect.top) / static_cast<f32>(scaled_height),
+                               static_cast<f32>(src_rect.right) / static_cast<f32>(scaled_width));
 
     return true;
 }
@@ -891,68 +819,6 @@ void RasterizerVulkan::MakeSoftwareVertexLayout() {
         attribute.size.Assign(sizes[i]);
         offset += sizes[i] * sizeof(float);
     }
-}
-
-void RasterizerVulkan::BindSampler(u32 unit, SamplerInfo& info,
-                                   const Pica::TexturingRegs::TextureConfig& config) {
-    // TODO: Cubemaps don't contain any mipmaps for now, so sampling from them returns
-    // nothing. Always sample from the base level until mipmaps for texture cubes are
-    // implemented
-    const bool skip_mipmap = config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
-    info = SamplerInfo{
-        .mag_filter = config.mag_filter,
-        .min_filter = config.min_filter,
-        .mip_filter = config.mip_filter,
-        .wrap_s = config.wrap_s,
-        .wrap_t = config.wrap_t,
-        .border_color = config.border_color.raw,
-        .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
-        .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level),
-    };
-
-    auto [it, new_sampler] = samplers.try_emplace(info);
-    if (new_sampler) {
-        it->second = CreateSampler(info);
-    }
-    pipeline_cache.BindSampler(unit, it->second);
-}
-
-vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
-    const bool use_border_color = instance.IsCustomBorderColorSupported() &&
-                                  (info.wrap_s == SamplerInfo::TextureConfig::ClampToBorder ||
-                                   info.wrap_t == SamplerInfo::TextureConfig::ClampToBorder);
-    auto properties = instance.GetPhysicalDevice().getProperties();
-
-    const auto color = PicaToVK::ColorRGBA8(info.border_color);
-    const vk::SamplerCustomBorderColorCreateInfoEXT border_color_info = {
-        .customBorderColor =
-            vk::ClearColorValue{
-                .float32 = std::array{color[0], color[1], color[2], color[3]},
-            },
-        .format = vk::Format::eUndefined,
-    };
-
-    const vk::SamplerCreateInfo sampler_info = {
-        .pNext = use_border_color ? &border_color_info : nullptr,
-        .magFilter = PicaToVK::TextureFilterMode(info.mag_filter),
-        .minFilter = PicaToVK::TextureFilterMode(info.min_filter),
-        .mipmapMode = PicaToVK::TextureMipFilterMode(info.mip_filter),
-        .addressModeU = PicaToVK::WrapMode(info.wrap_s),
-        .addressModeV = PicaToVK::WrapMode(info.wrap_t),
-        .mipLodBias = 0,
-        .anisotropyEnable = instance.IsAnisotropicFilteringSupported(),
-        .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
-        .compareEnable = false,
-        .compareOp = vk::CompareOp::eAlways,
-        .minLod = info.lod_min,
-        .maxLod = info.lod_max,
-        .borderColor =
-            use_border_color ? vk::BorderColor::eFloatCustomEXT : vk::BorderColor::eIntOpaqueBlack,
-        .unnormalizedCoordinates = false,
-    };
-
-    vk::Device device = instance.GetDevice();
-    return device.createSampler(sampler_info);
 }
 
 void RasterizerVulkan::SyncClipEnabled() {

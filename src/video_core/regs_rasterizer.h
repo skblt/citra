@@ -112,7 +112,7 @@ struct RasterizerRegs {
         Include = 3 // Exclude pixels outside the scissor box
     };
 
-    struct {
+    struct Scissor {
         BitField<0, 2, ScissorMode> mode;
 
         union {

@@ -7,6 +7,7 @@
 #include <set>
 #include <span>
 #include <vulkan/vulkan_hash.hpp>
+#include "video_core/rasterizer_cache/framebuffer_base.h"
 #include "video_core/rasterizer_cache/rasterizer_cache_base.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/renderer_vulkan/vk_blit_helper.h"
@@ -15,6 +16,10 @@
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 
 VK_DEFINE_HANDLE(VmaAllocation)
+
+namespace Pica {
+struct Regs;
+}
 
 namespace Vulkan {
 
@@ -25,55 +30,16 @@ struct StagingData {
     u64 buffer_offset = 0;
 };
 
-struct ImageAlloc {
-    ImageAlloc() = default;
-
-    ImageAlloc(const ImageAlloc&) = delete;
-    ImageAlloc& operator=(const ImageAlloc&) = delete;
-
-    ImageAlloc(ImageAlloc&&) = default;
-    ImageAlloc& operator=(ImageAlloc&&) = default;
-
+struct Allocation {
     vk::Image image;
     vk::ImageView image_view;
-    vk::ImageView base_view;
     vk::ImageView depth_view;
     vk::ImageView stencil_view;
     vk::ImageView storage_view;
     VmaAllocation allocation;
-    vk::ImageUsageFlags usage;
+    vk::ImageAspectFlags aspect;
     vk::Format format;
-    vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
-    vk::ImageLayout layout;
 };
-
-struct HostTextureTag {
-    vk::Format format = vk::Format::eUndefined;
-    VideoCore::PixelFormat pixel_format = VideoCore::PixelFormat::Invalid;
-    VideoCore::TextureType type = VideoCore::TextureType::Texture2D;
-    u32 width = 1;
-    u32 height = 1;
-    u32 levels = 1;
-
-    auto operator<=>(const HostTextureTag&) const noexcept = default;
-
-    const u64 Hash() const {
-        return Common::ComputeHash64(this, sizeof(HostTextureTag));
-    }
-};
-
-} // namespace Vulkan
-
-namespace std {
-template <>
-struct hash<Vulkan::HostTextureTag> {
-    std::size_t operator()(const Vulkan::HostTextureTag& tag) const noexcept {
-        return tag.Hash();
-    }
-};
-} // namespace std
-
-namespace Vulkan {
 
 class Instance;
 class RenderpassCache;
@@ -86,27 +52,28 @@ class Surface;
  */
 class TextureRuntime {
     friend class Surface;
+    friend class Sampler;
 
 public:
-    TextureRuntime(const Instance& instance, Scheduler& scheduler,
-                   RenderpassCache& renderpass_cache, DescriptorManager& desc_manager);
+    explicit TextureRuntime(const Instance& instance, Scheduler& scheduler,
+                            RenderpassCache& renderpass_cache, DescriptorManager& desc_manager);
     ~TextureRuntime();
 
     /// Causes a GPU command flush
     void Finish();
 
     /// Takes back ownership of the allocation for recycling
-    void Recycle(const HostTextureTag tag, ImageAlloc&& alloc);
+    void Recycle(const VideoCore::HostTextureTag tag, Allocation&& alloc);
 
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
     [[nodiscard]] StagingData FindStaging(u32 size, bool upload);
 
     /// Allocates a vulkan image possibly resusing an existing one
-    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, u32 levels,
+    [[nodiscard]] Allocation Allocate(u32 width, u32 height, u32 levels,
                                       VideoCore::PixelFormat format, VideoCore::TextureType type);
 
     /// Allocates a vulkan image
-    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, u32 levels,
+    [[nodiscard]] Allocation Allocate(u32 width, u32 height, u32 levels,
                                       VideoCore::PixelFormat pixel_format,
                                       VideoCore::TextureType type, vk::Format format,
                                       vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect);
@@ -157,17 +124,23 @@ private:
     StreamBuffer upload_buffer;
     StreamBuffer download_buffer;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
-    std::unordered_multimap<HostTextureTag, ImageAlloc> texture_recycler;
+    std::unordered_multimap<VideoCore::HostTextureTag, Allocation> texture_recycler;
 };
 
 class Surface : public VideoCore::SurfaceBase {
     friend class TextureRuntime;
 
 public:
-    Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime);
-    Surface(const VideoCore::SurfaceParams& params, vk::Format format, vk::ImageUsageFlags usage,
-            vk::ImageAspectFlags aspect, TextureRuntime& runtime);
+    explicit Surface(TextureRuntime& runtime, const VideoCore::SurfaceParams& params);
+    explicit Surface(TextureRuntime& runtime, const VideoCore::SurfaceParams& params,
+                     vk::Format format, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect);
     ~Surface() override;
+
+    Surface(const Surface&) noexcept = delete;
+    Surface& operator=(const Surface&) noexcept = delete;
+
+    Surface(Surface&&) noexcept = default;
+    Surface& operator=(Surface&&) noexcept = default;
 
     /// Returns the surface aspect
     vk::ImageAspectFlags Aspect() const noexcept {
@@ -199,9 +172,6 @@ public:
     /// Returns the pipeline stage flags indicative of the surface
     vk::PipelineStageFlags PipelineStageFlags() const noexcept;
 
-    /// Returns an image view used to create a framebuffer
-    vk::ImageView FramebufferView() noexcept;
-
     /// Returns the depth only image view of the surface
     vk::ImageView DepthView() noexcept;
 
@@ -223,18 +193,93 @@ private:
                               const StagingData& staging);
 
 private:
-    TextureRuntime& runtime;
-    const Instance& instance;
-    Scheduler& scheduler;
-    ImageAlloc alloc;
-    FormatTraits traits;
+    TextureRuntime* runtime;
+    Scheduler* scheduler;
+    vk::Device device;
+    Allocation alloc;
     bool is_framebuffer{};
     bool is_storage{};
 };
 
+class Framebuffer : public VideoCore::FramebufferBase {
+public:
+    explicit Framebuffer(Surface* const color, Surface* const depth_stencil,
+                         vk::Rect2D render_area);
+    explicit Framebuffer(TextureRuntime& runtime, Surface* const color,
+                         Surface* const depth_stencil, const Pica::Regs& regs,
+                         Common::Rectangle<u32> surfaces_rect);
+    ~Framebuffer();
+
+    [[nodiscard]] vk::Image Image(VideoCore::SurfaceType type) const noexcept {
+        return images[Index(type)];
+    }
+
+    [[nodiscard]] vk::ImageView ImageView(VideoCore::SurfaceType type) const noexcept {
+        return image_views[Index(type)];
+    }
+
+    bool HasView(VideoCore::SurfaceType type) const noexcept {
+        return static_cast<bool>(image_views[Index(type)]);
+    }
+
+    u32 Width() const noexcept {
+        return width;
+    }
+
+    u32 Height() const noexcept {
+        return height;
+    }
+
+    vk::Rect2D RenderArea() const noexcept {
+        return render_area;
+    }
+
+private:
+    void PrepareImages(Surface* const color, Surface* const depth_stencil);
+
+private:
+    std::array<vk::Image, 2> images{};
+    std::array<vk::ImageView, 2> image_views{};
+    vk::Rect2D render_area{};
+    u32 width{};
+    u32 height{};
+};
+
+/**
+ * @brief A sampler is used to configure the sampling parameters of a texture unit
+ */
+class Sampler {
+public:
+    Sampler(TextureRuntime& runtime, VideoCore::SamplerParams params);
+    ~Sampler();
+
+    Sampler(const Sampler&) = delete;
+    Sampler& operator=(const Sampler&) = delete;
+
+    Sampler(Sampler&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Sampler));
+        o.sampler = VK_NULL_HANDLE;
+    }
+    Sampler& operator=(Sampler&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Sampler));
+        o.sampler = VK_NULL_HANDLE;
+        return *this;
+    }
+
+    [[nodiscard]] vk::Sampler Handle() const noexcept {
+        return sampler;
+    }
+
+private:
+    vk::Device device;
+    vk::Sampler sampler;
+};
+
 struct Traits {
-    using RuntimeType = TextureRuntime;
-    using SurfaceType = Surface;
+    using Runtime = TextureRuntime;
+    using Surface = Surface;
+    using Framebuffer = Framebuffer;
+    using Sampler = Sampler;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;
