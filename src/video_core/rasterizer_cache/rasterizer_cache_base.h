@@ -60,6 +60,15 @@ public:
     RasterizerCache(Memory::MemorySystem& memory, TextureRuntime& runtime);
     ~RasterizerCache();
 
+    /// Perform hardware accelerated texture copy according to the provided configuration
+    bool AccelerateTextureCopy(const GPU::Regs::DisplayTransferConfig& config);
+
+    /// Perform hardware accelerated display transfer according to the provided configuration
+    bool AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config);
+
+    /// Perform hardware accelerated memory fill according to the provided configuration
+    bool AccelerateFill(const GPU::Regs::MemoryFillConfig& config);
+
     /// Blit one surface's texture to another
     bool BlitSurfaces(const Surface& src_surface, Common::Rectangle<u32> src_rect,
                       const Surface& dst_surface, Common::Rectangle<u32> dst_rect);
@@ -87,9 +96,6 @@ public:
     /// Get the color and depth surfaces based on the framebuffer configuration
     SurfaceSurfaceRect_Tuple GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb,
                                                     const Common::Rectangle<s32>& viewport_rect);
-
-    /// Get a surface that matches the fill config
-    Surface GetFillSurface(const GPU::Regs::MemoryFillConfig& config);
 
     /// Get a surface that matches a "texture copy" display transfer config
     SurfaceRect_Tuple GetTexCopySurface(const SurfaceParams& params);

@@ -38,6 +38,172 @@ RasterizerCache<T>::~RasterizerCache() {
 }
 
 template <class T>
+bool RasterizerCache<T>::AccelerateTextureCopy(const GPU::Regs::DisplayTransferConfig& config) {
+    u32 copy_size = Common::AlignDown(config.texture_copy.size, 16);
+    if (copy_size == 0) {
+        return false;
+    }
+
+    u32 input_gap = config.texture_copy.input_gap * 16;
+    u32 input_width = config.texture_copy.input_width * 16;
+    if (input_width == 0 && input_gap != 0) {
+        return false;
+    }
+    if (input_gap == 0 || input_width >= copy_size) {
+        input_width = copy_size;
+        input_gap = 0;
+    }
+    if (copy_size % input_width != 0) {
+        return false;
+    }
+
+    u32 output_gap = config.texture_copy.output_gap * 16;
+    u32 output_width = config.texture_copy.output_width * 16;
+    if (output_width == 0 && output_gap != 0) {
+        return false;
+    }
+    if (output_gap == 0 || output_width >= copy_size) {
+        output_width = copy_size;
+        output_gap = 0;
+    }
+    if (copy_size % output_width != 0) {
+        return false;
+    }
+
+    SurfaceParams src_params;
+    src_params.addr = config.GetPhysicalInputAddress();
+    src_params.stride = input_width + input_gap; // stride in bytes
+    src_params.width = input_width;              // width in bytes
+    src_params.height = copy_size / input_width;
+    src_params.size = ((src_params.height - 1) * src_params.stride) + src_params.width;
+    src_params.end = src_params.addr + src_params.size;
+
+    auto [src_surface, src_rect] = GetTexCopySurface(src_params);
+    if (src_surface == nullptr) {
+        return false;
+    }
+
+    if (output_gap != 0 &&
+        (output_width != src_surface->BytesInPixels(src_rect.GetWidth() / src_surface->res_scale) *
+                             (src_surface->is_tiled ? 8 : 1) ||
+         output_gap % src_surface->BytesInPixels(src_surface->is_tiled ? 64 : 1) != 0)) {
+        return false;
+    }
+
+    SurfaceParams dst_params = *src_surface;
+    dst_params.addr = config.GetPhysicalOutputAddress();
+    dst_params.width = src_rect.GetWidth() / src_surface->res_scale;
+    dst_params.stride = dst_params.width + src_surface->PixelsInBytes(
+                                               src_surface->is_tiled ? output_gap / 8 : output_gap);
+    dst_params.height = src_rect.GetHeight() / src_surface->res_scale;
+    dst_params.res_scale = src_surface->res_scale;
+    dst_params.UpdateParams();
+
+    // Since we are going to invalidate the gap if there is one, we will have to load it first
+    const bool load_gap = output_gap != 0;
+    auto [dst_surface, dst_rect] = GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, load_gap);
+
+    if (!dst_surface || dst_surface->type == SurfaceType::Texture ||
+        !CheckFormatsBlittable(src_surface->pixel_format, dst_surface->pixel_format)) {
+        return false;
+    }
+
+    ASSERT(src_rect.GetWidth() == dst_rect.GetWidth());
+
+    const TextureCopy texture_copy = {
+        .src_level = 0,
+        .dst_level = 0,
+        .src_offset = {src_rect.left, src_rect.bottom},
+        .dst_offset = {dst_rect.left, dst_rect.bottom},
+        .extent = {src_rect.GetWidth(), src_rect.GetHeight()},
+    };
+    runtime.CopyTextures(*src_surface, *dst_surface, texture_copy);
+
+    InvalidateRegion(dst_params.addr, dst_params.size, dst_surface);
+    return true;
+}
+
+template <class T>
+bool RasterizerCache<T>::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config) {
+    SurfaceParams src_params;
+    src_params.addr = config.GetPhysicalInputAddress();
+    src_params.width = config.output_width;
+    src_params.stride = config.input_width;
+    src_params.height = config.output_height;
+    src_params.is_tiled = !config.input_linear;
+    src_params.pixel_format = PixelFormatFromGPUPixelFormat(config.input_format);
+    src_params.UpdateParams();
+
+    SurfaceParams dst_params;
+    dst_params.addr = config.GetPhysicalOutputAddress();
+    dst_params.width = config.scaling != config.NoScale ? config.output_width.Value() / 2
+                                                        : config.output_width.Value();
+    dst_params.height = config.scaling == config.ScaleXY ? config.output_height.Value() / 2
+                                                         : config.output_height.Value();
+    dst_params.is_tiled = config.input_linear != config.dont_swizzle;
+    dst_params.pixel_format = PixelFormatFromGPUPixelFormat(config.output_format);
+    dst_params.UpdateParams();
+
+    auto [src_surface, src_rect] = GetSurfaceSubRect(src_params, ScaleMatch::Ignore, true);
+    if (src_surface == nullptr)
+        return false;
+
+    dst_params.res_scale = src_surface->res_scale;
+
+    auto [dst_surface, dst_rect] = GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, false);
+    if (dst_surface == nullptr) {
+        return false;
+    }
+
+    if (src_surface->is_tiled != dst_surface->is_tiled) {
+        std::swap(src_rect.top, src_rect.bottom);
+    }
+    if (config.flip_vertically) {
+        std::swap(src_rect.top, src_rect.bottom);
+    }
+
+    if (!CheckFormatsBlittable(src_surface->pixel_format, dst_surface->pixel_format)) {
+        return false;
+    }
+
+    const TextureBlit texture_blit = {
+        .src_level = 0,
+        .dst_level = 0,
+        .src_rect = src_rect,
+        .dst_rect = dst_rect,
+    };
+    runtime.BlitTextures(*src_surface, *dst_surface, texture_blit);
+
+    InvalidateRegion(dst_params.addr, dst_params.size, dst_surface);
+    return true;
+}
+
+template <class T>
+bool RasterizerCache<T>::AccelerateFill(const GPU::Regs::MemoryFillConfig& config) {
+    SurfaceParams params;
+    params.addr = config.GetStartAddress();
+    params.end = config.GetEndAddress();
+    params.size = params.end - params.addr;
+    params.type = SurfaceType::Fill;
+    params.res_scale = std::numeric_limits<u16>::max();
+
+    Surface fill_surface = std::make_shared<typename T::SurfaceType>(params, runtime);
+
+    std::memcpy(&fill_surface->fill_data[0], &config.value_32bit, 4);
+    if (config.fill_32bit) {
+        fill_surface->fill_size = 4;
+    } else if (config.fill_24bit) {
+        fill_surface->fill_size = 3;
+    } else {
+        fill_surface->fill_size = 2;
+    }
+
+    RegisterSurface(fill_surface);
+    InvalidateRegion(fill_surface->addr, fill_surface->size, fill_surface);
+    return true;
+}
+
+template <class T>
 template <typename Func>
 void RasterizerCache<T>::ForEachSurfaceInRegion(PAddr addr, size_t size, Func&& func) {
     using FuncReturn = typename std::invoke_result<Func, Surface>::type;
@@ -633,30 +799,6 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
     }
 
     return std::make_tuple(color_surface, depth_surface, fb_rect);
-}
-
-template <class T>
-auto RasterizerCache<T>::GetFillSurface(const GPU::Regs::MemoryFillConfig& config) -> Surface {
-    SurfaceParams params;
-    params.addr = config.GetStartAddress();
-    params.end = config.GetEndAddress();
-    params.size = params.end - params.addr;
-    params.type = SurfaceType::Fill;
-    params.res_scale = std::numeric_limits<u16>::max();
-
-    Surface new_surface = std::make_shared<typename T::SurfaceType>(params, runtime);
-
-    std::memcpy(&new_surface->fill_data[0], &config.value_32bit, 4);
-    if (config.fill_32bit) {
-        new_surface->fill_size = 4;
-    } else if (config.fill_24bit) {
-        new_surface->fill_size = 3;
-    } else {
-        new_surface->fill_size = 2;
-    }
-
-    RegisterSurface(new_surface);
-    return new_surface;
 }
 
 template <class T>
