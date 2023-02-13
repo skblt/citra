@@ -86,6 +86,7 @@ class Surface;
  */
 class TextureRuntime {
     friend class Surface;
+    friend class Sampler;
 
 public:
     TextureRuntime(const Instance& instance, Scheduler& scheduler,
@@ -235,9 +236,40 @@ private:
     bool is_storage{};
 };
 
+/**
+ * @brief A sampler is used to configure the sampling parameters of a texture unit
+ */
+class Sampler {
+public:
+    Sampler(TextureRuntime& runtime, VideoCore::SamplerParams params);
+    ~Sampler();
+
+    Sampler(const Sampler&) = delete;
+    Sampler& operator=(const Sampler&) = delete;
+
+    Sampler(Sampler&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Sampler));
+        o.sampler = VK_NULL_HANDLE;
+    }
+    Sampler& operator=(Sampler&& o) noexcept {
+        std::memcpy(this, &o, sizeof(Sampler));
+        o.sampler = VK_NULL_HANDLE;
+        return *this;
+    }
+
+    [[nodiscard]] vk::Sampler Handle() const noexcept {
+        return sampler;
+    }
+
+private:
+    vk::Device device;
+    vk::Sampler sampler;
+};
+
 struct Traits {
     using RuntimeType = TextureRuntime;
     using SurfaceType = Surface;
+    using Sampler = Sampler;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;

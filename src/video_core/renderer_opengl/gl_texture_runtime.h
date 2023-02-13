@@ -135,9 +135,29 @@ public:
     OGLTexture texture{};
 };
 
+class Sampler {
+public:
+    explicit Sampler(TextureRuntime& runtime, VideoCore::SamplerParams params);
+    ~Sampler();
+
+    Sampler(const Sampler&) = delete;
+    Sampler& operator=(const Sampler&) = delete;
+
+    Sampler(Sampler&&) = default;
+    Sampler& operator=(Sampler&&) = default;
+
+    [[nodiscard]] GLuint Handle() const noexcept {
+        return sampler.handle;
+    }
+
+private:
+    OGLSampler sampler;
+};
+
 struct Traits {
     using RuntimeType = TextureRuntime;
     using SurfaceType = Surface;
+    using Sampler = Sampler;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;

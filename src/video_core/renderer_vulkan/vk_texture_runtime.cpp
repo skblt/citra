@@ -5,6 +5,7 @@
 #include "common/microprofile.h"
 #include "video_core/rasterizer_cache/texture_codec.h"
 #include "video_core/rasterizer_cache/utils.h"
+#include "video_core/renderer_vulkan/pica_to_vk.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
@@ -52,9 +53,9 @@ struct RecordParams {
     return value;
 }
 
-[[nodiscard]] vk::ClearColorValue MakeClearColorValue(VideoCore::ClearValue clear) {
+[[nodiscard]] vk::ClearColorValue MakeClearColorValue(Common::Vec4f color) {
     return vk::ClearColorValue{
-        .float32 = std::array{clear.color[0], clear.color[1], clear.color[2], clear.color[3]},
+        .float32 = std::array{color[0], color[1], color[2], color[3]},
     };
 }
 
@@ -367,7 +368,7 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
                 static_cast<bool>(params.aspect & vk::ImageAspectFlagBits::eColor);
             if (is_color) {
                 cmdbuf.clearColorImage(params.src_image, vk::ImageLayout::eTransferDstOptimal,
-                                       MakeClearColorValue(value), range);
+                                       MakeClearColorValue(value.color), range);
             } else {
                 cmdbuf.clearDepthStencilImage(params.src_image,
                                               vk::ImageLayout::eTransferDstOptimal,
@@ -1227,6 +1228,58 @@ void Surface::DepthStencilDownload(const VideoCore::BufferTextureCopy& download,
     };
 
     r32_surface.Download(r32_download, staging);
+}
+
+Sampler::Sampler(TextureRuntime& runtime, VideoCore::SamplerParams params)
+    : device{runtime.GetInstance().GetDevice()} {
+    using TextureConfig = VideoCore::SamplerParams::TextureConfig;
+
+    const Instance& instance = runtime.GetInstance();
+    const vk::PhysicalDeviceProperties properties = instance.GetPhysicalDevice().getProperties();
+    const bool use_border_color =
+        instance.IsCustomBorderColorSupported() && (params.wrap_s == TextureConfig::ClampToBorder ||
+                                                    params.wrap_t == TextureConfig::ClampToBorder);
+
+    const Common::Vec4f color = PicaToVK::ColorRGBA8(params.border_color);
+    const vk::SamplerCustomBorderColorCreateInfoEXT border_color_info = {
+        .customBorderColor = MakeClearColorValue(color),
+        .format = vk::Format::eUndefined,
+    };
+
+    const vk::Filter mag_filter = PicaToVK::TextureFilterMode(params.mag_filter);
+    const vk::Filter min_filter = PicaToVK::TextureFilterMode(params.min_filter);
+    const vk::SamplerMipmapMode mipmap_mode = PicaToVK::TextureMipFilterMode(params.mip_filter);
+    const vk::SamplerAddressMode wrap_u = PicaToVK::WrapMode(params.wrap_s);
+    const vk::SamplerAddressMode wrap_v = PicaToVK::WrapMode(params.wrap_t);
+    const float lod_min = static_cast<float>(params.lod_min);
+    const float lod_max = static_cast<float>(params.lod_max);
+
+    const vk::SamplerCreateInfo sampler_info = {
+        .pNext = use_border_color ? &border_color_info : nullptr,
+        .magFilter = mag_filter,
+        .minFilter = min_filter,
+        .mipmapMode = mipmap_mode,
+        .addressModeU = wrap_u,
+        .addressModeV = wrap_v,
+        .mipLodBias = 0,
+        .anisotropyEnable = true,
+        .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
+        .compareEnable = false,
+        .compareOp = vk::CompareOp::eAlways,
+        .minLod = lod_min,
+        .maxLod = lod_max,
+        .borderColor =
+            use_border_color ? vk::BorderColor::eFloatCustomEXT : vk::BorderColor::eIntOpaqueBlack,
+        .unnormalizedCoordinates = false,
+    };
+
+    sampler = device.createSampler(sampler_info);
+}
+
+Sampler::~Sampler() {
+    if (sampler) {
+        device.destroySampler(sampler);
+    }
 }
 
 } // namespace Vulkan

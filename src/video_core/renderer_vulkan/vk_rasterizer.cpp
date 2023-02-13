@@ -92,16 +92,6 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory_, Frontend::EmuW
     MakeSoftwareVertexLayout();
     pipeline_info.vertex_layout = software_layout;
 
-    const SamplerInfo default_sampler_info = {
-        .mag_filter = Pica::TexturingRegs::TextureConfig::TextureFilter::Linear,
-        .min_filter = Pica::TexturingRegs::TextureConfig::TextureFilter::Linear,
-        .mip_filter = Pica::TexturingRegs::TextureConfig::TextureFilter::Linear,
-        .wrap_s = Pica::TexturingRegs::TextureConfig::WrapMode::ClampToBorder,
-        .wrap_t = Pica::TexturingRegs::TextureConfig::WrapMode::ClampToBorder,
-    };
-
-    default_sampler = CreateSampler(default_sampler_info);
-
     const vk::Device device = instance.GetDevice();
     texture_lf_view = device.createBufferView({
         .buffer = texture_lf_buffer.Handle(),
@@ -130,9 +120,10 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory_, Frontend::EmuW
     pipeline_cache.BindTexelBuffer(3, texture_rg_view);
     pipeline_cache.BindTexelBuffer(4, texture_rgba_view);
 
+    const Sampler& null_sampler = res_cache.GetSampler(VideoCore::NULL_SAMPLER_ID);
     for (u32 i = 0; i < 4; i++) {
         pipeline_cache.BindTexture(i, null_surface.ImageView());
-        pipeline_cache.BindSampler(i, default_sampler);
+        pipeline_cache.BindSampler(i, null_sampler.Handle());
     }
 
     for (u32 i = 0; i < 7; i++) {
@@ -147,10 +138,6 @@ RasterizerVulkan::RasterizerVulkan(Memory::MemorySystem& memory_, Frontend::EmuW
 RasterizerVulkan::~RasterizerVulkan() {
     scheduler.Finish();
     const vk::Device device = instance.GetDevice();
-
-    for (auto& [key, sampler] : samplers) {
-        device.destroySampler(sampler);
-    }
 
     device.destroySampler(default_sampler);
     device.destroyBufferView(texture_lf_view);
@@ -625,6 +612,7 @@ void RasterizerVulkan::SyncTextureUnits(Surface* const color_surface) {
         const auto& texture = pica_textures[texture_index];
 
         if (texture.enabled) {
+            Sampler& sampler = res_cache.GetSampler(texture.config);
             if (texture_index == 0) {
                 using TextureType = Pica::TexturingRegs::TextureConfig::TextureType;
                 switch (texture.config.type.Value()) {
@@ -676,7 +664,7 @@ void RasterizerVulkan::SyncTextureUnits(Surface* const color_surface) {
                         pipeline_cache.BindTexture(3, null_surface.ImageView());
                     }
 
-                    BindSampler(3, texture_cube_sampler, texture.config);
+                    pipeline_cache.BindSampler(3, sampler.Handle());
                     continue; // Texture unit 0 setup finished. Continue to next unit
                 }
                 default:
@@ -684,8 +672,7 @@ void RasterizerVulkan::SyncTextureUnits(Surface* const color_surface) {
                 }
             }
 
-            // Update sampler key
-            BindSampler(texture_index, texture_samplers[texture_index], texture.config);
+            pipeline_cache.BindSampler(texture_index, sampler.Handle());
 
             auto surface = res_cache.GetTextureSurface(texture);
             if (surface) {
@@ -717,8 +704,9 @@ void RasterizerVulkan::SyncTextureUnits(Surface* const color_surface) {
                 pipeline_cache.BindTexture(texture_index, null_surface.ImageView());
             }
         } else {
+            const Sampler& null_sampler = res_cache.GetSampler(VideoCore::NULL_SAMPLER_ID);
             pipeline_cache.BindTexture(texture_index, null_surface.ImageView());
-            pipeline_cache.BindSampler(texture_index, default_sampler);
+            pipeline_cache.BindSampler(texture_index, null_sampler.Handle());
         }
     }
 }
@@ -886,68 +874,6 @@ void RasterizerVulkan::MakeSoftwareVertexLayout() {
         attribute.size.Assign(sizes[i]);
         offset += sizes[i] * sizeof(float);
     }
-}
-
-void RasterizerVulkan::BindSampler(u32 unit, SamplerInfo& info,
-                                   const Pica::TexturingRegs::TextureConfig& config) {
-    // TODO: Cubemaps don't contain any mipmaps for now, so sampling from them returns
-    // nothing. Always sample from the base level until mipmaps for texture cubes are
-    // implemented
-    const bool skip_mipmap = config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
-    info = SamplerInfo{
-        .mag_filter = config.mag_filter,
-        .min_filter = config.min_filter,
-        .mip_filter = config.mip_filter,
-        .wrap_s = config.wrap_s,
-        .wrap_t = config.wrap_t,
-        .border_color = config.border_color.raw,
-        .lod_min = skip_mipmap ? 0.f : static_cast<float>(config.lod.min_level),
-        .lod_max = skip_mipmap ? 0.f : static_cast<float>(config.lod.max_level),
-    };
-
-    auto [it, new_sampler] = samplers.try_emplace(info);
-    if (new_sampler) {
-        it->second = CreateSampler(info);
-    }
-    pipeline_cache.BindSampler(unit, it->second);
-}
-
-vk::Sampler RasterizerVulkan::CreateSampler(const SamplerInfo& info) {
-    const bool use_border_color = instance.IsCustomBorderColorSupported() &&
-                                  (info.wrap_s == SamplerInfo::TextureConfig::ClampToBorder ||
-                                   info.wrap_t == SamplerInfo::TextureConfig::ClampToBorder);
-    auto properties = instance.GetPhysicalDevice().getProperties();
-
-    const auto color = PicaToVK::ColorRGBA8(info.border_color);
-    const vk::SamplerCustomBorderColorCreateInfoEXT border_color_info = {
-        .customBorderColor =
-            vk::ClearColorValue{
-                .float32 = std::array{color[0], color[1], color[2], color[3]},
-            },
-        .format = vk::Format::eUndefined,
-    };
-
-    const vk::SamplerCreateInfo sampler_info = {
-        .pNext = use_border_color ? &border_color_info : nullptr,
-        .magFilter = PicaToVK::TextureFilterMode(info.mag_filter),
-        .minFilter = PicaToVK::TextureFilterMode(info.min_filter),
-        .mipmapMode = PicaToVK::TextureMipFilterMode(info.mip_filter),
-        .addressModeU = PicaToVK::WrapMode(info.wrap_s),
-        .addressModeV = PicaToVK::WrapMode(info.wrap_t),
-        .mipLodBias = 0,
-        .anisotropyEnable = instance.IsAnisotropicFilteringSupported(),
-        .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
-        .compareEnable = false,
-        .compareOp = vk::CompareOp::eAlways,
-        .minLod = info.lod_min,
-        .maxLod = info.lod_max,
-        .borderColor =
-            use_border_color ? vk::BorderColor::eFloatCustomEXT : vk::BorderColor::eIntOpaqueBlack,
-        .unnormalizedCoordinates = false,
-    };
-
-    vk::Device device = instance.GetDevice();
-    return device.createSampler(sampler_info);
 }
 
 void RasterizerVulkan::SyncClipEnabled() {

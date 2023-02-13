@@ -43,16 +43,6 @@ RasterizerOpenGL::RasterizerOpenGL(Memory::MemorySystem& memory_, Frontend::EmuW
     u8 framebuffer_data[4] = {0, 0, 0, 1};
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, framebuffer_data);
 
-    // Create sampler objects
-    for (std::size_t i = 0; i < texture_samplers.size(); ++i) {
-        texture_samplers[i].Create();
-        state.texture_units[i].sampler = texture_samplers[i].sampler.handle;
-    }
-
-    // Create cubemap texture and sampler objects
-    texture_cube_sampler.Create();
-    state.texture_cube_unit.sampler = texture_cube_sampler.sampler.handle;
-
     // Generate VAO
     sw_vao.Create();
     hw_vao.Create();
@@ -491,6 +481,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         const auto& texture = pica_textures[texture_index];
 
         if (texture.enabled) {
+            Sampler& sampler = res_cache.GetSampler(texture.config);
             if (texture_index == 0) {
                 using TextureType = Pica::TexturingRegs::TextureConfig::TextureType;
                 switch (texture.config.type.Value()) {
@@ -530,7 +521,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                     state.texture_cube_unit.texture_cube =
                         res_cache.GetTextureCube(config)->texture.handle;
 
-                    texture_cube_sampler.SyncWithConfig(texture.config);
+                    state.texture_cube_unit.sampler = sampler.Handle();
                     state.texture_units[texture_index].texture_2d = 0;
                     continue; // Texture unit 0 setup finished. Continue to next unit
                 }
@@ -541,7 +532,8 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                 state.texture_cube_unit.texture_cube = 0;
             }
 
-            texture_samplers[texture_index].SyncWithConfig(texture.config);
+            state.texture_units[texture_index].sampler = sampler.Handle();
+
             auto surface = res_cache.GetTextureSurface(texture);
             if (surface != nullptr) {
                 CheckBarrier(state.texture_units[texture_index].texture_2d =
@@ -820,75 +812,6 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
     screen_info.display_texture = src_surface->texture.handle;
 
     return true;
-}
-
-void RasterizerOpenGL::SamplerInfo::Create() {
-    sampler.Create();
-    mag_filter = min_filter = mip_filter = TextureConfig::Linear;
-    wrap_s = wrap_t = TextureConfig::Repeat;
-    border_color = 0;
-    lod_min = lod_max = 0;
-
-    // default is 1000 and -1000
-    // Other attributes have correct defaults
-    glSamplerParameterf(sampler.handle, GL_TEXTURE_MAX_LOD, static_cast<float>(lod_max));
-    glSamplerParameterf(sampler.handle, GL_TEXTURE_MIN_LOD, static_cast<float>(lod_min));
-}
-
-void RasterizerOpenGL::SamplerInfo::SyncWithConfig(
-    const Pica::TexturingRegs::TextureConfig& config) {
-
-    GLuint s = sampler.handle;
-
-    if (mag_filter != config.mag_filter) {
-        mag_filter = config.mag_filter;
-        glSamplerParameteri(s, GL_TEXTURE_MAG_FILTER, PicaToGL::TextureMagFilterMode(mag_filter));
-    }
-
-    // TODO(wwylele): remove new_supress_mipmap_for_cube logic once mipmap for cube is implemented
-    bool new_supress_mipmap_for_cube =
-        config.type == Pica::TexturingRegs::TextureConfig::TextureCube;
-    if (min_filter != config.min_filter || mip_filter != config.mip_filter ||
-        supress_mipmap_for_cube != new_supress_mipmap_for_cube) {
-        min_filter = config.min_filter;
-        mip_filter = config.mip_filter;
-        supress_mipmap_for_cube = new_supress_mipmap_for_cube;
-        if (new_supress_mipmap_for_cube) {
-            // HACK: use mag filter converter for min filter because they are the same anyway
-            glSamplerParameteri(s, GL_TEXTURE_MIN_FILTER,
-                                PicaToGL::TextureMagFilterMode(min_filter));
-        } else {
-            glSamplerParameteri(s, GL_TEXTURE_MIN_FILTER,
-                                PicaToGL::TextureMinFilterMode(min_filter, mip_filter));
-        }
-    }
-
-    if (wrap_s != config.wrap_s) {
-        wrap_s = config.wrap_s;
-        glSamplerParameteri(s, GL_TEXTURE_WRAP_S, PicaToGL::WrapMode(wrap_s));
-    }
-    if (wrap_t != config.wrap_t) {
-        wrap_t = config.wrap_t;
-        glSamplerParameteri(s, GL_TEXTURE_WRAP_T, PicaToGL::WrapMode(wrap_t));
-    }
-
-    if (wrap_s == TextureConfig::ClampToBorder || wrap_t == TextureConfig::ClampToBorder) {
-        if (border_color != config.border_color.raw) {
-            border_color = config.border_color.raw;
-            auto gl_color = PicaToGL::ColorRGBA8(border_color);
-            glSamplerParameterfv(s, GL_TEXTURE_BORDER_COLOR, gl_color.AsArray());
-        }
-    }
-
-    if (lod_min != config.lod.min_level) {
-        lod_min = config.lod.min_level;
-        glSamplerParameterf(s, GL_TEXTURE_MIN_LOD, static_cast<float>(lod_min));
-    }
-
-    if (lod_max != config.lod.max_level) {
-        lod_max = config.lod.max_level;
-        glSamplerParameterf(s, GL_TEXTURE_MAX_LOD, static_cast<float>(lod_max));
-    }
 }
 
 void RasterizerOpenGL::SetShader() {

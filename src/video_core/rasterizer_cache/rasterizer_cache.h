@@ -27,7 +27,18 @@ inline auto RangeFromInterval(auto& map, const auto& interval) {
 template <class T>
 RasterizerCache<T>::RasterizerCache(Memory::MemorySystem& memory_, TextureRuntime& runtime_)
     : memory{memory_}, runtime{runtime_}, resolution_scale_factor{
-                                              VideoCore::GetResolutionScaleFactor()} {}
+                                              VideoCore::GetResolutionScaleFactor()} {
+    using TextureConfig = Pica::TexturingRegs::TextureConfig;
+
+    // Create null handles for all cached resources
+    void(slot_samplers.insert(runtime, SamplerParams{
+                                           .mag_filter = TextureConfig::TextureFilter::Linear,
+                                           .min_filter = TextureConfig::TextureFilter::Linear,
+                                           .mip_filter = TextureConfig::TextureFilter::Linear,
+                                           .wrap_s = TextureConfig::WrapMode::ClampToBorder,
+                                           .wrap_t = TextureConfig::WrapMode::ClampToBorder,
+                                       }));
+}
 
 template <class T>
 RasterizerCache<T>::~RasterizerCache() {
@@ -203,6 +214,33 @@ bool RasterizerCache<T>::AccelerateFill(const GPU::Regs::MemoryFillConfig& confi
     RegisterSurface(fill_surface);
     InvalidateRegion(fill_surface->addr, fill_surface->size, fill_surface);
     return true;
+}
+
+template <class T>
+auto RasterizerCache<T>::GetSampler(SamplerId sampler_id) -> Sampler& {
+    return slot_samplers[sampler_id];
+}
+
+template <class T>
+auto RasterizerCache<T>::GetSampler(const Pica::TexturingRegs::TextureConfig& config) -> Sampler& {
+    const SamplerParams params = {
+        .mag_filter = config.mag_filter,
+        .min_filter = config.min_filter,
+        .mip_filter = config.mip_filter,
+        .wrap_s = config.wrap_s,
+        .wrap_t = config.wrap_t,
+        .border_color = config.border_color.raw,
+        .lod_min = config.lod.min_level,
+        .lod_max = config.lod.max_level,
+        .lod_bias = config.lod.bias,
+    };
+
+    auto [it, is_new] = samplers.try_emplace(params);
+    if (is_new) {
+        it->second = slot_samplers.insert(runtime, params);
+    }
+
+    return slot_samplers[it->second];
 }
 
 template <class T>

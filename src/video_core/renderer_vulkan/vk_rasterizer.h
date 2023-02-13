@@ -24,36 +24,6 @@ class Scheduler;
 class RenderpassCache;
 class DescriptorManager;
 
-struct SamplerInfo {
-    using TextureConfig = Pica::TexturingRegs::TextureConfig;
-    TextureConfig::TextureFilter mag_filter;
-    TextureConfig::TextureFilter min_filter;
-    TextureConfig::TextureFilter mip_filter;
-    TextureConfig::WrapMode wrap_s;
-    TextureConfig::WrapMode wrap_t;
-    u32 border_color = 0;
-    float lod_min = 0;
-    float lod_max = 0;
-
-    // TODO(wwylele): remove this once mipmap for cube is implemented
-    bool supress_mipmap_for_cube = false;
-
-    auto operator<=>(const SamplerInfo&) const noexcept = default;
-};
-
-} // namespace Vulkan
-
-namespace std {
-template <>
-struct hash<Vulkan::SamplerInfo> {
-    std::size_t operator()(const Vulkan::SamplerInfo& info) const noexcept {
-        return Common::ComputeHash64(&info, sizeof(Vulkan::SamplerInfo));
-    }
-};
-} // namespace std
-
-namespace Vulkan {
-
 class RasterizerVulkan : public VideoCore::RasterizerAccelerated {
     friend class RendererVulkan;
 
@@ -152,12 +122,6 @@ private:
     /// Creates the vertex layout struct used for software shader pipelines
     void MakeSoftwareVertexLayout();
 
-    /// Binds a sampler to the specified texture unit
-    void BindSampler(u32 unit, SamplerInfo& info, const Pica::TexturingRegs::TextureConfig& config);
-
-    /// Creates a new sampler object
-    vk::Sampler CreateSampler(const SamplerInfo& info);
-
 private:
     const Instance& instance;
     Scheduler& scheduler;
@@ -174,10 +138,6 @@ private:
     vk::Sampler default_sampler;
     Surface null_surface;
     Surface null_storage_surface;
-
-    std::array<SamplerInfo, 3> texture_samplers;
-    SamplerInfo texture_cube_sampler;
-    std::unordered_map<SamplerInfo, vk::Sampler> samplers;
     PipelineInfo pipeline_info;
 
     StreamBuffer stream_buffer;     ///< Vertex+Index+Uniform buffer

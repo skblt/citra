@@ -10,6 +10,7 @@
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_texture_runtime.h"
+#include "video_core/renderer_opengl/pica_to_gl.h"
 #include "video_core/video_core.h"
 
 namespace OpenGL {
@@ -471,5 +472,31 @@ void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download,
         glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, staging.mapped.data());
     }
 }
+
+Sampler::Sampler(TextureRuntime& runtime, VideoCore::SamplerParams params) {
+    const GLenum mag_filter = PicaToGL::TextureMagFilterMode(params.min_filter);
+    const GLenum min_filter = PicaToGL::TextureMinFilterMode(params.min_filter, params.mip_filter);
+    const GLenum wrap_s = PicaToGL::WrapMode(params.wrap_s);
+    const GLenum wrap_t = PicaToGL::WrapMode(params.wrap_t);
+    const Common::Vec4f gl_color = PicaToGL::ColorRGBA8(params.border_color);
+    const float lod_min = params.lod_min;
+    const float lod_max = params.lod_max;
+
+    sampler.Create();
+
+    const GLuint handle = sampler.handle;
+    glSamplerParameteri(handle, GL_TEXTURE_MAG_FILTER, mag_filter);
+    glSamplerParameteri(handle, GL_TEXTURE_MIN_FILTER, min_filter);
+
+    glSamplerParameteri(handle, GL_TEXTURE_WRAP_S, wrap_s);
+    glSamplerParameteri(handle, GL_TEXTURE_WRAP_T, wrap_t);
+
+    glSamplerParameterfv(handle, GL_TEXTURE_BORDER_COLOR, gl_color.AsArray());
+
+    glSamplerParameterf(handle, GL_TEXTURE_MIN_LOD, lod_min);
+    glSamplerParameterf(handle, GL_TEXTURE_MAX_LOD, lod_max);
+}
+
+Sampler::~Sampler() = default;
 
 } // namespace OpenGL

@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <boost/icl/interval_map.hpp>
 #include <boost/range/iterator_range.hpp>
+#include "video_core/rasterizer_cache/sampler_params.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/rasterizer_cache/surface_params.h"
 #include "video_core/rasterizer_cache/utils.h"
@@ -44,6 +45,7 @@ class RasterizerCache : NonCopyable {
     static constexpr u64 CITRA_PAGEBITS = 18;
 
     using TextureRuntime = typename T::RuntimeType;
+    using Sampler = typename T::Sampler;
     using Surface = std::shared_ptr<typename T::SurfaceType>;
     using Watcher = SurfaceWatcher<typename T::SurfaceType>;
 
@@ -68,6 +70,10 @@ public:
 
     /// Perform hardware accelerated memory fill according to the provided configuration
     bool AccelerateFill(const GPU::Regs::MemoryFillConfig& config);
+
+    /// Returns a reference to the sampler object matching the provided configuration
+    Sampler& GetSampler(const Pica::TexturingRegs::TextureConfig& config);
+    Sampler& GetSampler(SamplerId sampler_id);
 
     /// Copy one surface's region to another
     void CopySurface(const Surface& src_surface, const Surface& dst_surface,
@@ -188,6 +194,9 @@ private:
     // This fits better for the purpose of this cache as textures are normaly
     // large in size.
     std::unordered_map<u64, std::vector<Surface>, Common::IdentityHash<u64>> page_table;
+    std::unordered_map<SamplerParams, SamplerId> samplers;
+
+    SlotVector<Sampler> slot_samplers;
 };
 
 } // namespace VideoCore

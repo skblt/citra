@@ -9,11 +9,16 @@
 #include "common/math_util.h"
 #include "common/vector_math.h"
 #include "video_core/rasterizer_cache/pixel_format.h"
+#include "video_core/rasterizer_cache/slot_vector.h"
 
 namespace VideoCore {
 
-class SurfaceParams;
 using Rect2D = Common::Rectangle<u32>;
+
+using SamplerId = SlotId;
+
+/// Fake sampler ID for null samplers
+constexpr SamplerId NULL_SAMPLER_ID{0};
 
 struct Offset {
     constexpr auto operator<=>(const Offset&) const noexcept = default;
@@ -104,6 +109,8 @@ struct TextureCubeConfig {
         return Common::ComputeHash64(this, sizeof(TextureCubeConfig));
     }
 };
+
+class SurfaceParams;
 
 [[nodiscard]] ClearValue MakeClearValue(SurfaceType type, PixelFormat format, const u8* fill_data);
 
