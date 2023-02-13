@@ -20,10 +20,6 @@ class MemorySystem;
 
 namespace VideoCore {
 
-inline auto RangeFromInterval(auto& map, const auto& interval) {
-    return boost::make_iterator_range(map.equal_range(interval));
-}
-
 enum class ScaleMatch {
     Exact,   ///< Only accept same res scale
     Upscale, ///< Only allow higher scale than params
