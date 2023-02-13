@@ -69,10 +69,6 @@ public:
     /// Perform hardware accelerated memory fill according to the provided configuration
     bool AccelerateFill(const GPU::Regs::MemoryFillConfig& config);
 
-    /// Blit one surface's texture to another
-    bool BlitSurfaces(const Surface& src_surface, Common::Rectangle<u32> src_rect,
-                      const Surface& dst_surface, Common::Rectangle<u32> dst_rect);
-
     /// Copy one surface's region to another
     void CopySurface(const Surface& src_surface, const Surface& dst_surface,
                      SurfaceInterval copy_interval);
