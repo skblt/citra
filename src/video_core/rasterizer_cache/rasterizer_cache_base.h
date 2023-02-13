@@ -47,7 +47,6 @@ class RasterizerCache : NonCopyable {
     using TextureRuntime = typename T::RuntimeType;
     using Sampler = typename T::Sampler;
     using Surface = std::shared_ptr<typename T::SurfaceType>;
-    using Watcher = SurfaceWatcher<typename T::SurfaceType>;
 
     /// Declare rasterizer interval types
     using SurfaceMap = boost::icl::interval_map<PAddr, Surface, boost::icl::partial_absorber,

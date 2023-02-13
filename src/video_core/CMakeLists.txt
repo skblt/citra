@@ -37,6 +37,7 @@ add_library(video_core STATIC
     rasterizer_cache/sampler_params.h
     rasterizer_cache/slot_vector.h
     rasterizer_cache/surface_base.h
+    rasterizer_cache/surface_base.cpp
     rasterizer_cache/utils.cpp
     rasterizer_cache/utils.h
     rasterizer_cache/surface_params.cpp

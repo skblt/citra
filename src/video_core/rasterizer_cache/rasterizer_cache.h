@@ -611,7 +611,8 @@ auto RasterizerCache<T>::GetTextureSurface(const Pica::Texture::TextureInfo& inf
             }
 
             if (watcher && !watcher->IsValid()) {
-                auto level_surface = watcher->Get();
+                auto level_surface =
+                    std::static_pointer_cast<typename T::SurfaceType>(watcher->Get());
                 if (!level_surface->invalid_regions.empty()) {
                     ValidateSurface(level_surface, level_surface->addr, level_surface->size);
                 }
@@ -684,7 +685,7 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
     for (std::size_t i = 0; i < addresses.size(); i++) {
         const auto& watcher = watchers[i];
         if (watcher && !watcher->IsValid()) {
-            auto face = watcher->Get();
+            auto face = std::static_pointer_cast<typename T::SurfaceType>(watcher->Get());
             if (!face->invalid_regions.empty()) {
                 ValidateSurface(face, face->addr, face->size);
             }

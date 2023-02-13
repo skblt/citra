@@ -313,7 +313,7 @@ void TextureRuntime::BindFramebuffer(GLenum target, GLint level, GLenum textarge
 }
 
 Surface::Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime)
-    : VideoCore::SurfaceBase<Surface>{params}, runtime{runtime}, driver{runtime.GetDriver()} {
+    : VideoCore::SurfaceBase{params}, runtime{runtime}, driver{runtime.GetDriver()} {
     if (pixel_format != VideoCore::PixelFormat::Invalid) {
         texture = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), levels, params.pixel_format,
                                    texture_type);

@@ -99,10 +99,10 @@ private:
     OGLFramebuffer read_fbo, draw_fbo;
 };
 
-class Surface : public VideoCore::SurfaceBase<Surface> {
+class Surface : public VideoCore::SurfaceBase {
 public:
     Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
-    ~Surface() override;
+    ~Surface();
 
     /// Returns the surface image handle
     GLuint Handle() const noexcept {
