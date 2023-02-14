@@ -707,32 +707,28 @@ auto RasterizerCache<T>::GetTextureCube(const TextureCubeConfig& config) -> cons
 }
 
 template <class T>
-auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb,
-                                                const Common::Rectangle<s32>& viewport_rect)
-    -> SurfaceSurfaceRect_Tuple {
+auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb)
+    -> Framebuffer {
     const auto& regs = Pica::g_state.regs;
     const auto& config = regs.framebuffer.framebuffer;
 
     // Update resolution_scale_factor and reset cache if changed
     const bool resolution_scale_changed =
         resolution_scale_factor != VideoCore::GetResolutionScaleFactor();
-    const bool texture_filter_changed =
-        /*VideoCore::g_texture_filter_update_requested.exchange(false) &&
-        texture_filterer->Reset(Settings::values.texture_filter_name,
-                                VideoCore::GetResolutionScaleFactor())*/
-        false;
-
-    if (resolution_scale_changed || texture_filter_changed) [[unlikely]] {
+    if (resolution_scale_changed) [[unlikely]] {
         resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
         UnregisterAll();
     }
 
-    Common::Rectangle<u32> viewport_clamped{
-        static_cast<u32>(std::clamp(viewport_rect.left, 0, static_cast<s32>(config.GetWidth()))),
-        static_cast<u32>(std::clamp(viewport_rect.top, 0, static_cast<s32>(config.GetHeight()))),
-        static_cast<u32>(std::clamp(viewport_rect.right, 0, static_cast<s32>(config.GetWidth()))),
-        static_cast<u32>(
-            std::clamp(viewport_rect.bottom, 0, static_cast<s32>(config.GetHeight())))};
+    const s32 framebuffer_width = config.GetWidth();
+    const s32 framebuffer_height = config.GetHeight();
+    const auto viewport_rect = regs.rasterizer.GetViewportRect();
+    const Common::Rectangle<u32> viewport_clamped = {
+        static_cast<u32>(std::clamp(viewport_rect.left, 0, framebuffer_width)),
+        static_cast<u32>(std::clamp(viewport_rect.top, 0, framebuffer_height)),
+        static_cast<u32>(std::clamp(viewport_rect.right, 0, framebuffer_width)),
+        static_cast<u32>(std::clamp(viewport_rect.bottom, 0, framebuffer_height)),
+    };
 
     // get color and depth surfaces
     SurfaceParams color_params;
@@ -756,25 +752,25 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
     // Make sure that framebuffers don't overlap if both color and depth are being used
     if (using_color_fb && using_depth_fb &&
         boost::icl::length(color_vp_interval & depth_vp_interval)) {
-        LOG_CRITICAL(Render_OpenGL, "Color and depth framebuffer memory regions overlap; "
-                                    "overlapping framebuffers not supported!");
+        LOG_CRITICAL(HW_GPU, "Color and depth framebuffer memory regions overlap; "
+                             "overlapping framebuffers not supported!");
         using_depth_fb = false;
     }
 
     Common::Rectangle<u32> color_rect{};
-    Surface color_surface = nullptr;
+    Surface color_surface{};
     if (using_color_fb)
         std::tie(color_surface, color_rect) =
             GetSurfaceSubRect(color_params, ScaleMatch::Exact, false);
 
     Common::Rectangle<u32> depth_rect{};
-    Surface depth_surface = nullptr;
+    Surface depth_surface{};
     if (using_depth_fb)
         std::tie(depth_surface, depth_rect) =
             GetSurfaceSubRect(depth_params, ScaleMatch::Exact, false);
 
     Common::Rectangle<u32> fb_rect{};
-    if (color_surface != nullptr && depth_surface != nullptr) {
+    if (color_surface && depth_surface) {
         fb_rect = color_rect;
         // Color and Depth surfaces must have the same dimensions and offsets
         if (color_rect.bottom != depth_rect.bottom || color_rect.top != depth_rect.top ||
@@ -783,24 +779,46 @@ auto RasterizerCache<T>::GetFramebufferSurfaces(bool using_color_fb, bool using_
             depth_surface = GetSurface(depth_params, ScaleMatch::Exact, false);
             fb_rect = color_surface->GetScaledRect();
         }
-    } else if (color_surface != nullptr) {
+    } else if (color_surface) {
         fb_rect = color_rect;
-    } else if (depth_surface != nullptr) {
+    } else if (depth_surface) {
         fb_rect = depth_rect;
     }
 
-    if (color_surface != nullptr) {
+    if (color_surface) {
         ValidateSurface(color_surface, boost::icl::first(color_vp_interval),
                         boost::icl::length(color_vp_interval));
         color_surface->InvalidateAllWatcher();
     }
-    if (depth_surface != nullptr) {
+    if (depth_surface) {
         ValidateSurface(depth_surface, boost::icl::first(depth_vp_interval),
                         boost::icl::length(depth_vp_interval));
         depth_surface->InvalidateAllWatcher();
     }
 
-    return std::make_tuple(color_surface, depth_surface, fb_rect);
+    render_targets = RenderTargets{
+        .color_surface = color_surface,
+        .depth_surface = depth_surface,
+    };
+
+    auto* const color = color_surface ? color_surface.get() : nullptr;
+    auto* const depth_stencil = depth_surface ? depth_surface.get() : nullptr;
+    return Framebuffer{runtime, color, depth_stencil, regs, fb_rect};
+}
+
+template <class T>
+void RasterizerCache<T>::InvalidateRenderTargets(const Framebuffer& framebuffer) {
+    const auto Invalidate = [&](SurfaceType type, Surface region_owner) {
+        const bool has_attachment = framebuffer.HasAttachment(type);
+        if (has_attachment) {
+            const SurfaceInterval interval = framebuffer.Interval(type);
+            InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
+                             region_owner);
+        }
+    };
+
+    Invalidate(SurfaceType::Color, render_targets.color_surface);
+    Invalidate(SurfaceType::DepthStencil, render_targets.depth_surface);
 }
 
 template <class T>

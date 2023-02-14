@@ -45,8 +45,9 @@ class RasterizerCache : NonCopyable {
     static constexpr u64 CITRA_PAGEBITS = 18;
 
     using TextureRuntime = typename T::RuntimeType;
-    using Sampler = typename T::Sampler;
     using Surface = std::shared_ptr<typename T::SurfaceType>;
+    using Sampler = typename T::Sampler;
+    using Framebuffer = typename T::Framebuffer;
 
     /// Declare rasterizer interval types
     using SurfaceMap = boost::icl::interval_map<PAddr, Surface, boost::icl::partial_absorber,
@@ -54,7 +55,6 @@ class RasterizerCache : NonCopyable {
                                                 boost::icl::inter_section, SurfaceInterval>;
 
     using SurfaceRect_Tuple = std::tuple<Surface, Common::Rectangle<u32>>;
-    using SurfaceSurfaceRect_Tuple = std::tuple<Surface, Surface, Common::Rectangle<u32>>;
     using PageMap = boost::icl::interval_map<u32, int>;
 
 public:
@@ -95,8 +95,10 @@ public:
     const Surface& GetTextureCube(const TextureCubeConfig& config);
 
     /// Get the color and depth surfaces based on the framebuffer configuration
-    SurfaceSurfaceRect_Tuple GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb,
-                                                    const Common::Rectangle<s32>& viewport_rect);
+    Framebuffer GetFramebufferSurfaces(bool using_color_fb, bool using_depth_fb);
+
+    /// Marks the draw rectangle defined in framebuffer as invalid
+    void InvalidateRenderTargets(const Framebuffer& framebuffer);
 
     /// Get a surface that matches a "texture copy" display transfer config
     SurfaceRect_Tuple GetTexCopySurface(const SurfaceParams& params);
@@ -196,6 +198,13 @@ private:
     std::unordered_map<SamplerParams, SamplerId> samplers;
 
     SlotVector<Sampler> slot_samplers;
+
+    struct RenderTargets {
+        Surface color_surface;
+        Surface depth_surface;
+    };
+
+    RenderTargets render_targets;
 };
 
 } // namespace VideoCore

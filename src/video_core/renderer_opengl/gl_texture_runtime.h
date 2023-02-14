@@ -6,6 +6,7 @@
 
 #include <set>
 #include <span>
+#include "video_core/rasterizer_cache/framebuffer_base.h"
 #include "video_core/rasterizer_cache/rasterizer_cache_base.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
@@ -36,6 +37,7 @@ class Surface;
  */
 class TextureRuntime {
     friend class Surface;
+    friend class Framebuffer;
 
 public:
     TextureRuntime(Driver& driver);
@@ -94,6 +96,7 @@ private:
     TextureFilterer filterer;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
     std::unordered_multimap<VideoCore::HostTextureTag, OGLTexture> texture_recycler;
+    std::unordered_map<u64, OGLFramebuffer, Common::IdentityHash<u64>> framebuffer_cache;
     StreamBuffer upload_buffer;
     std::vector<u8> download_buffer;
     OGLFramebuffer read_fbo, draw_fbo;
@@ -135,6 +138,30 @@ public:
     OGLTexture texture{};
 };
 
+class Framebuffer : public VideoCore::FramebufferBase {
+public:
+    explicit Framebuffer(TextureRuntime& runtime, Surface* const color,
+                         Surface* const depth_stencil, const Pica::Regs& regs,
+                         Common::Rectangle<u32> surfaces_rect);
+    ~Framebuffer();
+
+    [[nodiscard]] GLuint Handle() const noexcept {
+        return handle;
+    }
+
+    [[nodiscard]] GLuint Attachment(VideoCore::SurfaceType type) const noexcept {
+        return attachments[Index(type)];
+    }
+
+    bool HasAttachment(VideoCore::SurfaceType type) const noexcept {
+        return static_cast<bool>(attachments[Index(type)]);
+    }
+
+private:
+    std::array<GLuint, 2> attachments{};
+    GLuint handle{};
+};
+
 class Sampler {
 public:
     explicit Sampler(TextureRuntime& runtime, VideoCore::SamplerParams params);
@@ -158,6 +185,7 @@ struct Traits {
     using RuntimeType = TextureRuntime;
     using SurfaceType = Surface;
     using Sampler = Sampler;
+    using Framebuffer = Framebuffer;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;

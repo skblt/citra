@@ -93,7 +93,7 @@ private:
     void SyncAndUploadLUTsLF();
 
     /// Syncs all enabled PICA texture units
-    void SyncTextureUnits(Surface* const color_surface);
+    void SyncTextureUnits(const Framebuffer& framebuffer);
 
     /// Upload the uniform blocks to the uniform buffer object
     void UploadUniforms(bool accelerate_draw);

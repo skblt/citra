@@ -7,6 +7,7 @@
 #include <set>
 #include <span>
 #include <vulkan/vulkan_hash.hpp>
+#include "video_core/rasterizer_cache/framebuffer_base.h"
 #include "video_core/rasterizer_cache/rasterizer_cache_base.h"
 #include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/renderer_vulkan/vk_blit_helper.h"
@@ -235,6 +236,55 @@ private:
     bool is_storage{};
 };
 
+class Framebuffer : public VideoCore::FramebufferBase {
+public:
+    explicit Framebuffer(Surface* const color, Surface* const depth_stencil,
+                         vk::Rect2D render_area);
+    explicit Framebuffer(TextureRuntime& runtime, Surface* const color,
+                         Surface* const depth_stencil, const Pica::Regs& regs,
+                         Common::Rectangle<u32> surfaces_rect);
+    ~Framebuffer();
+
+    VideoCore::PixelFormat Format(VideoCore::SurfaceType type) const noexcept {
+        return formats[Index(type)];
+    }
+
+    [[nodiscard]] vk::Image Image(VideoCore::SurfaceType type) const noexcept {
+        return images[Index(type)];
+    }
+
+    [[nodiscard]] vk::ImageView ImageView(VideoCore::SurfaceType type) const noexcept {
+        return image_views[Index(type)];
+    }
+
+    bool HasAttachment(VideoCore::SurfaceType type) const noexcept {
+        return static_cast<bool>(image_views[Index(type)]);
+    }
+
+    u32 Width() const noexcept {
+        return width;
+    }
+
+    u32 Height() const noexcept {
+        return height;
+    }
+
+    vk::Rect2D RenderArea() const noexcept {
+        return render_area;
+    }
+
+private:
+    void PrepareImages(Surface* const color, Surface* const depth_stencil);
+
+private:
+    std::array<vk::Image, 2> images{};
+    std::array<vk::ImageView, 2> image_views{};
+    std::array<VideoCore::PixelFormat, 2> formats{};
+    vk::Rect2D render_area{};
+    u32 width{};
+    u32 height{};
+};
+
 /**
  * @brief A sampler is used to configure the sampling parameters of a texture unit
  */
@@ -269,6 +319,7 @@ struct Traits {
     using RuntimeType = TextureRuntime;
     using SurfaceType = Surface;
     using Sampler = Sampler;
+    using Framebuffer = Framebuffer;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;

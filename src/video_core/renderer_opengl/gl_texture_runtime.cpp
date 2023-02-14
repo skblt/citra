@@ -6,6 +6,7 @@
 #include "common/scope_exit.h"
 #include "common/settings.h"
 #include "video_core/rasterizer_cache/utils.h"
+#include "video_core/regs.h"
 #include "video_core/renderer_opengl/gl_driver.h"
 #include "video_core/renderer_opengl/gl_format_reinterpreter.h"
 #include "video_core/renderer_opengl/gl_state.h"
@@ -472,6 +473,74 @@ void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download,
         glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, staging.mapped.data());
     }
 }
+
+Framebuffer::Framebuffer(TextureRuntime& runtime, Surface* const color,
+                         Surface* const depth_stencil, const Pica::Regs& regs,
+                         Common::Rectangle<u32> surfaces_rect)
+    : VideoCore::FramebufferBase{regs, color, depth_stencil, surfaces_rect} {
+
+    const bool shadow_rendering = regs.framebuffer.IsShadowRendering();
+    const bool has_stencil = regs.framebuffer.HasStencil();
+    if (shadow_rendering && !color) {
+        return; // Framebuffer won't get used
+    }
+
+    if (color) {
+        attachments[0] = color->Handle();
+    }
+    if (depth_stencil) {
+        attachments[1] = depth_stencil->Handle();
+    }
+
+    const u64 hash = Common::ComputeStructHash64(attachments);
+    auto [it, new_framebuffer] = runtime.framebuffer_cache.try_emplace(hash);
+    if (!new_framebuffer) {
+        handle = it->second.handle;
+        return;
+    }
+
+    // Create a new framebuffer otherwise
+    OGLFramebuffer& framebuffer = it->second;
+    framebuffer.Create();
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer.handle);
+
+    if (shadow_rendering) {
+        glFramebufferParameteri(GL_DRAW_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_WIDTH,
+                                color->width * res_scale);
+        glFramebufferParameteri(GL_DRAW_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_HEIGHT,
+                                color->height * res_scale);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
+                               0);
+    } else {
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                               color ? color->Handle() : 0, 0);
+        if (depth_stencil) {
+            if (has_stencil) {
+                // Attach both depth and stencil
+                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                                       GL_TEXTURE_2D, depth_stencil->Handle(), 0);
+            } else {
+                // Attach depth
+                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
+                                       depth_stencil->Handle(), 0);
+                // Clear stencil attachment
+                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
+                                       0);
+            }
+        } else {
+            // Clear both depth and stencil attachment
+            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D,
+                                   0, 0);
+        }
+    }
+
+    // Restore previous framebuffer
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, OpenGLState::GetCurState().draw.draw_framebuffer);
+}
+
+Framebuffer::~Framebuffer() = default;
 
 Sampler::Sampler(TextureRuntime& runtime, VideoCore::SamplerParams params) {
     const GLenum mag_filter = PicaToGL::TextureMagFilterMode(params.min_filter);

@@ -5,6 +5,7 @@
 #pragma once
 
 #include <span>
+#include <boost/icl/right_open_interval.hpp>
 #include "common/hash.h"
 #include "common/math_util.h"
 #include "common/vector_math.h"
@@ -19,6 +20,8 @@ using SamplerId = SlotId;
 
 /// Fake sampler ID for null samplers
 constexpr SamplerId NULL_SAMPLER_ID{0};
+
+using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
 
 struct Offset {
     constexpr auto operator<=>(const Offset&) const noexcept = default;

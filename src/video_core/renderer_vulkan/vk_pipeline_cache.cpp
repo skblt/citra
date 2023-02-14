@@ -680,16 +680,6 @@ void PipelineCache::BindSampler(u32 binding, vk::Sampler sampler) {
     desc_manager.SetBinding(2, binding, data);
 }
 
-void PipelineCache::SetViewport(float x, float y, float width, float height) {
-    const vk::Viewport viewport{x, y, width, height, 0.f, 1.f};
-    scheduler.Record([viewport](vk::CommandBuffer cmdbuf) { cmdbuf.setViewport(0, viewport); });
-}
-
-void PipelineCache::SetScissor(s32 x, s32 y, u32 width, u32 height) {
-    const vk::Rect2D scissor{{x, y}, {width, height}};
-    scheduler.Record([scissor](vk::CommandBuffer cmdbuf) { cmdbuf.setScissor(0, scissor); });
-}
-
 void PipelineCache::ApplyDynamic(const PipelineInfo& info, bool is_dirty) {
     scheduler.Record([is_dirty, current_dynamic = current_info.dynamic,
                       dynamic = info.dynamic](vk::CommandBuffer cmdbuf) {

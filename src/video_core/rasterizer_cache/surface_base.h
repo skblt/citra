@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <boost/icl/interval_set.hpp>
 #include "video_core/rasterizer_cache/surface_params.h"
 
 namespace VideoCore {

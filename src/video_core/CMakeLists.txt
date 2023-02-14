@@ -28,7 +28,8 @@ add_library(video_core STATIC
     regs_texturing.h
     renderer_base.cpp
     renderer_base.h
-    rasterizer_cache/texture_codec.h
+    rasterizer_cache/framebuffer_base.cpp
+    rasterizer_cache/framebuffer_base.h
     rasterizer_cache/pixel_format.cpp
     rasterizer_cache/pixel_format.h
     rasterizer_cache/rasterizer_cache.cpp
@@ -36,8 +37,9 @@ add_library(video_core STATIC
     rasterizer_cache/rasterizer_cache_base.h
     rasterizer_cache/sampler_params.h
     rasterizer_cache/slot_vector.h
-    rasterizer_cache/surface_base.h
     rasterizer_cache/surface_base.cpp
+    rasterizer_cache/surface_base.h
+    rasterizer_cache/texture_codec.h
     rasterizer_cache/utils.cpp
     rasterizer_cache/utils.h
     rasterizer_cache/surface_params.cpp

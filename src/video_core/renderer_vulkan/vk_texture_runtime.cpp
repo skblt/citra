@@ -1227,6 +1227,50 @@ void Surface::DepthStencilDownload(const VideoCore::BufferTextureCopy& download,
     r32_surface.Download(r32_download, staging);
 }
 
+Framebuffer::Framebuffer(Surface* const color, Surface* const depth_stencil,
+                         vk::Rect2D render_area_)
+    : render_area{render_area_} {
+    PrepareImages(color, depth_stencil);
+}
+
+Framebuffer::Framebuffer(TextureRuntime& runtime, Surface* const color,
+                         Surface* const depth_stencil, const Pica::Regs& regs,
+                         Common::Rectangle<u32> surfaces_rect)
+    : VideoCore::FramebufferBase{regs, color, depth_stencil, surfaces_rect} {
+
+    // Update render area
+    render_area.offset.x = draw_rect.left;
+    render_area.offset.y = draw_rect.bottom;
+    render_area.extent.width = draw_rect.GetWidth();
+    render_area.extent.height = draw_rect.GetHeight();
+
+    PrepareImages(color, depth_stencil);
+}
+
+Framebuffer::~Framebuffer() = default;
+
+void Framebuffer::PrepareImages(Surface* const color, Surface* const depth_stencil) {
+    u32 cursor{0};
+    width = height = std::numeric_limits<u32>::max();
+
+    const auto Prepare = [&](Surface* const surface) {
+        if (!surface) {
+            formats[cursor++] = VideoCore::PixelFormat::Invalid;
+            return;
+        }
+
+        width = std::min(width, surface->GetScaledWidth());
+        height = std::min(height, surface->GetScaledHeight());
+        formats[cursor] = surface->pixel_format;
+        images[cursor] = surface->Image();
+        image_views[cursor++] = surface->ImageView();
+    };
+
+    // Setup image handles
+    Prepare(color);
+    Prepare(depth_stencil);
+}
+
 Sampler::Sampler(TextureRuntime& runtime, VideoCore::SamplerParams params)
     : device{runtime.GetInstance().GetDevice()} {
     using TextureConfig = VideoCore::SamplerParams::TextureConfig;

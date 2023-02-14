@@ -39,6 +39,8 @@ struct hash<Vulkan::FramebufferInfo> {
 
 namespace Vulkan {
 
+class Framebuffer;
+
 class RenderpassCache {
     static constexpr std::size_t MAX_COLOR_FORMATS = 5;
     static constexpr std::size_t MAX_DEPTH_FORMATS = 4;
@@ -48,6 +50,8 @@ public:
     ~RenderpassCache();
 
     /// Begins a new renderpass only when no other renderpass is currently active
+    void EnterRenderpass(const Framebuffer& framebuffer, bool do_clear = false,
+                         vk::ClearValue clear = {});
     void EnterRenderpass(Surface* const color, Surface* const depth_stencil, vk::Rect2D render_area,
                          bool do_clear = false, vk::ClearValue clear = {});
 
@@ -68,8 +72,7 @@ public:
 
 private:
     /// Begins a new rendering scope using dynamic rendering
-    void BeginRendering(Surface* const color, Surface* const depth_stencil, vk::Rect2D render_area,
-                        bool do_clear, vk::ClearValue clear);
+    void BeginRendering(const Framebuffer& framebuffer, bool do_clear, vk::ClearValue clear);
 
     /// Creates a renderpass configured appropriately and stores it in cached_renderpasses
     vk::RenderPass CreateRenderPass(vk::Format color, vk::Format depth,
