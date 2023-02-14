@@ -151,30 +151,4 @@ std::array<u8, 4> SurfaceBase::MakeFillBuffer(PAddr copy_addr) {
     return fill_buffer;
 }
 
-std::shared_ptr<Watcher> SurfaceBase::CreateWatcher() {
-    auto weak_ptr = weak_from_this();
-    auto watcher = std::make_shared<Watcher>(std::move(weak_ptr));
-    watchers.push_back(watcher);
-    return watcher;
-}
-
-void SurfaceBase::InvalidateAllWatcher() {
-    for (const auto& watcher : watchers) {
-        if (auto locked = watcher.lock()) {
-            locked->valid = false;
-        }
-    }
-}
-
-void SurfaceBase::UnlinkAllWatcher() {
-    for (const auto& watcher : watchers) {
-        if (auto locked = watcher.lock()) {
-            locked->valid = false;
-            locked->surface.reset();
-        }
-    }
-
-    watchers.clear();
-}
-
 } // namespace VideoCore

@@ -16,6 +16,8 @@
 
 namespace OpenGL {
 
+using VideoCore::TextureType;
+
 constexpr FormatTuple DEFAULT_TUPLE = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
 
 static constexpr std::array DEPTH_TUPLES = {
@@ -137,10 +139,6 @@ OGLTexture TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
         return texture;
     }
 
-    const auto& tuple = GetFormatTuple(format);
-    const OpenGLState& state = OpenGLState::GetCurState();
-    GLuint old_tex = state.texture_units[0].texture_2d;
-
     // Allocate new texture
     OGLTexture texture{};
     texture.Create();
@@ -148,13 +146,14 @@ OGLTexture TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(target, texture.handle);
 
+    const auto& tuple = GetFormatTuple(format);
     glTexStorage2D(target, levels, tuple.internal_format, width, height);
 
     glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    glBindTexture(target, old_tex);
+    glBindTexture(target, OpenGLState::GetCurState().texture_units[0].texture_2d);
     return texture;
 }
 
@@ -221,10 +220,14 @@ bool TextureRuntime::ClearTexture(Surface& surface, const VideoCore::TextureClea
 
 bool TextureRuntime::CopyTextures(Surface& source, Surface& dest,
                                   const VideoCore::TextureCopy& copy) {
-    glCopyImageSubData(source.texture.handle, GL_TEXTURE_2D, copy.src_level, copy.src_offset.x,
-                       copy.src_offset.y, 0, dest.texture.handle, GL_TEXTURE_2D, copy.dst_level,
-                       copy.dst_offset.x, copy.dst_offset.y, 0, copy.extent.width,
-                       copy.extent.height, 1);
+    const GLenum src_textarget =
+        source.texture_type == TextureType::CubeMap ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+    const GLenum dst_textarget =
+        dest.texture_type == TextureType::CubeMap ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+    glCopyImageSubData(source.texture.handle, src_textarget, copy.src_level, copy.src_offset.x,
+                       copy.src_offset.y, copy.src_layer, dest.texture.handle, dst_textarget,
+                       copy.dst_level, copy.dst_offset.x, copy.dst_offset.y, copy.dst_layer,
+                       copy.extent.width, copy.extent.height, 1);
     return true;
 }
 
@@ -238,13 +241,13 @@ bool TextureRuntime::BlitTextures(Surface& source, Surface& dest,
     state.draw.draw_framebuffer = draw_fbo.handle;
     state.Apply();
 
-    const GLenum src_textarget = source.texture_type == VideoCore::TextureType::CubeMap
+    const GLenum src_textarget = source.texture_type == TextureType::CubeMap
                                      ? GL_TEXTURE_CUBE_MAP_POSITIVE_X + blit.src_layer
                                      : GL_TEXTURE_2D;
     BindFramebuffer(GL_READ_FRAMEBUFFER, blit.src_level, src_textarget, source.type,
                     source.texture);
 
-    const GLenum dst_textarget = dest.texture_type == VideoCore::TextureType::CubeMap
+    const GLenum dst_textarget = dest.texture_type == TextureType::CubeMap
                                      ? GL_TEXTURE_CUBE_MAP_POSITIVE_X + blit.dst_layer
                                      : GL_TEXTURE_2D;
     BindFramebuffer(GL_DRAW_FRAMEBUFFER, blit.dst_level, dst_textarget, dest.type, dest.texture);
@@ -347,7 +350,8 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
         OpenGLState prev_state = OpenGLState::GetCurState();
         SCOPE_EXIT({ prev_state.Apply(); });
 
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(stride));
+        const VideoCore::Rect2D rect = upload.texture_rect;
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(rect.GetWidth()));
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, staging.buffer);
 
         // Unmap the buffer FindStaging mapped beforehand
@@ -357,15 +361,12 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
         glBindTexture(GL_TEXTURE_2D, texture.handle);
 
         const auto& tuple = runtime.GetFormatTuple(pixel_format);
-        glTexSubImage2D(GL_TEXTURE_2D, upload.texture_level, upload.texture_rect.left,
-                        upload.texture_rect.bottom, upload.texture_rect.GetWidth(),
-                        upload.texture_rect.GetHeight(), tuple.format, tuple.type,
+        glTexSubImage2D(GL_TEXTURE_2D, upload.texture_level, rect.left, rect.bottom,
+                        rect.GetWidth(), rect.GetHeight(), tuple.format, tuple.type,
                         reinterpret_cast<void*>(staging.buffer_offset));
 
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     }
-
-    InvalidateAllWatcher();
 }
 
 MICROPROFILE_DEFINE(OpenGL_Download, "OpenGL", "Texture Download", MP_RGB(128, 192, 64));
@@ -375,25 +376,25 @@ void Surface::Download(const VideoCore::BufferTextureCopy& download, const Stagi
     // Ensure no bad interactions with GL_PACK_ALIGNMENT
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
 
-    OpenGLState prev_state = OpenGLState::GetCurState();
-    SCOPE_EXIT({ prev_state.Apply(); });
-
-    glPixelStorei(GL_PACK_ROW_LENGTH, static_cast<GLint>(stride));
-
     const bool is_scaled = res_scale != 1;
     if (is_scaled) {
         ScaledDownload(download, staging);
     } else {
+        OpenGLState prev_state = OpenGLState::GetCurState();
+        SCOPE_EXIT({ prev_state.Apply(); });
+
+        const VideoCore::Rect2D rect = download.texture_rect;
+        glPixelStorei(GL_PACK_ROW_LENGTH, static_cast<GLint>(rect.GetWidth()));
+
         runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, download.texture_level, GL_TEXTURE_2D, type,
                                 texture);
 
         const auto& tuple = runtime.GetFormatTuple(pixel_format);
-        glReadPixels(download.texture_rect.left, download.texture_rect.bottom,
-                     download.texture_rect.GetWidth(), download.texture_rect.GetHeight(),
-                     tuple.format, tuple.type, staging.mapped.data());
-    }
+        glReadPixels(rect.left, rect.bottom, rect.GetWidth(), rect.GetHeight(), tuple.format,
+                     tuple.type, staging.mapped.data());
 
-    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+        glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    }
 }
 
 void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
@@ -414,7 +415,6 @@ void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload, const Sta
         .buffer_size = upload.buffer_size,
         .texture_rect = unscaled_rect,
     };
-
     unscaled_surface.Upload(unscaled_upload, staging);
 
     const auto& filterer = runtime.GetFilterer();
@@ -422,13 +422,9 @@ void Surface::ScaledUpload(const VideoCore::BufferTextureCopy& upload, const Sta
         const VideoCore::TextureBlit blit = {
             .src_level = 0,
             .dst_level = upload.texture_level,
-            .src_layer = 0,
-            .dst_layer = 0,
             .src_rect = unscaled_rect,
             .dst_rect = scaled_rect,
         };
-
-        // If filtering fails, resort to normal blitting
         runtime.BlitTextures(unscaled_surface, *this, blit);
     }
 }
@@ -451,7 +447,7 @@ void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download,
     // Blit the scaled rectangle to the unscaled texture
     const VideoCore::TextureBlit blit = {
         .src_level = download.texture_level,
-        .dst_level = 0,
+        .dst_level = download.texture_level,
         .src_layer = 0,
         .dst_layer = 0,
         .src_rect = scaled_rect,
@@ -464,12 +460,13 @@ void Surface::ScaledDownload(const VideoCore::BufferTextureCopy& download,
 
     const auto& tuple = runtime.GetFormatTuple(pixel_format);
     if (driver.IsOpenGLES()) {
-        runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, 0, GL_TEXTURE_2D, type,
+        runtime.BindFramebuffer(GL_READ_FRAMEBUFFER, download.texture_level, GL_TEXTURE_2D, type,
                                 unscaled_surface.texture);
         glReadPixels(0, 0, rect_width, rect_height, tuple.format, tuple.type,
                      staging.mapped.data());
     } else {
-        glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, staging.mapped.data());
+        glGetTexImage(GL_TEXTURE_2D, download.texture_level, tuple.format, tuple.type,
+                      staging.mapped.data());
     }
 }
 

@@ -64,6 +64,8 @@ bool CheckFormatsBlittable(PixelFormat source_format, PixelFormat dest_format) {
         return true;
     }
 
+    LOG_WARNING(HW_GPU, "Unblittable format pair detected {} and {}",
+                PixelFormatAsString(source_format), PixelFormatAsString(dest_format));
     return false;
 }
 

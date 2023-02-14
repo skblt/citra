@@ -12,38 +12,7 @@ namespace VideoCore {
 
 using SurfaceRegions = boost::icl::interval_set<PAddr, std::less, SurfaceInterval>;
 
-class SurfaceBase;
-
-/**
- * A watcher that notifies whether a cached surface has been changed. This is useful for caching
- * surface collection objects, including texture cube and mipmap.
- */
-class Watcher {
-public:
-    explicit Watcher(std::weak_ptr<SurfaceBase>&& surface) : surface(std::move(surface)) {}
-
-    /// Checks whether the surface has been changed.
-    bool IsValid() const {
-        return !surface.expired() && valid;
-    }
-
-    /// Marks that the content of the referencing surface has been updated to the watcher user.
-    void Validate() {
-        ASSERT(!surface.expired());
-        valid = true;
-    }
-
-    /// Gets the referencing surface. Returns null if the surface has been destroyed
-    std::shared_ptr<SurfaceBase> Get() const {
-        return surface.lock();
-    }
-
-public:
-    std::weak_ptr<SurfaceBase> surface;
-    bool valid = false;
-};
-
-class SurfaceBase : public SurfaceParams, public std::enable_shared_from_this<SurfaceBase> {
+class SurfaceBase : public SurfaceParams {
 public:
     SurfaceBase();
     explicit SurfaceBase(const SurfaceParams& params);
@@ -66,15 +35,6 @@ public:
     /// Returns the clear value used to validate another surface from this fill surface
     ClearValue MakeClearValue(PAddr copy_addr, PixelFormat dst_format);
 
-    /// Creates a surface watcher linked to this surface
-    std::shared_ptr<Watcher> CreateWatcher();
-
-    /// Invalidates all watchers linked to this surface
-    void InvalidateAllWatcher();
-
-    /// Removes any linked watchers from this surface
-    void UnlinkAllWatcher();
-
     /// Returns true when the region denoted by interval is valid
     bool IsRegionValid(SurfaceInterval interval) const {
         return (invalid_regions.find(interval) == invalid_regions.end());
@@ -94,12 +54,8 @@ public:
     bool registered = false;
     bool picked = false;
     SurfaceRegions invalid_regions;
-    std::array<std::shared_ptr<Watcher>, 7> level_watchers;
     std::array<u8, 4> fill_data;
     u32 fill_size = 0;
-
-public:
-    std::vector<std::weak_ptr<Watcher>> watchers;
 };
 
 } // namespace VideoCore

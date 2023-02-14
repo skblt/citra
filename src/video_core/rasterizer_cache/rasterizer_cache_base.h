@@ -157,14 +157,14 @@ private:
     void DownloadFillSurface(const Surface& surface, SurfaceInterval interval);
 
     /// Returns false if there is a surface in the cache at the interval with the same bit-width,
-    bool NoUnimplementedReinterpretations(const Surface& surface, SurfaceParams& params,
+    bool NoUnimplementedReinterpretations(const Surface& surface, SurfaceParams params,
                                           SurfaceInterval interval);
 
     /// Return true if a surface with an invalid pixel format exists at the interval
-    bool IntervalHasInvalidPixelFormat(SurfaceParams& params, SurfaceInterval interval);
+    bool IntervalHasInvalidPixelFormat(SurfaceParams params, SurfaceInterval interval);
 
     /// Attempt to find a reinterpretable surface in the cache and use it to copy for validation
-    bool ValidateByReinterpretation(const Surface& surface, SurfaceParams& params,
+    bool ValidateByReinterpretation(const Surface& surface, SurfaceParams params,
                                     SurfaceInterval interval);
 
     /// Create a new surface

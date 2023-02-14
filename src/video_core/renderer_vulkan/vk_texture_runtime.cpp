@@ -871,8 +871,6 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
 
         runtime.upload_buffer.Commit(staging.size);
     }
-
-    InvalidateAllWatcher();
 }
 
 void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {

@@ -452,6 +452,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                         .pz = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ),
                         .nz = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ),
                         .width = texture.config.width,
+                        .levels = texture.config.lod.max_level + 1,
                         .format = texture.format};
 
                     state.texture_cube_unit.texture_cube =
