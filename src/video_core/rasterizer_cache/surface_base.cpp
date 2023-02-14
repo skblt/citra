@@ -5,6 +5,7 @@
 #include "common/alignment.h"
 #include "common/assert.h"
 #include "video_core/rasterizer_cache/surface_base.h"
+#include "video_core/texture/texture_decode.h"
 
 namespace VideoCore {
 
@@ -96,6 +97,58 @@ SurfaceInterval SurfaceBase::GetCopyableInterval(const SurfaceParams& params) co
         }
     }
     return result;
+}
+
+ClearValue SurfaceBase::MakeClearValue(PAddr copy_addr, PixelFormat dst_format) {
+    const SurfaceType dst_type = GetFormatType(dst_format);
+    const std::array fill_buffer = MakeFillBuffer(copy_addr);
+
+    ClearValue result{};
+    switch (dst_type) {
+    case SurfaceType::Color:
+    case SurfaceType::Texture:
+    case SurfaceType::Fill: {
+        Pica::Texture::TextureInfo tex_info{};
+        tex_info.format = static_cast<Pica::TexturingRegs::TextureFormat>(dst_format);
+        const auto color = Pica::Texture::LookupTexture(fill_buffer.data(), 0, 0, tex_info);
+        result.color = color / 255.f;
+        break;
+    }
+    case SurfaceType::Depth: {
+        u32 depth_uint = 0;
+        if (dst_format == PixelFormat::D16) {
+            std::memcpy(&depth_uint, fill_buffer.data(), 2);
+            result.depth = depth_uint / 65535.0f; // 2^16 - 1
+        } else if (dst_format == PixelFormat::D24) {
+            std::memcpy(&depth_uint, fill_buffer.data(), 3);
+            result.depth = depth_uint / 16777215.0f; // 2^24 - 1
+        }
+        break;
+    }
+    case SurfaceType::DepthStencil: {
+        u32 clear_value_uint;
+        std::memcpy(&clear_value_uint, fill_buffer.data(), sizeof(u32));
+        result.depth = (clear_value_uint & 0xFFFFFF) / 16777215.0f; // 2^24 - 1
+        result.stencil = (clear_value_uint >> 24);
+        break;
+    }
+    default:
+        UNREACHABLE_MSG("Invalid surface type!");
+    }
+
+    return result;
+}
+
+std::array<u8, 4> SurfaceBase::MakeFillBuffer(PAddr copy_addr) {
+    const PAddr fill_offset = (copy_addr - addr) % fill_size;
+    std::array<u8, 4> fill_buffer;
+
+    u32 fill_buff_pos = fill_offset;
+    for (std::size_t i = 0; i < fill_buffer.size(); i++) {
+        fill_buffer[i] = fill_data[fill_buff_pos++ % fill_size];
+    }
+
+    return fill_buffer;
 }
 
 std::shared_ptr<Watcher> SurfaceBase::CreateWatcher() {

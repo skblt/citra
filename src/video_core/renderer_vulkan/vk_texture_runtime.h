@@ -114,8 +114,7 @@ public:
                                       vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect);
 
     /// Fills the rectangle of the texture with the clear value provided
-    bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
-                      VideoCore::ClearValue value);
+    bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear);
 
     /// Copies a rectangle of src_tex to another rectange of dst_rect
     bool CopyTextures(Surface& source, Surface& dest, const VideoCore::TextureCopy& copy);
@@ -140,8 +139,7 @@ public:
 
 private:
     /// Clears a partial texture rect using a clear rectangle
-    void ClearTextureWithRenderpass(Surface& surface, const VideoCore::TextureClear& clear,
-                                    VideoCore::ClearValue value);
+    void ClearTextureWithRenderpass(Surface& surface, const VideoCore::TextureClear& clear);
 
     /// Returns the current Vulkan instance
     const Instance& GetInstance() const {

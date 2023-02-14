@@ -48,6 +48,7 @@ union ClearValue {
 struct TextureClear {
     u32 texture_level;
     Rect2D texture_rect;
+    ClearValue value;
 };
 
 struct TextureCopy {
@@ -74,12 +75,6 @@ struct BufferTextureCopy {
     u32 buffer_size;
     Rect2D texture_rect;
     u32 texture_level;
-};
-
-struct BufferCopy {
-    u32 src_offset;
-    u32 dst_offset;
-    u32 size;
 };
 
 struct HostTextureTag {

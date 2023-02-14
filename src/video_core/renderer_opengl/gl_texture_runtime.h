@@ -57,8 +57,7 @@ public:
                         VideoCore::TextureType type);
 
     /// Fills the rectangle of the texture with the clear value provided
-    bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear,
-                      VideoCore::ClearValue value);
+    bool ClearTexture(Surface& surface, const VideoCore::TextureClear& clear);
 
     /// Copies a rectangle of src_tex to another rectange of dst_rect
     bool CopyTextures(Surface& source, Surface& dest, const VideoCore::TextureCopy& copy);
