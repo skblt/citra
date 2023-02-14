@@ -336,10 +336,7 @@ Surface::~Surface() {
     }
 }
 
-MICROPROFILE_DEFINE(OpenGL_Upload, "OpenGL", "Texture Upload", MP_RGB(128, 192, 64));
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
-    MICROPROFILE_SCOPE(OpenGL_Upload);
-
     // Ensure no bad interactions with GL_UNPACK_ALIGNMENT
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
 
@@ -369,10 +366,7 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
     }
 }
 
-MICROPROFILE_DEFINE(OpenGL_Download, "OpenGL", "Texture Download", MP_RGB(128, 192, 64));
 void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
-    MICROPROFILE_SCOPE(OpenGL_Download);
-
     // Ensure no bad interactions with GL_PACK_ALIGNMENT
     ASSERT(stride * GetBytesPerPixel(pixel_format) % 4 == 0);
 

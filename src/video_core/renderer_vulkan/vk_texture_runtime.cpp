@@ -15,8 +15,6 @@
 #include <vulkan/vulkan_format_traits.hpp>
 
 MICROPROFILE_DEFINE(Vulkan_ImageAlloc, "Vulkan", "Texture Allocation", MP_RGB(192, 52, 235));
-MICROPROFILE_DEFINE(Vulkan_Upload, "Vulkan", "Texture Upload", MP_RGB(128, 192, 64));
-MICROPROFILE_DEFINE(Vulkan_Download, "Vulkan", "Texture Download", MP_RGB(128, 192, 64));
 
 namespace Vulkan {
 
@@ -780,8 +778,6 @@ Surface::~Surface() {
 }
 
 void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingData& staging) {
-    MICROPROFILE_SCOPE(Vulkan_Upload);
-
     runtime.renderpass_cache.ExitRenderpass();
 
     const bool is_scaled = res_scale != 1;
@@ -874,8 +870,6 @@ void Surface::Upload(const VideoCore::BufferTextureCopy& upload, const StagingDa
 }
 
 void Surface::Download(const VideoCore::BufferTextureCopy& download, const StagingData& staging) {
-    MICROPROFILE_SCOPE(Vulkan_Download);
-
     runtime.renderpass_cache.ExitRenderpass();
 
     // For depth stencil downloads always use the compute shader fallback
