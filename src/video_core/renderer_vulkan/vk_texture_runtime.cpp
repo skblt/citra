@@ -21,6 +21,7 @@ namespace Vulkan {
 using VideoCore::GetFormatType;
 using VideoCore::MipLevels;
 using VideoCore::PixelFormatAsString;
+using VideoCore::TextureType;
 
 struct RecordParams {
     vk::ImageAspectFlags aspect;
@@ -130,9 +131,6 @@ TextureRuntime::~TextureRuntime() {
 
     for (const auto& [key, alloc] : texture_recycler) {
         vmaDestroyImage(allocator, alloc.image, alloc.allocation);
-        if (alloc.base_view && alloc.base_view != alloc.image_view) {
-            device.destroyImageView(alloc.base_view);
-        }
         device.destroyImageView(alloc.image_view);
         if (alloc.depth_view) {
             device.destroyImageView(alloc.depth_view);
@@ -162,22 +160,18 @@ void TextureRuntime::Finish() {
     scheduler.Finish();
 }
 
-ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
+Allocation TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
                                     VideoCore::PixelFormat format, VideoCore::TextureType type) {
     const FormatTraits traits = instance.GetTraits(format);
     return Allocate(width, height, levels, format, type, traits.native, traits.usage,
                     traits.aspect);
 }
 
-ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
+Allocation TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
                                     VideoCore::PixelFormat pixel_format,
                                     VideoCore::TextureType type, vk::Format format,
                                     vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect) {
     MICROPROFILE_SCOPE(Vulkan_ImageAlloc);
-
-    ImageAlloc alloc{};
-    alloc.format = format;
-    alloc.aspect = aspect;
 
     // The internal format does not provide enough guarantee of texture uniqueness
     // especially when many pixel formats fallback to RGBA8
@@ -191,9 +185,8 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
         .levels = levels,
     };
 
-    // Attempt to recycle an unused allocation
     if (auto it = texture_recycler.find(key); it != texture_recycler.end()) {
-        ImageAlloc alloc = std::move(it->second);
+        Allocation alloc = std::move(it->second);
         texture_recycler.erase(it);
         return alloc;
     }
@@ -242,24 +235,23 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
 
     VkImage unsafe_image{};
     VkImageCreateInfo unsafe_image_info = static_cast<VkImageCreateInfo>(image_info);
+    VmaAllocation allocation{};
 
     VkResult result = vmaCreateImage(instance.GetAllocator(), &unsafe_image_info, &alloc_info,
-                                     &unsafe_image, &alloc.allocation, nullptr);
+                                     &unsafe_image, &allocation, nullptr);
     if (result != VK_SUCCESS) [[unlikely]] {
         LOG_CRITICAL(Render_Vulkan, "Failed allocating texture with error {}", result);
         UNREACHABLE();
     }
+    const vk::Image image{unsafe_image};
 
-    const vk::ImageViewType view_type =
-        type == VideoCore::TextureType::CubeMap ? vk::ImageViewType::eCube : vk::ImageViewType::e2D;
-
-    alloc.image = vk::Image{unsafe_image};
     const vk::ImageViewCreateInfo view_info = {
-        .image = alloc.image,
-        .viewType = view_type,
+        .image = image,
+        .viewType =
+            type == TextureType::CubeMap ? vk::ImageViewType::eCube : vk::ImageViewType::e2D,
         .format = format,
         .subresourceRange{
-            .aspectMask = alloc.aspect,
+            .aspectMask = aspect,
             .baseMipLevel = 0,
             .levelCount = levels,
             .baseArrayLayer = 0,
@@ -268,13 +260,10 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
     };
 
     vk::Device device = instance.GetDevice();
-    alloc.image_view = device.createImageView(view_info);
-    if (levels == 1) {
-        alloc.base_view = alloc.image_view;
-    }
+    const vk::ImageView image_view = device.createImageView(view_info);
 
     renderpass_cache.ExitRenderpass();
-    scheduler.Record([image = alloc.image, aspect = alloc.aspect](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([image, aspect](vk::CommandBuffer cmdbuf) {
         const vk::ImageMemoryBarrier init_barrier = {
             .srcAccessMask = vk::AccessFlagBits::eNone,
             .dstAccessMask = vk::AccessFlagBits::eNone,
@@ -297,10 +286,16 @@ ImageAlloc TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
                                vk::DependencyFlagBits::eByRegion, {}, {}, init_barrier);
     });
 
-    return alloc;
+    return Allocation{
+        .image = image,
+        .image_view = image_view,
+        .allocation = allocation,
+        .aspect = aspect,
+        .format = format,
+    };
 }
 
-void TextureRuntime::Recycle(const HostTextureTag tag, ImageAlloc&& alloc) {
+void TextureRuntime::Recycle(const HostTextureTag tag, Allocation&& alloc) {
     texture_recycler.emplace(tag, std::move(alloc));
 }
 
@@ -745,7 +740,7 @@ bool TextureRuntime::NeedsConvertion(VideoCore::PixelFormat format) const {
 
 Surface::Surface(const VideoCore::SurfaceParams& params, TextureRuntime& runtime)
     : VideoCore::SurfaceBase{params}, runtime{runtime}, instance{runtime.GetInstance()},
-      scheduler{runtime.GetScheduler()}, traits{instance.GetTraits(pixel_format)} {
+      scheduler{runtime.GetScheduler()} {
 
     if (pixel_format != VideoCore::PixelFormat::Invalid) {
         alloc = runtime.Allocate(GetScaledWidth(), GetScaledHeight(), levels, params.pixel_format,
@@ -992,28 +987,6 @@ vk::PipelineStageFlags Surface::PipelineStageFlags() const noexcept {
            (is_framebuffer ? attachment_flags : vk::PipelineStageFlagBits::eNone) |
            (is_storage ? vk::PipelineStageFlagBits::eComputeShader
                        : vk::PipelineStageFlagBits::eNone);
-}
-
-vk::ImageView Surface::FramebufferView() noexcept {
-    vk::ImageView& base_view = alloc.base_view;
-    if (base_view) {
-        return base_view;
-    }
-
-    const vk::ImageViewCreateInfo base_view_info = {
-        .image = alloc.image,
-        .viewType = vk::ImageViewType::e2D,
-        .format = instance.GetTraits(pixel_format).native,
-        .subresourceRange{
-            .aspectMask = alloc.aspect,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = VK_REMAINING_ARRAY_LAYERS,
-        },
-    };
-    base_view = instance.GetDevice().createImageView(base_view_info);
-    return base_view;
 }
 
 vk::ImageView Surface::DepthView() noexcept {

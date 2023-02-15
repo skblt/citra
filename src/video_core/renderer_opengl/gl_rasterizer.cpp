@@ -412,7 +412,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         auto surface = res_cache.GetTextureSurface(info);
 
         if (surface != nullptr) {
-            target = surface->texture.handle;
+            target = surface->Handle();
         } else {
             target = 0;
         }
@@ -431,7 +431,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                 case TextureType::Shadow2D: {
                     const auto surface = res_cache.GetTextureSurface(texture);
                     if (surface) {
-                        state.image_shadow_texture_px = surface->texture.handle;
+                        state.image_shadow_texture_px = surface->Handle();
                     } else {
                         state.image_shadow_texture_px = 0;
                     }
@@ -463,7 +463,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                         .format = texture.format};
 
                     state.texture_cube_unit.texture_cube =
-                        res_cache.GetTextureCube(config)->texture.handle;
+                        res_cache.GetTextureCube(config)->Handle();
 
                     state.texture_cube_unit.sampler = sampler.Handle();
                     state.texture_units[texture_index].texture_2d = 0;
@@ -480,7 +480,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
 
             auto surface = res_cache.GetTextureSurface(texture);
             if (surface != nullptr) {
-                state.texture_units[texture_index].texture_2d = surface->texture.handle;
+                state.texture_units[texture_index].texture_2d = surface->Handle();
             } else {
                 // Can occur when texture addr is null or its memory is unmapped/invalid
                 // HACK: In this case, the correct behaviour for the PICA is to use the last
@@ -688,14 +688,14 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
         return false;
     }
 
-    u32 scaled_width = src_surface->GetScaledWidth();
-    u32 scaled_height = src_surface->GetScaledHeight();
+    const u32 scaled_width = src_surface->GetScaledWidth();
+    const u32 scaled_height = src_surface->GetScaledHeight();
 
     screen_info.display_texcoords = Common::Rectangle<float>(
         (float)src_rect.bottom / (float)scaled_height, (float)src_rect.left / (float)scaled_width,
         (float)src_rect.top / (float)scaled_height, (float)src_rect.right / (float)scaled_width);
 
-    screen_info.display_texture = src_surface->texture.handle;
+    screen_info.display_texture = src_surface->Handle();
 
     return true;
 }

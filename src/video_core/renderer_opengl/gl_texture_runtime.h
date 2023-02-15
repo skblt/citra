@@ -40,8 +40,8 @@ class TextureRuntime {
     friend class Framebuffer;
 
 public:
-    TextureRuntime(Driver& driver);
-    ~TextureRuntime() = default;
+    explicit TextureRuntime(Driver& driver);
+    ~TextureRuntime();
 
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
     StagingData FindStaging(u32 size, bool upload);
@@ -78,7 +78,7 @@ public:
 private:
     /// Returns the framebuffer used for texture downloads
     void BindFramebuffer(GLenum target, GLint level, GLenum textarget, VideoCore::SurfaceType type,
-                         OGLTexture& texture) const;
+                         GLuint handle) const;
 
     /// Returns the OpenGL driver class
     const Driver& GetDriver() const {
@@ -103,7 +103,7 @@ private:
 
 class Surface : public VideoCore::SurfaceBase {
 public:
-    Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
+    explicit Surface(VideoCore::SurfaceParams& params, TextureRuntime& runtime);
     ~Surface();
 
     /// Returns the surface image handle
@@ -132,8 +132,6 @@ private:
 private:
     TextureRuntime& runtime;
     const Driver& driver;
-
-public:
     OGLTexture texture{};
 };
 

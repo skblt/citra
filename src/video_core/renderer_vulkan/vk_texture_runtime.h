@@ -26,26 +26,15 @@ struct StagingData {
     u64 buffer_offset = 0;
 };
 
-struct ImageAlloc {
-    ImageAlloc() = default;
-
-    ImageAlloc(const ImageAlloc&) = delete;
-    ImageAlloc& operator=(const ImageAlloc&) = delete;
-
-    ImageAlloc(ImageAlloc&&) = default;
-    ImageAlloc& operator=(ImageAlloc&&) = default;
-
+struct Allocation {
     vk::Image image;
     vk::ImageView image_view;
-    vk::ImageView base_view;
     vk::ImageView depth_view;
     vk::ImageView stencil_view;
     vk::ImageView storage_view;
     VmaAllocation allocation;
-    vk::ImageUsageFlags usage;
+    vk::ImageAspectFlags aspect;
     vk::Format format;
-    vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
-    vk::ImageLayout layout;
 };
 
 struct HostTextureTag {
@@ -98,17 +87,17 @@ public:
     void Finish();
 
     /// Takes back ownership of the allocation for recycling
-    void Recycle(const HostTextureTag tag, ImageAlloc&& alloc);
+    void Recycle(const HostTextureTag tag, Allocation&& alloc);
 
     /// Maps an internal staging buffer of the provided size of pixel uploads/downloads
     [[nodiscard]] StagingData FindStaging(u32 size, bool upload);
 
     /// Allocates a vulkan image possibly resusing an existing one
-    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, u32 levels,
+    [[nodiscard]] Allocation Allocate(u32 width, u32 height, u32 levels,
                                       VideoCore::PixelFormat format, VideoCore::TextureType type);
 
     /// Allocates a vulkan image
-    [[nodiscard]] ImageAlloc Allocate(u32 width, u32 height, u32 levels,
+    [[nodiscard]] Allocation Allocate(u32 width, u32 height, u32 levels,
                                       VideoCore::PixelFormat pixel_format,
                                       VideoCore::TextureType type, vk::Format format,
                                       vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect);
@@ -159,7 +148,7 @@ private:
     StreamBuffer upload_buffer;
     StreamBuffer download_buffer;
     std::array<ReinterpreterList, VideoCore::PIXEL_FORMAT_COUNT> reinterpreters;
-    std::unordered_multimap<HostTextureTag, ImageAlloc> texture_recycler;
+    std::unordered_multimap<HostTextureTag, Allocation> texture_recycler;
 };
 
 class Surface : public VideoCore::SurfaceBase {
@@ -201,9 +190,6 @@ public:
     /// Returns the pipeline stage flags indicative of the surface
     vk::PipelineStageFlags PipelineStageFlags() const noexcept;
 
-    /// Returns an image view used to create a framebuffer
-    vk::ImageView FramebufferView() noexcept;
-
     /// Returns the depth only image view of the surface
     vk::ImageView DepthView() noexcept;
 
@@ -228,8 +214,7 @@ private:
     TextureRuntime& runtime;
     const Instance& instance;
     Scheduler& scheduler;
-    ImageAlloc alloc;
-    FormatTraits traits;
+    Allocation alloc;
     bool is_framebuffer{};
     bool is_storage{};
 };
