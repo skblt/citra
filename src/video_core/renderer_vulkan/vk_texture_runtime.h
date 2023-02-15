@@ -299,10 +299,10 @@ private:
 };
 
 struct Traits {
-    using RuntimeType = TextureRuntime;
-    using SurfaceType = Surface;
-    using Sampler = Sampler;
-    using Framebuffer = Framebuffer;
+    using Runtime = Vulkan::TextureRuntime;
+    using Surface = Vulkan::Surface;
+    using Sampler = Vulkan::Sampler;
+    using Framebuffer = Vulkan::Framebuffer;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;

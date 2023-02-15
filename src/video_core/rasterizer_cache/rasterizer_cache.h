@@ -25,7 +25,7 @@ inline auto RangeFromInterval(auto& map, const auto& interval) {
 }
 
 template <class T>
-RasterizerCache<T>::RasterizerCache(Memory::MemorySystem& memory_, TextureRuntime& runtime_)
+RasterizerCache<T>::RasterizerCache(Memory::MemorySystem& memory_, Runtime& runtime_)
     : memory{memory_}, runtime{runtime_}, resolution_scale_factor{
                                               VideoCore::GetResolutionScaleFactor()} {
     using TextureConfig = Pica::TexturingRegs::TextureConfig;
@@ -198,7 +198,7 @@ bool RasterizerCache<T>::AccelerateFill(const GPU::Regs::MemoryFillConfig& confi
     params.type = SurfaceType::Fill;
     params.res_scale = std::numeric_limits<u16>::max();
 
-    Surface fill_surface = std::make_shared<typename T::SurfaceType>(params, runtime);
+    Surface fill_surface = std::make_shared<typename T::Surface>(params, runtime);
 
     std::memcpy(&fill_surface->fill_data[0], &config.value_32bit, 4);
     if (config.fill_32bit) {
@@ -1146,7 +1146,7 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, const Surface& r
 
 template <class T>
 auto RasterizerCache<T>::CreateSurface(SurfaceParams& params) -> Surface {
-    Surface surface = std::make_shared<typename T::SurfaceType>(params, runtime);
+    Surface surface = std::make_shared<typename T::Surface>(params, runtime);
     surface->invalid_regions.insert(surface->GetInterval());
     return surface;
 }

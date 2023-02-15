@@ -44,8 +44,8 @@ class RasterizerCache : NonCopyable {
     /// Address shift for caching surfaces into a hash table
     static constexpr u64 CITRA_PAGEBITS = 18;
 
-    using TextureRuntime = typename T::RuntimeType;
-    using Surface = std::shared_ptr<typename T::SurfaceType>;
+    using Runtime = typename T::Runtime;
+    using Surface = std::shared_ptr<typename T::Surface>;
     using Sampler = typename T::Sampler;
     using Framebuffer = typename T::Framebuffer;
 
@@ -58,7 +58,7 @@ class RasterizerCache : NonCopyable {
     using PageMap = boost::icl::interval_map<u32, int>;
 
 public:
-    RasterizerCache(Memory::MemorySystem& memory, TextureRuntime& runtime);
+    RasterizerCache(Memory::MemorySystem& memory, Runtime& runtime);
     ~RasterizerCache();
 
     /// Perform hardware accelerated texture copy according to the provided configuration
@@ -184,7 +184,7 @@ private:
 
 private:
     Memory::MemorySystem& memory;
-    TextureRuntime& runtime;
+    Runtime& runtime;
     PageMap cached_pages;
     SurfaceMap dirty_regions;
     std::vector<Surface> remove_surfaces;

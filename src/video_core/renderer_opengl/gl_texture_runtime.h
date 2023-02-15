@@ -179,10 +179,10 @@ private:
 };
 
 struct Traits {
-    using RuntimeType = TextureRuntime;
-    using SurfaceType = Surface;
-    using Sampler = Sampler;
-    using Framebuffer = Framebuffer;
+    using Runtime = OpenGL::TextureRuntime;
+    using Surface = OpenGL::Surface;
+    using Sampler = OpenGL::Sampler;
+    using Framebuffer = OpenGL::Framebuffer;
 };
 
 using RasterizerCache = VideoCore::RasterizerCache<Traits>;
