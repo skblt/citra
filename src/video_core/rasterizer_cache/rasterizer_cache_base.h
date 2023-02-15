@@ -10,7 +10,6 @@
 #include <boost/icl/interval_map.hpp>
 #include <boost/range/iterator_range.hpp>
 #include "video_core/rasterizer_cache/sampler_params.h"
-#include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/rasterizer_cache/surface_params.h"
 #include "video_core/rasterizer_cache/utils.h"
 #include "video_core/texture/texture_decode.h"

@@ -11,6 +11,7 @@
 #include "core/memory.h"
 #include "video_core/pica_state.h"
 #include "video_core/rasterizer_cache/rasterizer_cache_base.h"
+#include "video_core/rasterizer_cache/surface_base.h"
 #include "video_core/video_core.h"
 
 namespace VideoCore {
@@ -495,10 +496,7 @@ auto RasterizerCache<T>::GetSurfaceSubRect(const SurfaceParams& params, ScaleMat
 
             Surface new_surface = CreateSurface(new_params);
             DuplicateSurface(surface, new_surface);
-
-            // Delete the expanded surface, this can't be done safely yet
-            // because it may still be in use
-            remove_surfaces.push_back(surface);
+            UnregisterSurface(surface);
 
             surface = new_surface;
             RegisterSurface(new_surface);
@@ -1127,18 +1125,7 @@ void RasterizerCache<T>::InvalidateRegion(PAddr addr, u32 size, const Surface& r
         dirty_regions.erase(invalid_interval);
     }
 
-    for (const auto& remove_surface : remove_surfaces) {
-        if (remove_surface == region_owner) {
-            Surface expanded_surface =
-                FindMatch<MatchFlags::SubRect>(*region_owner, ScaleMatch::Ignore);
-            ASSERT(expanded_surface);
-
-            if ((region_owner->invalid_regions - expanded_surface->invalid_regions).empty()) {
-                DuplicateSurface(region_owner, expanded_surface);
-            } else {
-                continue;
-            }
-        }
+    for (Surface remove_surface : remove_surfaces) {
         UnregisterSurface(remove_surface);
     }
     remove_surfaces.clear();
