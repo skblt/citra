@@ -39,7 +39,6 @@ void Module::serialize(Archive& ar, const unsigned int file_version) {
     ar& shared_font_mem;
     ar& shared_font_loaded;
     ar& shared_font_relocated;
-    ar& lock;
     ar& cpu_percent;
     ar& unknown_ns_state_field;
     ar& screen_capture_buffer;
@@ -302,19 +301,22 @@ void Module::APTInterface::GetLockHandle(Kernel::HLERequestContext& ctx) {
     // Bits [0:2] are the applet type (System, Library, etc)
     // Bit 5 tells the application that there's a pending APT parameter,
     // this will cause the app to wait until parameter_event is signaled.
-    u32 applet_attributes = rp.Pop<u32>();
-    IPC::RequestBuilder rb = rp.MakeBuilder(3, 2);
-    rb.Push(RESULT_SUCCESS); // No error
+    u32 attributes = rp.Pop<u32>();
 
-    // TODO(Subv): The output attributes should have an AppletPos of either Library or System |
-    // Library (depending on the type of the last launched applet) if the input attributes'
-    // AppletPos has the Library bit set.
+    LOG_DEBUG(Service_APT, "called applet_attributes={:#010X}", attributes);
 
-    rb.Push(applet_attributes); // Applet Attributes, this value is passed to Enable.
-    rb.Push<u32>(0);            // Least significant bit = power button state
-    rb.PushCopyObjects(apt->lock);
-
-    LOG_WARNING(Service_APT, "(STUBBED) called applet_attributes={:#010X}", applet_attributes);
+    auto result = apt->applet_manager->GetLockHandle(attributes);
+    if (result.Failed()) {
+        IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+        rb.Push(result.Code());
+    } else {
+        auto results = std::move(result).Unwrap();
+        IPC::RequestBuilder rb = rp.MakeBuilder(3, 2);
+        rb.Push(RESULT_SUCCESS);
+        rb.PushRaw(results.corrected_attributes);
+        rb.Push<u32>(results.state);
+        rb.PushCopyObjects(results.lock);
+    }
 }
 
 void Module::APTInterface::Enable(Kernel::HLERequestContext& ctx) {
@@ -405,7 +407,7 @@ void Module::APTInterface::ReceiveParameter(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS); // No error
     rb.PushEnum(next_parameter->sender_id);
     rb.PushEnum(next_parameter->signal); // Signal type
-    ASSERT_MSG(next_parameter->buffer.size() <= buffer_size, "Input static buffer is too small!");
+    next_parameter->buffer.resize(buffer_size);
     rb.Push(static_cast<u32>(next_parameter->buffer.size())); // Parameter buffer size
     rb.PushMoveObjects(next_parameter->object);
     next_parameter->buffer.resize(buffer_size); // APT always push a buffer with the maximum size
@@ -431,7 +433,7 @@ void Module::APTInterface::GlanceParameter(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS); // No error
     rb.PushEnum(next_parameter->sender_id);
     rb.PushEnum(next_parameter->signal); // Signal type
-    ASSERT_MSG(next_parameter->buffer.size() <= buffer_size, "Input static buffer is too small!");
+    next_parameter->buffer.resize(buffer_size);
     rb.Push(static_cast<u32>(next_parameter->buffer.size())); // Parameter buffer size
     rb.PushMoveObjects(next_parameter->object);
     next_parameter->buffer.resize(buffer_size); // APT always push a buffer with the maximum size
@@ -697,12 +699,12 @@ void Module::APTInterface::CloseApplication(Kernel::HLERequestContext& ctx) {
 
 void Module::APTInterface::CancelLibraryApplet(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x3B, 1, 0); // 0x003B0040
-    bool exiting = rp.Pop<bool>();
+    bool app_exiting = rp.Pop<bool>();
+
+    LOG_DEBUG(Service_APT, "called app_exiting={}", app_exiting);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
-    rb.Push<u32>(1); // TODO: Find the return code meaning
-
-    LOG_WARNING(Service_APT, "(STUBBED) called exiting={}", exiting);
+    rb.Push(apt->applet_manager->CancelLibraryApplet(app_exiting));
 }
 
 void Module::APTInterface::PrepareToCloseLibraryApplet(Kernel::HLERequestContext& ctx) {
@@ -1046,8 +1048,6 @@ Module::Module(Core::System& system) : system(system) {
                                               MemoryPermission::ReadWrite, MemoryPermission::Read,
                                               0, Kernel::MemoryRegion::SYSTEM, "APT:SharedFont")
                           .Unwrap();
-
-    lock = system.Kernel().CreateMutex(false, "APT_U:Lock");
 }
 
 Module::~Module() {}

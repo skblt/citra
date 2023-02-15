@@ -744,8 +744,6 @@ private:
     bool shared_font_loaded = false;
     bool shared_font_relocated = false;
 
-    std::shared_ptr<Kernel::Mutex> lock;
-
     u32 cpu_percent = 0; ///< CPU time available to the running application
 
     // APT::CheckNew3DSApp will check this unknown_ns_state_field to determine processing mode
