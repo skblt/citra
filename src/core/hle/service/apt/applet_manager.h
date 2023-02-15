@@ -161,11 +161,17 @@ public:
     ResultCode PrepareToStartLibraryApplet(AppletId applet_id);
     ResultCode PreloadLibraryApplet(AppletId applet_id);
     ResultCode FinishPreloadingLibraryApplet(AppletId applet_id);
-    ResultCode StartLibraryApplet(AppletId applet_id, std::shared_ptr<Kernel::Object> object,
+    ResultCode StartLibraryApplet(AppletId applet_id, const std::shared_ptr<Kernel::Object>& object,
                                   const std::vector<u8>& buffer);
     ResultCode PrepareToCloseLibraryApplet(bool not_pause, bool exiting, bool jump_home);
     ResultCode CloseLibraryApplet(std::shared_ptr<Kernel::Object> object, std::vector<u8> buffer);
     ResultCode CancelLibraryApplet(bool app_exiting);
+
+    ResultCode PrepareToStartSystemApplet(AppletId applet_id);
+    ResultCode StartSystemApplet(AppletId applet_id, const std::shared_ptr<Kernel::Object>& object,
+                                 const std::vector<u8>& buffer);
+    ResultCode PrepareToCloseSystemApplet();
+    ResultCode CloseSystemApplet(std::shared_ptr<Kernel::Object> object, std::vector<u8> buffer);
 
     ResultCode PrepareToDoApplicationJump(u64 title_id, FS::MediaType media_type,
                                           ApplicationJumpFlags flags);
@@ -312,6 +318,7 @@ private:
     std::array<AppletSlotData, NumAppletSlot> applet_slots = {};
     AppletSlot active_slot = AppletSlot::Error;
     AppletSlot last_library_launcher_slot = AppletSlot::Error;
+    AppletSlot last_system_launcher_slot = AppletSlot::Error;
 
     // This overload returns nullptr if no applet with the specified id has been started.
     AppletSlotData* GetAppletSlotData(AppletId id);

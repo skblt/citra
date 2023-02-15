@@ -417,6 +417,17 @@ public:
         void PrepareToStartLibraryApplet(Kernel::HLERequestContext& ctx);
 
         /**
+         * APT::PrepareToStartSystemApplet service function
+         *  Inputs:
+         *      0 : Command header [0x00190040]
+         *      1 : Id of the applet to start
+         *  Outputs:
+         *      0 : Return header
+         *      1 : Result of function, 0 on success, otherwise error code
+         */
+        void PrepareToStartSystemApplet(Kernel::HLERequestContext& ctx);
+
+        /**
          * APT::PrepareToStartNewestHomeMenu service function
          *  Inputs:
          *      0 : Command header [0x001A0000]
@@ -463,6 +474,22 @@ public:
          *      1 : Result of function, 0 on success, otherwise error code
          */
         void StartLibraryApplet(Kernel::HLERequestContext& ctx);
+
+        /**
+         * APT::StartSystemApplet service function
+         *  Inputs:
+         *      0 : Command header [0x001F0084]
+         *      1 : Id of the applet to start
+         *      2 : Buffer size
+         *      3 : 0x0
+         *      4 : Handle passed to the applet
+         *      5 : (Size << 14) | 2
+         *      6 : Input buffer virtual address
+         *  Outputs:
+         *      0 : Return header
+         *      1 : Result of function, 0 on success, otherwise error code
+         */
+        void StartSystemApplet(Kernel::HLERequestContext& ctx);
 
         /**
          * APT::CloseApplication service function
@@ -563,6 +590,16 @@ public:
         void PrepareToCloseLibraryApplet(Kernel::HLERequestContext& ctx);
 
         /**
+         * APT::PrepareToCloseSystemApplet service function
+         *  Inputs:
+         *      0 : Command header [0x00260000]
+         *  Outputs:
+         *      0 : Header code
+         *      1 : Result code
+         */
+        void PrepareToCloseSystemApplet(Kernel::HLERequestContext& ctx);
+
+        /**
          * APT::CloseLibraryApplet service function
          *  Inputs:
          *      0 : Command header [0x00280044]
@@ -576,6 +613,21 @@ public:
          *      1 : Result code
          */
         void CloseLibraryApplet(Kernel::HLERequestContext& ctx);
+
+        /**
+         * APT::CloseSystemApplet service function
+         *  Inputs:
+         *      0 : Command header [0x00290044]
+         *      1 : Buffer size
+         *      2 : 0x0
+         *      3 : Object handle
+         *      4 : (Size << 14) | 2
+         *      5 : Input buffer virtual address
+         *  Outputs:
+         *      0 : Header code
+         *      1 : Result code
+         */
+        void CloseSystemApplet(Kernel::HLERequestContext& ctx);
 
         /**
          * APT::LoadSysMenuArg service function

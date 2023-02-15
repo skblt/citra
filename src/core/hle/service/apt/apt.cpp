@@ -635,6 +635,16 @@ void Module::APTInterface::PrepareToStartLibraryApplet(Kernel::HLERequestContext
     rb.Push(apt->applet_manager->PrepareToStartLibraryApplet(applet_id));
 }
 
+void Module::APTInterface::PrepareToStartSystemApplet(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x19, 1, 0); // 0x190040
+    const auto applet_id = rp.PopEnum<AppletId>();
+
+    LOG_DEBUG(Service_APT, "called, applet_id={:08X}", applet_id);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(apt->applet_manager->PrepareToStartSystemApplet(applet_id));
+}
+
 void Module::APTInterface::PrepareToStartNewestHomeMenu(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x1A, 0, 0); // 0x1A0000
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
@@ -683,6 +693,20 @@ void Module::APTInterface::StartLibraryApplet(Kernel::HLERequestContext& ctx) {
     rb.Push(apt->applet_manager->StartLibraryApplet(applet_id, std::move(object), buffer));
 }
 
+void Module::APTInterface::StartSystemApplet(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x1F, 2, 4); // 0x1F0084
+    const auto applet_id = rp.PopEnum<AppletId>();
+
+    [[maybe_unused]] const auto buffer_size = rp.Pop<u32>();
+    const auto object = rp.PopGenericObject();
+    const auto buffer = rp.PopStaticBuffer();
+
+    LOG_DEBUG(Service_APT, "called, applet_id={:08X}", applet_id);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(apt->applet_manager->StartSystemApplet(applet_id, object, buffer));
+}
+
 void Module::APTInterface::CloseApplication(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x27, 1, 4);
     [[maybe_unused]] const u32 parameters_size = rp.Pop<u32>();
@@ -720,6 +744,15 @@ void Module::APTInterface::PrepareToCloseLibraryApplet(Kernel::HLERequestContext
     rb.Push(apt->applet_manager->PrepareToCloseLibraryApplet(not_pause, exiting, jump_to_home));
 }
 
+void Module::APTInterface::PrepareToCloseSystemApplet(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x26, 0, 0); // 0x260000
+
+    LOG_DEBUG(Service_APT, "called");
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(apt->applet_manager->PrepareToCloseSystemApplet());
+}
+
 void Module::APTInterface::CloseLibraryApplet(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x28, 1, 4); // 0x00280044
     u32 parameter_size = rp.Pop<u32>();
@@ -730,6 +763,18 @@ void Module::APTInterface::CloseLibraryApplet(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(apt->applet_manager->CloseLibraryApplet(std::move(object), std::move(buffer)));
+}
+
+void Module::APTInterface::CloseSystemApplet(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x29, 1, 4); // 0x00280044
+    const auto parameter_size = rp.Pop<u32>();
+    const auto object = rp.PopGenericObject();
+    const auto buffer = rp.PopStaticBuffer();
+
+    LOG_DEBUG(Service_APT, "called size={}", parameter_size);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(apt->applet_manager->CloseSystemApplet(object, buffer));
 }
 
 void Module::APTInterface::LoadSysMenuArg(Kernel::HLERequestContext& ctx) {
