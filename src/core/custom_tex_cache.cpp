@@ -83,14 +83,14 @@ void CustomTexCache::PreloadTextures(Frontend::ImageInterface& image_interface) 
             std::bitset<32> width_bits(tex_info.width);
             std::bitset<32> height_bits(tex_info.height);
             if (width_bits.count() == 1 && height_bits.count() == 1) {
-                LOG_DEBUG(Render_OpenGL, "Loaded custom texture from {}", path_info.path);
+                LOG_DEBUG(HW_GPU, "Loaded custom texture from {}", path_info.path);
                 Common::FlipRGBA8Texture(tex_info.tex, tex_info.width, tex_info.height);
                 CacheTexture(path_info.hash, tex_info.tex, tex_info.width, tex_info.height);
             } else {
-                LOG_ERROR(Render_OpenGL, "Texture {} size is not a power of 2", path_info.path);
+                LOG_ERROR(HW_GPU, "Texture {} size is not a power of 2", path_info.path);
             }
         } else {
-            LOG_ERROR(Render_OpenGL, "Failed to load custom texture {}", path_info.path);
+            LOG_ERROR(HW_GPU, "Failed to load custom texture {}", path_info.path);
         }
     }
 }

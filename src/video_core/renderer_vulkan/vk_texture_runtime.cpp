@@ -173,9 +173,7 @@ Allocation TextureRuntime::Allocate(u32 width, u32 height, u32 levels,
                                     vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect) {
     MICROPROFILE_SCOPE(Vulkan_ImageAlloc);
 
-    // The internal format does not provide enough guarantee of texture uniqueness
-    // especially when many pixel formats fallback to RGBA8
-    ASSERT(pixel_format != VideoCore::PixelFormat::Invalid);
+    ASSERT(pixel_format != VideoCore::PixelFormat::Invalid && levels >= 1);
     const HostTextureTag key = {
         .format = format,
         .pixel_format = pixel_format,

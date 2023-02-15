@@ -167,8 +167,6 @@ add_executable(citra-qt
     precompiled_headers.h
     uisettings.cpp
     uisettings.h
-    qt_image_interface.cpp
-    qt_image_interface.h
     updater/updater.cpp
     updater/updater.h
     updater/updater_p.h

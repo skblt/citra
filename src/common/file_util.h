@@ -339,6 +339,9 @@ public:
     [[nodiscard]] explicit operator bool() const {
         return IsGood();
     }
+    [[nodiscard]] std::FILE* Handle() {
+        return m_file;
+    }
 
     bool Seek(s64 off, int origin);
     [[nodiscard]] u64 Tell() const;

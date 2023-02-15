@@ -1,4 +1,4 @@
-// Copyright 2019 Citra Emulator Project
+// Copyright 2023 Citra Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
@@ -10,15 +10,13 @@
 #include <vector>
 #include "common/common_types.h"
 
-namespace Frontend {
-class ImageInterface;
-}
+namespace VideoCore {
 
-namespace Core {
-struct CustomTexInfo {
+struct CustomTexture {
     u32 width;
     u32 height;
-    std::vector<u8> tex;
+    u32 levels;
+    std::vector<u8> pixels;
 };
 
 // This is to avoid parsing the filename multiple times
@@ -28,16 +26,16 @@ struct CustomTexPathInfo {
 };
 
 // TODO: think of a better name for this class...
-class CustomTexCache {
+class CustomTexManager {
 public:
-    explicit CustomTexCache();
-    ~CustomTexCache();
+    explicit CustomTexManager();
+    ~CustomTexManager();
 
     bool IsTextureDumped(u64 hash) const;
     void SetTextureDumped(u64 hash);
 
     bool IsTextureCached(u64 hash) const;
-    const CustomTexInfo& LookupTexture(u64 hash) const;
+    const CustomTexture& LookupTexture(u64 hash) const;
     void CacheTexture(u64 hash, const std::vector<u8>& tex, u32 width, u32 height);
 
     void AddTexturePath(u64 hash, const std::string& path);
@@ -52,4 +50,4 @@ private:
     std::unordered_map<u64, CustomTexInfo> custom_textures;
     std::unordered_map<u64, CustomTexPathInfo> custom_texture_paths;
 };
-} // namespace Core
+} // namespace VideoCore

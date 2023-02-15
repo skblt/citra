@@ -172,8 +172,8 @@ if (ENABLE_WEB_SERVICE)
     target_compile_definitions(cpp-jwt INTERFACE CPP_JWT_USE_VENDORED_NLOHMANN_JSON)
 endif()
 
-# lodepng
-add_subdirectory(lodepng)
+# libspng
+add_subdirectory(libspng)
 
 # (xperia64): Only use libyuv on Android b/c of build issues on Windows and mandatory JPEG
 if(ANDROID)

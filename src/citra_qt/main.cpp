@@ -50,7 +50,6 @@
 #include "citra_qt/movie/movie_play_dialog.h"
 #include "citra_qt/movie/movie_record_dialog.h"
 #include "citra_qt/multiplayer/state.h"
-#include "citra_qt/qt_image_interface.h"
 #include "citra_qt/uisettings.h"
 #include "citra_qt/updater/updater.h"
 #include "citra_qt/util/clickable_label.h"
@@ -2648,9 +2647,6 @@ int main(int argc, char* argv[]) {
     Core::System& system = Core::System::GetInstance();
     system.RegisterMiiSelector(std::make_shared<QtMiiSelector>(main_window));
     system.RegisterSoftwareKeyboard(std::make_shared<QtKeyboard>(main_window));
-
-    // Register Qt image interface
-    system.RegisterImageInterface(std::make_shared<QtImageInterface>());
 
     main_window.show();
 

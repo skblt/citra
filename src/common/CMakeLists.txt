@@ -74,11 +74,14 @@ add_library(common STATIC
     common_precompiled_headers.h
     common_types.h
     construct.h
+    dds.h
     error.cpp
     error.h
     file_util.cpp
     file_util.h
     hash.h
+    image_util.cpp
+    image_util.h
     linear_disk_cache.h
     literals.h
     logging/backend.cpp
@@ -143,7 +146,7 @@ add_library(common STATIC
 create_target_directory_groups(common)
 
 target_link_libraries(common PUBLIC fmt::fmt microprofile Boost::boost Boost::serialization)
-target_link_libraries(common PRIVATE libzstd_static)
+target_link_libraries(common PRIVATE libzstd_static spng_static)
 set_target_properties(common PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ENABLE_LTO})
 
 if ("x86_64" IN_LIST ARCHITECTURE)
