@@ -142,6 +142,14 @@ public:
     bool CancelParameter(bool check_sender, AppletId sender_appid, bool check_receiver,
                          AppletId receiver_appid);
 
+    struct GetLockHandleResult {
+        AppletAttributes corrected_attributes;
+        u32 state;
+        std::shared_ptr<Kernel::Mutex> lock;
+    };
+
+    ResultVal<GetLockHandleResult> GetLockHandle(AppletAttributes attributes);
+
     struct InitializeResult {
         std::shared_ptr<Kernel::Event> notification_event;
         std::shared_ptr<Kernel::Event> parameter_event;
@@ -153,10 +161,17 @@ public:
     ResultCode PrepareToStartLibraryApplet(AppletId applet_id);
     ResultCode PreloadLibraryApplet(AppletId applet_id);
     ResultCode FinishPreloadingLibraryApplet(AppletId applet_id);
-    ResultCode StartLibraryApplet(AppletId applet_id, std::shared_ptr<Kernel::Object> object,
+    ResultCode StartLibraryApplet(AppletId applet_id, const std::shared_ptr<Kernel::Object>& object,
                                   const std::vector<u8>& buffer);
     ResultCode PrepareToCloseLibraryApplet(bool not_pause, bool exiting, bool jump_home);
     ResultCode CloseLibraryApplet(std::shared_ptr<Kernel::Object> object, std::vector<u8> buffer);
+    ResultCode CancelLibraryApplet(bool app_exiting);
+
+    ResultCode PrepareToStartSystemApplet(AppletId applet_id);
+    ResultCode StartSystemApplet(AppletId applet_id, const std::shared_ptr<Kernel::Object>& object,
+                                 const std::vector<u8>& buffer);
+    ResultCode PrepareToCloseSystemApplet();
+    ResultCode CloseSystemApplet(std::shared_ptr<Kernel::Object> object, std::vector<u8> buffer);
 
     ResultCode PrepareToDoApplicationJump(u64 title_id, FS::MediaType media_type,
                                           ApplicationJumpFlags flags);
@@ -240,6 +255,9 @@ public:
     };
 
 private:
+    /// APT lock retrieved via GetLockHandle.
+    std::shared_ptr<Kernel::Mutex> lock;
+
     /// Parameter data to be returned in the next call to Glance/ReceiveParameter.
     // NOTE: A bug in gcc prevents serializing std::optional
     boost::optional<MessageParameter> next_parameter;
@@ -298,10 +316,13 @@ private:
 
     // Holds data about the concurrently running applets in the system.
     std::array<AppletSlotData, NumAppletSlot> applet_slots = {};
+    AppletSlot active_slot = AppletSlot::Error;
+    AppletSlot last_library_launcher_slot = AppletSlot::Error;
+    AppletSlot last_system_launcher_slot = AppletSlot::Error;
 
     // This overload returns nullptr if no applet with the specified id has been started.
     AppletSlotData* GetAppletSlotData(AppletId id);
-    AppletSlotData* GetAppletSlotData(AppletAttributes attributes);
+    AppletSlot GetAppletSlot(AppletAttributes attributes);
 
     /// Checks if the Application slot has already been registered and sends the parameter to it,
     /// otherwise it queues for sending when the application registers itself with APT::Enable.
@@ -323,6 +344,9 @@ private:
             ar& delayed_parameter;
             ar& app_start_parameters;
             ar& deliver_arg;
+            ar& active_slot;
+            ar& last_library_launcher_slot;
+            ar& lock;
         }
         ar& applet_slots;
         ar& library_applet_closing_command;

@@ -39,7 +39,6 @@ void Module::serialize(Archive& ar, const unsigned int file_version) {
     ar& shared_font_mem;
     ar& shared_font_loaded;
     ar& shared_font_relocated;
-    ar& lock;
     ar& cpu_percent;
     ar& unknown_ns_state_field;
     ar& screen_capture_buffer;
@@ -302,19 +301,22 @@ void Module::APTInterface::GetLockHandle(Kernel::HLERequestContext& ctx) {
     // Bits [0:2] are the applet type (System, Library, etc)
     // Bit 5 tells the application that there's a pending APT parameter,
     // this will cause the app to wait until parameter_event is signaled.
-    u32 applet_attributes = rp.Pop<u32>();
-    IPC::RequestBuilder rb = rp.MakeBuilder(3, 2);
-    rb.Push(RESULT_SUCCESS); // No error
+    u32 attributes = rp.Pop<u32>();
 
-    // TODO(Subv): The output attributes should have an AppletPos of either Library or System |
-    // Library (depending on the type of the last launched applet) if the input attributes'
-    // AppletPos has the Library bit set.
+    LOG_DEBUG(Service_APT, "called applet_attributes={:#010X}", attributes);
 
-    rb.Push(applet_attributes); // Applet Attributes, this value is passed to Enable.
-    rb.Push<u32>(0);            // Least significant bit = power button state
-    rb.PushCopyObjects(apt->lock);
-
-    LOG_WARNING(Service_APT, "(STUBBED) called applet_attributes={:#010X}", applet_attributes);
+    auto result = apt->applet_manager->GetLockHandle(attributes);
+    if (result.Failed()) {
+        IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+        rb.Push(result.Code());
+    } else {
+        auto results = std::move(result).Unwrap();
+        IPC::RequestBuilder rb = rp.MakeBuilder(3, 2);
+        rb.Push(RESULT_SUCCESS);
+        rb.PushRaw(results.corrected_attributes);
+        rb.Push<u32>(results.state);
+        rb.PushCopyObjects(results.lock);
+    }
 }
 
 void Module::APTInterface::Enable(Kernel::HLERequestContext& ctx) {
@@ -405,7 +407,7 @@ void Module::APTInterface::ReceiveParameter(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS); // No error
     rb.PushEnum(next_parameter->sender_id);
     rb.PushEnum(next_parameter->signal); // Signal type
-    ASSERT_MSG(next_parameter->buffer.size() <= buffer_size, "Input static buffer is too small!");
+    next_parameter->buffer.resize(buffer_size);
     rb.Push(static_cast<u32>(next_parameter->buffer.size())); // Parameter buffer size
     rb.PushMoveObjects(next_parameter->object);
     next_parameter->buffer.resize(buffer_size); // APT always push a buffer with the maximum size
@@ -431,7 +433,7 @@ void Module::APTInterface::GlanceParameter(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS); // No error
     rb.PushEnum(next_parameter->sender_id);
     rb.PushEnum(next_parameter->signal); // Signal type
-    ASSERT_MSG(next_parameter->buffer.size() <= buffer_size, "Input static buffer is too small!");
+    next_parameter->buffer.resize(buffer_size);
     rb.Push(static_cast<u32>(next_parameter->buffer.size())); // Parameter buffer size
     rb.PushMoveObjects(next_parameter->object);
     next_parameter->buffer.resize(buffer_size); // APT always push a buffer with the maximum size
@@ -541,7 +543,7 @@ void Module::APTInterface::ReceiveDeliverArg(Kernel::HLERequestContext& ctx) {
 void Module::APTInterface::PrepareToStartApplication(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x15, 5, 0); // 0x00150140
     const u64 title_id = rp.Pop<u64>();
-    const auto media_type = rp.PopEnum<FS::MediaType>();
+    const auto media_type = static_cast<FS::MediaType>(rp.Pop<u8>());
     rp.Skip(1, false); // Padding
     const u32 flags = rp.Pop<u32>();
 
@@ -633,6 +635,16 @@ void Module::APTInterface::PrepareToStartLibraryApplet(Kernel::HLERequestContext
     rb.Push(apt->applet_manager->PrepareToStartLibraryApplet(applet_id));
 }
 
+void Module::APTInterface::PrepareToStartSystemApplet(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x19, 1, 0); // 0x190040
+    const auto applet_id = rp.PopEnum<AppletId>();
+
+    LOG_DEBUG(Service_APT, "called, applet_id={:08X}", applet_id);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(apt->applet_manager->PrepareToStartSystemApplet(applet_id));
+}
+
 void Module::APTInterface::PrepareToStartNewestHomeMenu(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x1A, 0, 0); // 0x1A0000
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
@@ -681,6 +693,20 @@ void Module::APTInterface::StartLibraryApplet(Kernel::HLERequestContext& ctx) {
     rb.Push(apt->applet_manager->StartLibraryApplet(applet_id, std::move(object), buffer));
 }
 
+void Module::APTInterface::StartSystemApplet(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x1F, 2, 4); // 0x1F0084
+    const auto applet_id = rp.PopEnum<AppletId>();
+
+    [[maybe_unused]] const auto buffer_size = rp.Pop<u32>();
+    const auto object = rp.PopGenericObject();
+    const auto buffer = rp.PopStaticBuffer();
+
+    LOG_DEBUG(Service_APT, "called, applet_id={:08X}", applet_id);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(apt->applet_manager->StartSystemApplet(applet_id, object, buffer));
+}
+
 void Module::APTInterface::CloseApplication(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x27, 1, 4);
     [[maybe_unused]] const u32 parameters_size = rp.Pop<u32>();
@@ -697,12 +723,12 @@ void Module::APTInterface::CloseApplication(Kernel::HLERequestContext& ctx) {
 
 void Module::APTInterface::CancelLibraryApplet(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x3B, 1, 0); // 0x003B0040
-    bool exiting = rp.Pop<bool>();
+    bool app_exiting = rp.Pop<bool>();
+
+    LOG_DEBUG(Service_APT, "called app_exiting={}", app_exiting);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
-    rb.Push<u32>(1); // TODO: Find the return code meaning
-
-    LOG_WARNING(Service_APT, "(STUBBED) called exiting={}", exiting);
+    rb.Push(apt->applet_manager->CancelLibraryApplet(app_exiting));
 }
 
 void Module::APTInterface::PrepareToCloseLibraryApplet(Kernel::HLERequestContext& ctx) {
@@ -718,6 +744,15 @@ void Module::APTInterface::PrepareToCloseLibraryApplet(Kernel::HLERequestContext
     rb.Push(apt->applet_manager->PrepareToCloseLibraryApplet(not_pause, exiting, jump_to_home));
 }
 
+void Module::APTInterface::PrepareToCloseSystemApplet(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x26, 0, 0); // 0x260000
+
+    LOG_DEBUG(Service_APT, "called");
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(apt->applet_manager->PrepareToCloseSystemApplet());
+}
+
 void Module::APTInterface::CloseLibraryApplet(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x28, 1, 4); // 0x00280044
     u32 parameter_size = rp.Pop<u32>();
@@ -728,6 +763,18 @@ void Module::APTInterface::CloseLibraryApplet(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(apt->applet_manager->CloseLibraryApplet(std::move(object), std::move(buffer)));
+}
+
+void Module::APTInterface::CloseSystemApplet(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x29, 1, 4); // 0x00280044
+    const auto parameter_size = rp.Pop<u32>();
+    const auto object = rp.PopGenericObject();
+    const auto buffer = rp.PopStaticBuffer();
+
+    LOG_DEBUG(Service_APT, "called size={}", parameter_size);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(apt->applet_manager->CloseSystemApplet(object, buffer));
 }
 
 void Module::APTInterface::LoadSysMenuArg(Kernel::HLERequestContext& ctx) {
@@ -1017,7 +1064,7 @@ void Module::APTInterface::Unknown0x0103(Kernel::HLERequestContext& ctx) {
 void Module::APTInterface::IsTitleAllowed(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x105, 4, 0); // 0x01050100
     const u64 program_id = rp.Pop<u64>();
-    const auto media_type = rp.PopEnum<FS::MediaType>();
+    const auto media_type = static_cast<FS::MediaType>(rp.Pop<u8>());
     rp.Skip(1, false); // Padding
 
     // We allow all titles to be launched, so this function is a no-op
@@ -1046,8 +1093,6 @@ Module::Module(Core::System& system) : system(system) {
                                               MemoryPermission::ReadWrite, MemoryPermission::Read,
                                               0, Kernel::MemoryRegion::SYSTEM, "APT:SharedFont")
                           .Unwrap();
-
-    lock = system.Kernel().CreateMutex(false, "APT_U:Lock");
 }
 
 Module::~Module() {}
