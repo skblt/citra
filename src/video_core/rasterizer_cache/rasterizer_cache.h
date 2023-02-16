@@ -796,8 +796,8 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
         return;
     }
 
-    const SurfaceInterval validate_interval(addr, addr + size);
-    const SurfaceRegions validate_regions = surface->invalid_regions & validate_interval;
+    const auto validate_interval = SurfaceInterval(addr, addr + size);
+    const auto validate_regions = surface->invalid_regions & validate_interval;
     if (validate_regions.empty()) {
         return;
     }
@@ -810,6 +810,12 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
 
     for (u32 level = surface->LevelOf(addr); level <= surface->LevelOf(addr + size); level++) {
         auto level_regions = validate_regions & surface->LevelInterval(level);
+
+        const auto NotifyValidated = [&](SurfaceInterval interval) {
+            level_regions.erase(interval);
+            surface->invalid_regions.erase(interval);
+        };
+
         while (!level_regions.empty()) {
             const SurfaceInterval interval = *level_regions.begin();
             const SurfaceParams params = surface->FromInterval(interval);
@@ -819,14 +825,14 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
             if (copy_surface) {
                 const SurfaceInterval copy_interval = copy_surface->GetCopyableInterval(params);
                 CopySurface(copy_surface, surface, copy_interval);
-                level_regions.erase(copy_interval);
+                NotifyValidated(copy_interval);
                 continue;
             }
 
             // Try to find surface in cache with different format
             // that can can be reinterpreted to the requested format.
             if (ValidateByReinterpretation(surface, params, interval)) {
-                level_regions.erase(interval);
+                NotifyValidated(interval);
                 continue;
             }
             // Could not find a matching reinterpreter, check if we need to implement a
@@ -847,11 +853,9 @@ void RasterizerCache<T>::ValidateSurface(const Surface& surface, PAddr addr, u32
             // Load data from 3DS memory
             FlushRegion(params.addr, params.size);
             UploadSurface(surface, interval);
-            level_regions.erase(params.GetInterval());
+            NotifyValidated(params.GetInterval());
         }
     }
-
-    surface->invalid_regions.erase(validate_interval);
 }
 
 template <class T>
