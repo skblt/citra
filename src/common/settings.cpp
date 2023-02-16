@@ -196,6 +196,9 @@ void RestoreGlobalState(bool is_powered_on) {
     values.factor_3d.SetGlobal(true);
     values.filter_mode.SetGlobal(true);
     values.pp_shader_name.SetGlobal(true);
+    values.dump_textures.SetGlobal(true);
+    values.custom_textures.SetGlobal(true);
+    values.preload_textures.SetGlobal(true);
 }
 
 void LoadProfile(int index) {

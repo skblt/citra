@@ -3,9 +3,9 @@
 // Refer to the license.txt file included.
 
 #include <QColorDialog>
+#include "citra_qt/configuration/configuration_shared.h"
 #include "citra_qt/configuration/configure_enhancements.h"
 #include "common/settings.h"
-#include "core/core.h"
 #include "ui_configure_enhancements.h"
 #include "video_core/renderer_opengl/post_processing_opengl.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
@@ -17,6 +17,7 @@ ConfigureEnhancements::ConfigureEnhancements(QWidget* parent)
     for (const auto& filter : OpenGL::TextureFilterer::GetFilterNames())
         ui->texture_filter_combobox->addItem(QString::fromStdString(filter.data()));
 
+    SetupPerGameUI();
     SetConfiguration();
 
     ui->layoutBox->setEnabled(!Settings::values.custom_layout);
@@ -48,6 +49,8 @@ ConfigureEnhancements::ConfigureEnhancements(QWidget* parent)
             ui->toggle_preload_textures->setChecked(false);
     });
 }
+
+ConfigureEnhancements::~ConfigureEnhancements() = default;
 
 void ConfigureEnhancements::SetConfiguration() {
     ui->resolution_factor_combobox->setCurrentIndex(Settings::values.resolution_factor.GetValue());
@@ -122,12 +125,32 @@ void ConfigureEnhancements::ApplyConfiguration() {
         static_cast<Settings::LayoutOption>(ui->layout_combobox->currentIndex());
     Settings::values.swap_screen = ui->swap_screen->isChecked();
     Settings::values.upright_screen = ui->upright_screen->isChecked();
-    Settings::values.dump_textures = ui->toggle_dump_textures->isChecked();
-    Settings::values.custom_textures = ui->toggle_custom_textures->isChecked();
-    Settings::values.preload_textures = ui->toggle_preload_textures->isChecked();
+
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.dump_textures,
+                                             ui->toggle_dump_textures, dump_textures);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.custom_textures,
+                                             ui->toggle_custom_textures, custom_textures);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.preload_textures,
+                                             ui->toggle_preload_textures, preload_textures);
+
     Settings::values.bg_red = static_cast<float>(bg_color.redF());
     Settings::values.bg_green = static_cast<float>(bg_color.greenF());
     Settings::values.bg_blue = static_cast<float>(bg_color.blueF());
 }
 
-ConfigureEnhancements::~ConfigureEnhancements() {}
+void ConfigureEnhancements::SetupPerGameUI() {
+    // Block the global settings if a game is currently running that overrides them
+    if (Settings::IsConfiguringGlobal()) {
+        ui->toggle_dump_textures->setEnabled(Settings::values.dump_textures.UsingGlobal());
+        ui->toggle_custom_textures->setEnabled(Settings::values.custom_textures.UsingGlobal());
+        ui->toggle_preload_textures->setEnabled(Settings::values.preload_textures.UsingGlobal());
+        return;
+    }
+
+    ConfigurationShared::SetColoredTristate(ui->toggle_dump_textures,
+                                            Settings::values.dump_textures, dump_textures);
+    ConfigurationShared::SetColoredTristate(ui->toggle_custom_textures,
+                                            Settings::values.custom_textures, custom_textures);
+    ConfigurationShared::SetColoredTristate(ui->toggle_preload_textures,
+                                            Settings::values.preload_textures, preload_textures);
+}

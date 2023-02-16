@@ -15,6 +15,7 @@ class System;
 
 class ConfigureAudio;
 class ConfigureGeneral;
+class ConfigureEnhancements;
 class ConfigureGraphics;
 class ConfigureSystem;
 
@@ -64,6 +65,7 @@ private:
 
     std::unique_ptr<ConfigureAudio> audio_tab;
     std::unique_ptr<ConfigureGeneral> general_tab;
+    std::unique_ptr<ConfigureEnhancements> enhancements_tab;
     std::unique_ptr<ConfigureGraphics> graphics_tab;
     std::unique_ptr<ConfigureSystem> system_tab;
 };

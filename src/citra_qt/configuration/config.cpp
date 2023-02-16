@@ -233,7 +233,6 @@ void Config::ReadValues() {
         ReadDebuggingValues();
         ReadWebServiceValues();
         ReadVideoDumpingValues();
-        ReadUtilityValues();
     }
 
     ReadUIValues();
@@ -242,6 +241,7 @@ void Config::ReadValues() {
     ReadLayoutValues();
     ReadAudioValues();
     ReadSystemValues();
+    ReadUtilityValues();
 }
 
 void Config::ReadAudioValues() {
@@ -413,9 +413,9 @@ void Config::ReadControlValues() {
 void Config::ReadUtilityValues() {
     qt_config->beginGroup(QStringLiteral("Utility"));
 
-    ReadBasicSetting(Settings::values.dump_textures);
-    ReadBasicSetting(Settings::values.custom_textures);
-    ReadBasicSetting(Settings::values.preload_textures);
+    ReadGlobalSetting(Settings::values.dump_textures);
+    ReadGlobalSetting(Settings::values.custom_textures);
+    ReadGlobalSetting(Settings::values.preload_textures);
 
     qt_config->endGroup();
 }
@@ -811,7 +811,6 @@ void Config::SaveValues() {
         SaveDebuggingValues();
         SaveWebServiceValues();
         SaveVideoDumpingValues();
-        SaveUtilityValues();
     }
 
     SaveUIValues();
@@ -820,6 +819,7 @@ void Config::SaveValues() {
     SaveLayoutValues();
     SaveAudioValues();
     SaveSystemValues();
+    SaveUtilityValues();
 }
 
 void Config::SaveAudioValues() {
@@ -931,9 +931,9 @@ void Config::SaveControlValues() {
 void Config::SaveUtilityValues() {
     qt_config->beginGroup(QStringLiteral("Utility"));
 
-    WriteBasicSetting(Settings::values.dump_textures);
-    WriteBasicSetting(Settings::values.custom_textures);
-    WriteBasicSetting(Settings::values.preload_textures);
+    WriteGlobalSetting(Settings::values.dump_textures);
+    WriteGlobalSetting(Settings::values.custom_textures);
+    WriteGlobalSetting(Settings::values.preload_textures);
 
     qt_config->endGroup();
 }
