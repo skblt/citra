@@ -143,8 +143,8 @@ void TelemetrySession::AddInitialInfo(Loader::AppLoader& app_loader) {
              Settings::values.use_shader_jit.GetValue());
     AddField(Telemetry::FieldType::UserConfig, "Renderer_UseVsync",
              Settings::values.use_vsync_new.GetValue());
-    AddField(Telemetry::FieldType::UserConfig, "Renderer_FilterMode",
-             Settings::values.filter_mode.GetValue());
+    AddField(Telemetry::FieldType::UserConfig, "Renderer_LinearFilter",
+             Settings::values.linear_filter.GetValue());
     AddField(Telemetry::FieldType::UserConfig, "Renderer_Render3d",
              static_cast<int>(Settings::values.render_3d.GetValue()));
     AddField(Telemetry::FieldType::UserConfig, "Renderer_Factor3d",

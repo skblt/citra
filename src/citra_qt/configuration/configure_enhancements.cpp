@@ -14,9 +14,6 @@ ConfigureEnhancements::ConfigureEnhancements(QWidget* parent)
     : QWidget(parent), ui(std::make_unique<Ui::ConfigureEnhancements>()) {
     ui->setupUi(this);
 
-    for (const auto& filter : OpenGL::TextureFilterer::GetFilterNames())
-        ui->texture_filter_combobox->addItem(QString::fromStdString(filter.data()));
-
     SetupPerGameUI();
     SetConfiguration();
 
@@ -53,21 +50,30 @@ ConfigureEnhancements::ConfigureEnhancements(QWidget* parent)
 ConfigureEnhancements::~ConfigureEnhancements() = default;
 
 void ConfigureEnhancements::SetConfiguration() {
-    ui->resolution_factor_combobox->setCurrentIndex(Settings::values.resolution_factor.GetValue());
+
+    if (!Settings::IsConfiguringGlobal()) {
+        ConfigurationShared::SetHighlight(ui->widget_resolution,
+                                          !Settings::values.resolution_factor.UsingGlobal());
+        ConfigurationShared::SetHighlight(ui->widget_texture_filter,
+                                          !Settings::values.texture_filter.UsingGlobal());
+        ConfigurationShared::SetPerGameSetting(ui->resolution_factor_combobox,
+                                               &Settings::values.resolution_factor);
+        ConfigurationShared::SetPerGameSetting(ui->texture_filter_combobox,
+                                               &Settings::values.texture_filter);
+    } else {
+        ui->resolution_factor_combobox->setCurrentIndex(
+            Settings::values.resolution_factor.GetValue());
+        ui->texture_filter_combobox->setCurrentIndex(
+            static_cast<int>(Settings::values.texture_filter.GetValue()));
+    }
+
     ui->render_3d_combobox->setCurrentIndex(
         static_cast<int>(Settings::values.render_3d.GetValue()));
     ui->factor_3d->setValue(Settings::values.factor_3d.GetValue());
     ui->mono_rendering_eye->setCurrentIndex(
         static_cast<int>(Settings::values.mono_render_option.GetValue()));
     updateShaders(Settings::values.render_3d.GetValue());
-    ui->toggle_linear_filter->setChecked(Settings::values.filter_mode.GetValue());
-    int tex_filter_idx = ui->texture_filter_combobox->findText(
-        QString::fromStdString(Settings::values.texture_filter_name.GetValue()));
-    if (tex_filter_idx == -1) {
-        ui->texture_filter_combobox->setCurrentIndex(0);
-    } else {
-        ui->texture_filter_combobox->setCurrentIndex(tex_filter_idx);
-    }
+    ui->toggle_linear_filter->setChecked(Settings::values.linear_filter.GetValue());
     ui->layout_combobox->setCurrentIndex(
         static_cast<int>(Settings::values.layout_option.GetValue()));
     ui->swap_screen->setChecked(Settings::values.swap_screen.GetValue());
@@ -110,8 +116,8 @@ void ConfigureEnhancements::RetranslateUI() {
 }
 
 void ConfigureEnhancements::ApplyConfiguration() {
-    Settings::values.resolution_factor =
-        static_cast<u16>(ui->resolution_factor_combobox->currentIndex());
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.resolution_factor,
+                                             ui->resolution_factor_combobox);
     Settings::values.render_3d =
         static_cast<Settings::StereoRenderOption>(ui->render_3d_combobox->currentIndex());
     Settings::values.factor_3d = ui->factor_3d->value();
@@ -119,8 +125,10 @@ void ConfigureEnhancements::ApplyConfiguration() {
         static_cast<Settings::MonoRenderOption>(ui->mono_rendering_eye->currentIndex());
     Settings::values.pp_shader_name =
         ui->shader_combobox->itemText(ui->shader_combobox->currentIndex()).toStdString();
-    Settings::values.filter_mode = ui->toggle_linear_filter->isChecked();
-    Settings::values.texture_filter_name = ui->texture_filter_combobox->currentText().toStdString();
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.linear_filter,
+                                             ui->toggle_linear_filter, linear_filter);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.texture_filter,
+                                             ui->texture_filter_combobox);
     Settings::values.layout_option =
         static_cast<Settings::LayoutOption>(ui->layout_combobox->currentIndex());
     Settings::values.swap_screen = ui->swap_screen->isChecked();
@@ -141,16 +149,29 @@ void ConfigureEnhancements::ApplyConfiguration() {
 void ConfigureEnhancements::SetupPerGameUI() {
     // Block the global settings if a game is currently running that overrides them
     if (Settings::IsConfiguringGlobal()) {
+        ui->widget_resolution->setEnabled(Settings::values.resolution_factor.UsingGlobal());
+        ui->widget_texture_filter->setEnabled(Settings::values.texture_filter.UsingGlobal());
+        ui->toggle_linear_filter->setEnabled(Settings::values.linear_filter.UsingGlobal());
         ui->toggle_dump_textures->setEnabled(Settings::values.dump_textures.UsingGlobal());
         ui->toggle_custom_textures->setEnabled(Settings::values.custom_textures.UsingGlobal());
         ui->toggle_preload_textures->setEnabled(Settings::values.preload_textures.UsingGlobal());
         return;
     }
 
+    ConfigurationShared::SetColoredTristate(ui->toggle_linear_filter,
+                                            Settings::values.linear_filter, linear_filter);
     ConfigurationShared::SetColoredTristate(ui->toggle_dump_textures,
                                             Settings::values.dump_textures, dump_textures);
     ConfigurationShared::SetColoredTristate(ui->toggle_custom_textures,
                                             Settings::values.custom_textures, custom_textures);
     ConfigurationShared::SetColoredTristate(ui->toggle_preload_textures,
                                             Settings::values.preload_textures, preload_textures);
+
+    ConfigurationShared::SetColoredComboBox(
+        ui->resolution_factor_combobox, ui->widget_resolution,
+        static_cast<u32>(Settings::values.resolution_factor.GetValue(true)));
+
+    ConfigurationShared::SetColoredComboBox(
+        ui->texture_filter_combobox, ui->widget_texture_filter,
+        static_cast<u32>(Settings::values.texture_filter.GetValue(true)));
 }

@@ -18,29 +18,30 @@ namespace OpenGL {
 
 namespace {
 
+using Settings::TextureFilter;
 using TextureFilterContructor = std::function<std::unique_ptr<TextureFilterBase>(u16)>;
 
-template <typename T>
-std::pair<std::string_view, TextureFilterContructor> FilterMapPair() {
-    return {T::NAME, std::make_unique<T, u16>};
+template <TextureFilter filter, typename T>
+std::pair<TextureFilter, TextureFilterContructor> FilterMapPair() {
+    return {filter, std::make_unique<T, u16>};
 };
 
-static const std::unordered_map<std::string_view, TextureFilterContructor> filter_map{
-    {TextureFilterer::NONE, [](u16) { return nullptr; }},
-    FilterMapPair<Anime4kUltrafast>(),
-    FilterMapPair<Bicubic>(),
-    FilterMapPair<NearestNeighbor>(),
-    FilterMapPair<ScaleForce>(),
-    FilterMapPair<XbrzFreescale>(),
+static const std::unordered_map<TextureFilter, TextureFilterContructor> filter_map{
+    {TextureFilter::Linear, [](u16) { return nullptr; }},
+    FilterMapPair<TextureFilter::Anime4K, Anime4kUltrafast>(),
+    FilterMapPair<TextureFilter::Bicubic, Bicubic>(),
+    FilterMapPair<TextureFilter::NearestNeighbor, NearestNeighbor>(),
+    FilterMapPair<TextureFilter::ScaleForce, ScaleForce>(),
+    FilterMapPair<TextureFilter::xBRZ, XbrzFreescale>(),
 };
 
 } // namespace
 
-TextureFilterer::TextureFilterer(std::string_view filter_name, u16 scale_factor) {
+TextureFilterer::TextureFilterer(TextureFilter filter_name, u16 scale_factor) {
     Reset(filter_name, scale_factor);
 }
 
-bool TextureFilterer::Reset(std::string_view new_filter_name, u16 new_scale_factor) {
+bool TextureFilterer::Reset(TextureFilter new_filter_name, u16 new_scale_factor) {
     if (filter_name == new_filter_name && (IsNull() || filter->scale_factor == new_scale_factor))
         return false;
 
@@ -71,22 +72,6 @@ bool TextureFilterer::Filter(const OGLTexture& src_tex, Common::Rectangle<u32> s
 
     filter->Filter(src_tex, src_rect, dst_tex, dst_rect);
     return true;
-}
-
-std::vector<std::string_view> TextureFilterer::GetFilterNames() {
-    std::vector<std::string_view> ret;
-    std::transform(filter_map.begin(), filter_map.end(), std::back_inserter(ret),
-                   [](auto pair) { return pair.first; });
-    std::sort(ret.begin(), ret.end(), [](std::string_view lhs, std::string_view rhs) {
-        // sort lexicographically with none at the top
-        bool lhs_is_none{lhs == NONE};
-        bool rhs_is_none{rhs == NONE};
-        if (lhs_is_none || rhs_is_none)
-            return lhs_is_none && !rhs_is_none;
-        return lhs < rhs;
-    });
-
-    return ret;
 }
 
 } // namespace OpenGL

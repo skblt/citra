@@ -54,9 +54,25 @@ enum class StereoRenderOption : u32 {
 
 // Which eye to render when 3d is off. 800px wide mode could be added here in the future, when
 // implemented
-enum class MonoRenderOption : u32 { LeftEye = 0, RightEye = 1 };
+enum class MonoRenderOption : u32 {
+    LeftEye = 0,
+    RightEye = 1,
+};
 
-enum class AudioEmulation : u32 { HLE = 0, LLE = 1, LLEMultithreaded = 2 };
+enum class AudioEmulation : u32 {
+    HLE = 0,
+    LLE = 1,
+    LLEMultithreaded = 2,
+};
+
+enum class TextureFilter : u32 {
+    Linear = 0,
+    Anime4K = 1,
+    Bicubic = 2,
+    NearestNeighbor = 3,
+    ScaleForce = 4,
+    xBRZ = 5,
+};
 
 namespace NativeButton {
 
@@ -418,7 +434,7 @@ struct Values {
     Setting<bool> use_shader_jit{true, "use_shader_jit"};
     SwitchableSetting<u16, true> resolution_factor{1, 0, 10, "resolution_factor"};
     SwitchableSetting<u16, true> frame_limit{100, 0, 1000, "frame_limit"};
-    SwitchableSetting<std::string> texture_filter_name{"none", "texture_filter_name"};
+    SwitchableSetting<TextureFilter> texture_filter{TextureFilter::Linear, "texture_filter"};
 
     SwitchableSetting<LayoutOption> layout_option{LayoutOption::Default, "layout_option"};
     SwitchableSetting<bool> swap_screen{false, "swap_screen"};
@@ -447,7 +463,7 @@ struct Values {
     Setting<s32> cardboard_x_shift{0, "cardboard_x_shift"};
     Setting<s32> cardboard_y_shift{0, "cardboard_y_shift"};
 
-    SwitchableSetting<bool> filter_mode{true, "filter_mode"};
+    SwitchableSetting<bool> linear_filter{true, "linear_filter"};
     SwitchableSetting<std::string> pp_shader_name{"none (builtin)", "pp_shader_name"};
 
     SwitchableSetting<bool> dump_textures{false, "dump_textures"};

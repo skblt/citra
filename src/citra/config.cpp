@@ -130,8 +130,8 @@ void Config::ReadValues() {
         static_cast<u16>(sdl2_config->GetInteger("Renderer", "frame_limit", 100));
     Settings::values.use_vsync_new =
         static_cast<u16>(sdl2_config->GetInteger("Renderer", "use_vsync_new", 1));
-    Settings::values.texture_filter_name =
-        sdl2_config->GetString("Renderer", "texture_filter_name", "none");
+    Settings::values.texture_filter = static_cast<Settings::TextureFilter>(
+        sdl2_config->GetInteger("Renderer", "texture_filter", 0));
 
     Settings::values.mono_render_option = static_cast<Settings::MonoRenderOption>(
         sdl2_config->GetInteger("Renderer", "mono_render_option", 0));
@@ -148,7 +148,7 @@ void Config::ReadValues() {
         default_shader = "horizontal (builtin)";
     Settings::values.pp_shader_name =
         sdl2_config->GetString("Renderer", "pp_shader_name", default_shader);
-    Settings::values.filter_mode = sdl2_config->GetBoolean("Renderer", "filter_mode", true);
+    Settings::values.linear_filter = sdl2_config->GetBoolean("Renderer", "linear_filter", true);
 
     Settings::values.bg_red = static_cast<float>(sdl2_config->GetReal("Renderer", "bg_red", 0.0));
     Settings::values.bg_green =

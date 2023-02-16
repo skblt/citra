@@ -76,20 +76,37 @@ void Apply() {
     Service::PLGLDR::PLG_LDR::SetAllowGameChangeState(values.allow_plugin_loader.GetValue());
 }
 
+std::string_view AudioEmulationName(AudioEmulation emulation) {
+    switch (emulation) {
+    case AudioEmulation::HLE:
+        return "HLE";
+    case AudioEmulation::LLE:
+        return "LLE";
+    case AudioEmulation::LLEMultithreaded:
+        return "LLE Multithreaded";
+    }
+};
+
+std::string_view TextureFilterName(TextureFilter filter) {
+    switch (filter) {
+    case TextureFilter::Linear:
+        return "Linear";
+    case TextureFilter::Anime4K:
+        return "Anime4K Ultrafast";
+    case TextureFilter::Bicubic:
+        return "Bicubic";
+    case TextureFilter::NearestNeighbor:
+        return "Nearest Neighbor";
+    case TextureFilter::ScaleForce:
+        return "ScaleForce";
+    case TextureFilter::xBRZ:
+        return "xBRZ freescale";
+    }
+};
+
 void LogSettings() {
     const auto log_setting = [](std::string_view name, const auto& value) {
         LOG_INFO(Config, "{}: {}", name, value);
-    };
-
-    const auto to_string = [](AudioEmulation emulation) -> std::string_view {
-        switch (emulation) {
-        case AudioEmulation::HLE:
-            return "HLE";
-        case AudioEmulation::LLE:
-            return "LLE";
-        case AudioEmulation::LLEMultithreaded:
-            return "LLE Multithreaded";
-        }
     };
 
     LOG_INFO(Config, "Citra Configuration:");
@@ -105,8 +122,8 @@ void LogSettings() {
     log_setting("Renderer_FrameLimit", values.frame_limit.GetValue());
     log_setting("Renderer_VSyncNew", values.use_vsync_new.GetValue());
     log_setting("Renderer_PostProcessingShader", values.pp_shader_name.GetValue());
-    log_setting("Renderer_FilterMode", values.filter_mode.GetValue());
-    log_setting("Renderer_TextureFilterName", values.texture_filter_name.GetValue());
+    log_setting("Renderer_LinearFilter", values.linear_filter.GetValue());
+    log_setting("Renderer_TextureFilterName", TextureFilterName(values.texture_filter.GetValue()));
     log_setting("Stereoscopy_Render3d", values.render_3d.GetValue());
     log_setting("Stereoscopy_Factor3d", values.factor_3d.GetValue());
     log_setting("Stereoscopy_MonoRenderOption", values.mono_render_option.GetValue());
@@ -116,7 +133,7 @@ void LogSettings() {
     log_setting("Utility_DumpTextures", values.dump_textures.GetValue());
     log_setting("Utility_CustomTextures", values.custom_textures.GetValue());
     log_setting("Utility_UseDiskShaderCache", values.use_disk_shader_cache.GetValue());
-    log_setting("Audio_Emulation", to_string(values.audio_emulation.GetValue()));
+    log_setting("Audio_Emulation", AudioEmulationName(values.audio_emulation.GetValue()));
     log_setting("Audio_OutputEngine", values.sink_id.GetValue());
     log_setting("Audio_EnableAudioStretching", values.enable_audio_stretching.GetValue());
     log_setting("Audio_OutputDevice", values.audio_device_id.GetValue());
@@ -185,7 +202,7 @@ void RestoreGlobalState(bool is_powered_on) {
     values.use_vsync_new.SetGlobal(true);
     values.resolution_factor.SetGlobal(true);
     values.frame_limit.SetGlobal(true);
-    values.texture_filter_name.SetGlobal(true);
+    values.texture_filter.SetGlobal(true);
     values.layout_option.SetGlobal(true);
     values.swap_screen.SetGlobal(true);
     values.upright_screen.SetGlobal(true);
@@ -194,7 +211,7 @@ void RestoreGlobalState(bool is_powered_on) {
     values.bg_blue.SetGlobal(true);
     values.render_3d.SetGlobal(true);
     values.factor_3d.SetGlobal(true);
-    values.filter_mode.SetGlobal(true);
+    values.linear_filter.SetGlobal(true);
     values.pp_shader_name.SetGlobal(true);
     values.dump_textures.SetGlobal(true);
     values.custom_textures.SetGlobal(true);

@@ -85,6 +85,7 @@ void ConfigurePerGame::ApplyConfiguration() {
     graphics_tab->ApplyConfiguration();
     audio_tab->ApplyConfiguration();
 
+    Settings::Apply();
     Settings::LogSettings();
 
     game_config->Save();

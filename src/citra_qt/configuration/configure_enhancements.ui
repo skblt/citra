@@ -27,74 +27,88 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_6">
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout">
-        <item>
-         <widget class="QLabel" name="label">
-          <property name="text">
-           <string>Internal Resolution</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QComboBox" name="resolution_factor_combobox">
-          <item>
+       <widget class="QWidget" name="widget_resolution" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="resolution_label">
            <property name="text">
-            <string>Auto (Window Size)</string>
+            <string>Internal Resolution</string>
            </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>Native (400x240)</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>2x Native (800x480)</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>3x Native (1200x720)</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>4x Native (1600x960)</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>5x Native (2000x1200)</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>6x Native (2400x1440)</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>7x Native (2800x1680)</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>8x Native (3200x1920)</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>9x Native (3600x2160)</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>10x Native (4000x2400)</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-       </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="resolution_factor_combobox">
+           <item>
+            <property name="text">
+             <string>Auto (Window Size)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Native (400x240)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>2x Native (800x480)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>3x Native (1200x720)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>4x Native (1600x960)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>5x Native (2000x1200)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>6x Native (2400x1440)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>7x Native (2800x1680)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>8x Native (3200x1920)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>9x Native (3600x2160)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>10x Native (4000x2400)</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+        </layout>
+       </widget>
       </item>
       <item>
        <widget class="QCheckBox" name="toggle_linear_filter">
@@ -104,32 +118,91 @@
        </widget>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_11">
-        <item>
-         <widget class="QLabel" name="label_2">
-          <property name="text">
-           <string>Post-Processing Shader</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QComboBox" name="shader_combobox"/>
-        </item>
-       </layout>
+       <widget class="QWidget" name="widget_shader" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout_11">
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="shader_label">
+           <property name="text">
+            <string>Post-Processing Shader</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="shader_combobox"/>
+         </item>
+        </layout>
+       </widget>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_3">
-        <item>
-         <widget class="QLabel" name="label_5">
-          <property name="text">
-           <string>Texture Filter</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QComboBox" name="texture_filter_combobox"/>
-        </item>
-       </layout>
+       <widget class="QWidget" name="widget_texture_filter" native="true">
+        <layout class="QHBoxLayout" name="horizontalLayout_3">
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="texture_filter_label">
+           <property name="text">
+            <string>Texture Filter</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="texture_filter_combobox">
+           <item>
+            <property name="text">
+             <string>Linear (Default)</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Anime4K Ultrafast</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Bicubic</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Nearest Neighbor</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>ScaleForce</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>xBRZ freescale</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+        </layout>
+       </widget>
       </item>
      </layout>
     </widget>

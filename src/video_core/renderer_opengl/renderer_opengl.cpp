@@ -672,9 +672,9 @@ void RendererOpenGL::InitOpenGLObjects() {
 
 void RendererOpenGL::ReloadSampler() {
     glSamplerParameteri(filter_sampler.handle, GL_TEXTURE_MIN_FILTER,
-                        Settings::values.filter_mode ? GL_LINEAR : GL_NEAREST);
+                        Settings::values.linear_filter ? GL_LINEAR : GL_NEAREST);
     glSamplerParameteri(filter_sampler.handle, GL_TEXTURE_MAG_FILTER,
-                        Settings::values.filter_mode ? GL_LINEAR : GL_NEAREST);
+                        Settings::values.linear_filter ? GL_LINEAR : GL_NEAREST);
     glSamplerParameteri(filter_sampler.handle, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glSamplerParameteri(filter_sampler.handle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }

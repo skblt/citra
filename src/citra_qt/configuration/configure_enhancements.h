@@ -38,6 +38,7 @@ private:
     void updateTextureFilter(int index);
 
     std::unique_ptr<Ui::ConfigureEnhancements> ui;
+    ConfigurationShared::CheckState linear_filter;
     ConfigurationShared::CheckState dump_textures;
     ConfigurationShared::CheckState custom_textures;
     ConfigurationShared::CheckState preload_textures;
