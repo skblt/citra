@@ -543,7 +543,7 @@ void Module::APTInterface::ReceiveDeliverArg(Kernel::HLERequestContext& ctx) {
 void Module::APTInterface::PrepareToStartApplication(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x15, 5, 0); // 0x00150140
     const u64 title_id = rp.Pop<u64>();
-    const auto media_type = rp.PopEnum<FS::MediaType>();
+    const auto media_type = static_cast<FS::MediaType>(rp.Pop<u8>());
     rp.Skip(1, false); // Padding
     const u32 flags = rp.Pop<u32>();
 
@@ -1064,7 +1064,7 @@ void Module::APTInterface::Unknown0x0103(Kernel::HLERequestContext& ctx) {
 void Module::APTInterface::IsTitleAllowed(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x105, 4, 0); // 0x01050100
     const u64 program_id = rp.Pop<u64>();
-    const auto media_type = rp.PopEnum<FS::MediaType>();
+    const auto media_type = static_cast<FS::MediaType>(rp.Pop<u8>());
     rp.Skip(1, false); // Padding
 
     // We allow all titles to be launched, so this function is a no-op
