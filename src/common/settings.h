@@ -361,38 +361,6 @@ protected:
     Type custom{};         ///< The custom value of the setting
 };
 
-/**
- * The InputSetting class allows for getting a reference to either the global or custom members.
- * This is required as we cannot easily modify the values of user-defined types within containers
- * using the SetValue() member function found in the Setting class. The primary purpose of this
- * class is to store an array of 10 PlayerInput structs for both the global and custom setting and
- * allows for easily accessing and modifying both settings.
- */
-template <typename Type>
-class InputSetting final {
-public:
-    InputSetting() = default;
-    explicit InputSetting(Type val) : Setting<Type>(val) {}
-    ~InputSetting() = default;
-    void SetGlobal(bool to_global) {
-        use_global = to_global;
-    }
-    [[nodiscard]] bool UsingGlobal() const {
-        return use_global;
-    }
-    [[nodiscard]] Type& GetValue(bool need_global = false) {
-        if (use_global || need_global) {
-            return global;
-        }
-        return custom;
-    }
-
-private:
-    bool use_global{true}; ///< The setting's global state
-    Type global{};         ///< The setting
-    Type custom{};         ///< The custom setting value
-};
-
 struct InputProfile {
     std::string name;
     std::array<std::string, NativeButton::NumButtons> buttons;
