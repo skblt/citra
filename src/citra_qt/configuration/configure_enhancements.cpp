@@ -17,7 +17,7 @@ ConfigureEnhancements::ConfigureEnhancements(QWidget* parent)
     SetupPerGameUI();
     SetConfiguration();
 
-    ui->layoutBox->setEnabled(!Settings::values.custom_layout);
+    ui->layout_group->setEnabled(!Settings::values.custom_layout);
 
     ui->resolution_factor_combobox->setEnabled(Settings::values.use_hw_renderer.GetValue());
 
@@ -52,19 +52,19 @@ ConfigureEnhancements::~ConfigureEnhancements() = default;
 void ConfigureEnhancements::SetConfiguration() {
 
     if (!Settings::IsConfiguringGlobal()) {
-        ConfigurationShared::SetHighlight(ui->widget_resolution,
-                                          !Settings::values.resolution_factor.UsingGlobal());
-        ConfigurationShared::SetHighlight(ui->widget_texture_filter,
-                                          !Settings::values.texture_filter.UsingGlobal());
         ConfigurationShared::SetPerGameSetting(ui->resolution_factor_combobox,
                                                &Settings::values.resolution_factor);
         ConfigurationShared::SetPerGameSetting(ui->texture_filter_combobox,
                                                &Settings::values.texture_filter);
+        ConfigurationShared::SetPerGameSetting(ui->layout_combobox,
+                                               &Settings::values.layout_option);
     } else {
         ui->resolution_factor_combobox->setCurrentIndex(
             Settings::values.resolution_factor.GetValue());
         ui->texture_filter_combobox->setCurrentIndex(
             static_cast<int>(Settings::values.texture_filter.GetValue()));
+        ui->layout_combobox->setCurrentIndex(
+            static_cast<int>(Settings::values.layout_option.GetValue()));
     }
 
     ui->render_3d_combobox->setCurrentIndex(
@@ -74,10 +74,8 @@ void ConfigureEnhancements::SetConfiguration() {
         static_cast<int>(Settings::values.mono_render_option.GetValue()));
     updateShaders(Settings::values.render_3d.GetValue());
     ui->toggle_linear_filter->setChecked(Settings::values.linear_filter.GetValue());
-    ui->layout_combobox->setCurrentIndex(
-        static_cast<int>(Settings::values.layout_option.GetValue()));
-    ui->swap_screen->setChecked(Settings::values.swap_screen.GetValue());
-    ui->upright_screen->setChecked(Settings::values.upright_screen.GetValue());
+    ui->toggle_swap_screen->setChecked(Settings::values.swap_screen.GetValue());
+    ui->toggle_upright_screen->setChecked(Settings::values.upright_screen.GetValue());
     ui->toggle_dump_textures->setChecked(Settings::values.dump_textures.GetValue());
     ui->toggle_custom_textures->setChecked(Settings::values.custom_textures.GetValue());
     ui->toggle_preload_textures->setChecked(Settings::values.preload_textures.GetValue());
@@ -129,11 +127,11 @@ void ConfigureEnhancements::ApplyConfiguration() {
                                              ui->toggle_linear_filter, linear_filter);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.texture_filter,
                                              ui->texture_filter_combobox);
-    Settings::values.layout_option =
-        static_cast<Settings::LayoutOption>(ui->layout_combobox->currentIndex());
-    Settings::values.swap_screen = ui->swap_screen->isChecked();
-    Settings::values.upright_screen = ui->upright_screen->isChecked();
-
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.layout_option, ui->layout_combobox);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.swap_screen, ui->toggle_swap_screen,
+                                             swap_screen);
+    ConfigurationShared::ApplyPerGameSetting(&Settings::values.upright_screen,
+                                             ui->toggle_upright_screen, upright_screen);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.dump_textures,
                                              ui->toggle_dump_textures, dump_textures);
     ConfigurationShared::ApplyPerGameSetting(&Settings::values.custom_textures,
@@ -152,14 +150,24 @@ void ConfigureEnhancements::SetupPerGameUI() {
         ui->widget_resolution->setEnabled(Settings::values.resolution_factor.UsingGlobal());
         ui->widget_texture_filter->setEnabled(Settings::values.texture_filter.UsingGlobal());
         ui->toggle_linear_filter->setEnabled(Settings::values.linear_filter.UsingGlobal());
+        ui->toggle_swap_screen->setEnabled(Settings::values.swap_screen.UsingGlobal());
+        ui->toggle_upright_screen->setEnabled(Settings::values.upright_screen.UsingGlobal());
         ui->toggle_dump_textures->setEnabled(Settings::values.dump_textures.UsingGlobal());
         ui->toggle_custom_textures->setEnabled(Settings::values.custom_textures.UsingGlobal());
         ui->toggle_preload_textures->setEnabled(Settings::values.preload_textures.UsingGlobal());
         return;
     }
 
+    ui->stereo_group->setVisible(false);
+    ui->widget_shader->setVisible(false);
+    ui->bg_color_group->setVisible(false);
+
     ConfigurationShared::SetColoredTristate(ui->toggle_linear_filter,
                                             Settings::values.linear_filter, linear_filter);
+    ConfigurationShared::SetColoredTristate(ui->toggle_swap_screen, Settings::values.swap_screen,
+                                            swap_screen);
+    ConfigurationShared::SetColoredTristate(ui->toggle_upright_screen,
+                                            Settings::values.upright_screen, upright_screen);
     ConfigurationShared::SetColoredTristate(ui->toggle_dump_textures,
                                             Settings::values.dump_textures, dump_textures);
     ConfigurationShared::SetColoredTristate(ui->toggle_custom_textures,
@@ -174,4 +182,8 @@ void ConfigureEnhancements::SetupPerGameUI() {
     ConfigurationShared::SetColoredComboBox(
         ui->texture_filter_combobox, ui->widget_texture_filter,
         static_cast<u32>(Settings::values.texture_filter.GetValue(true)));
+
+    ConfigurationShared::SetColoredComboBox(
+        ui->layout_combobox, ui->widget_layout,
+        static_cast<u32>(Settings::values.layout_option.GetValue(true)));
 }

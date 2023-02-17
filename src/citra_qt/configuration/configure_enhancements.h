@@ -39,6 +39,8 @@ private:
 
     std::unique_ptr<Ui::ConfigureEnhancements> ui;
     ConfigurationShared::CheckState linear_filter;
+    ConfigurationShared::CheckState swap_screen;
+    ConfigurationShared::CheckState upright_screen;
     ConfigurationShared::CheckState dump_textures;
     ConfigurationShared::CheckState custom_textures;
     ConfigurationShared::CheckState preload_textures;
