@@ -110,8 +110,8 @@ void Config::ReadValues() {
         static_cast<int>(sdl2_config->GetInteger("Core", "cpu_clock_percentage", 100));
 
     // Premium
-    Settings::values.texture_filter_name =
-        sdl2_config->GetString("Premium", "texture_filter_name", "none");
+    Settings::values.texture_filter = static_cast<Settings::TextureFilter>(
+        sdl2_config->GetInteger("Premium", "texture_filter", 0));
 
     // Renderer
     Settings::values.use_gles = sdl2_config->GetBoolean("Renderer", "use_gles", true);
@@ -145,7 +145,7 @@ void Config::ReadValues() {
         default_shader = "horizontal (builtin)";
     Settings::values.pp_shader_name =
         sdl2_config->GetString("Renderer", "pp_shader_name", default_shader);
-    Settings::values.filter_mode = sdl2_config->GetBoolean("Renderer", "filter_mode", true);
+    Settings::values.linear_filter = sdl2_config->GetBoolean("Renderer", "linear_filter", true);
 
     Settings::values.bg_red = static_cast<float>(sdl2_config->GetReal("Renderer", "bg_red", 0.0));
     Settings::values.bg_green =
